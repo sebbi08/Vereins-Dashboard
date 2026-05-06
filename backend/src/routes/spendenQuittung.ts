@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { Router } from 'express';
 import type { QuittungEingaben, SpendenQuittungListItem } from 'shared';
 import { prisma } from '../prismaClient';
@@ -142,7 +143,7 @@ spendenQuittungRouter.get('/:id', async (req, res) => {
     return;
   }
 
-  const aktiveRevision = quittung.revisionen.find((r) => r.status === 'AKTIV');
+  const aktiveRevision = quittung.revisionen.find((r: { status: string }) => r.status === 'AKTIV');
 
   res.json({
     id: quittung.id,
@@ -201,7 +202,7 @@ spendenQuittungRouter.post('/', async (req, res) => {
   const { nummer, jahr, laufendeNummer } = await generiereQuittungsNummer(prisma);
   const spendendatum = new Date(body.eingaben.spendendatum);
 
-  const { quittung, revision } = await prisma.$transaction(async (tx) => {
+  const { quittung, revision } = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const q = await tx.spendenQuittung.create({
       data: {
         nummer,
@@ -288,7 +289,7 @@ spendenQuittungRouter.post('/:id/revision', async (req, res) => {
   const neueRevisionNummer = (letzteRevision?.revisionNummer ?? 0) + 1;
   const spendendatum = new Date(body.eingaben.spendendatum);
 
-  const neueRevision = await prisma.$transaction(async (tx) => {
+  const neueRevision = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.spendenQuittungRevision.updateMany({
       where: { quittungId: id, status: 'AKTIV' },
       data: { status: 'ERSETZT' },
