@@ -19,14 +19,12 @@ services:
       - ./frontend/tsconfig.node.json:/app/frontend/tsconfig.node.json
       - ./frontend/vite-env.d.ts:/app/frontend/vite-env.d.ts
       - ./shared/src:/app/shared/src
-      - ./context:/app/context
-      - dev-data:/app/data
+      - ./dev-data:/app/data
     environment:
       NODE_ENV: development
       DATABASE_URL: "file:/app/data/db.sqlite"
       PORT: "3000"
       DATA_DIR: "/app/data"
-      CONTEXT_DIR: "/app/context"
       VITE_API_TARGET: "http://localhost:3000"
 
 volumes:

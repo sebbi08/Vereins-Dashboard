@@ -2,8 +2,10 @@
 import type { SpendenQuittungListItem } from 'shared';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAppStore } from '../stores/app';
 
 const router = useRouter();
+const store = useAppStore();
 const quittungen = ref<SpendenQuittungListItem[]>([]);
 const laden = ref(false);
 const fehler = ref('');
@@ -57,11 +59,25 @@ const anzahlGesamt = computed(() => quittungen.value.length);
     <div class="flex items-center justify-between mb-6">
       <h2 class="text-2xl font-bold text-gray-800">Spenden Quittungen</h2>
       <button
-        class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+        :disabled="!store.quittungsVorlageVorhanden"
+        :title="!store.quittungsVorlageVorhanden ? 'Bitte zuerst eine Vorlage in den Einstellungen hochladen' : undefined"
+        class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         @click="router.push('/spenden-quittung/neu')"
       >
         + Neue Quittung
       </button>
+    </div>
+
+    <!-- Vorlage fehlt Banner -->
+    <div
+      v-if="store.quittungsVorlageVorhanden === false"
+      class="mb-4 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800"
+    >
+      <span class="mt-0.5 text-lg leading-none">⚠️</span>
+      <span>
+        Keine Spendenquittungs-Vorlage hinterlegt. Bitte zuerst eine Vorlage hochladen, bevor Quittungen erstellt werden können.
+        <router-link to="/einstellungen" class="ml-1 font-medium underline hover:text-amber-900">Zu den Einstellungen →</router-link>
+      </span>
     </div>
 
     <!-- Filter -->

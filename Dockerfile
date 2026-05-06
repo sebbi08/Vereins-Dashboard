@@ -31,12 +31,9 @@ COPY --from=builder /app/backend/package*.json ./backend/
 # Copy frontend build
 COPY --from=builder /app/frontend/dist ./frontend/dist
 
-# Copy default templates
-COPY --from=builder /app/context ./context
-
-# Install production dependencies only
+# Install runtime dependencies including Prisma CLI for deploy-time migrations
 WORKDIR /app/backend
-RUN npm ci --omit=dev && npx prisma generate
+RUN npm ci && npx prisma generate
 
 # Create data directories
 RUN mkdir -p /app/data/vorlagen /app/data/quittungen
@@ -49,6 +46,5 @@ ENV NODE_ENV=production
 ENV DATABASE_URL="file:/app/data/db.sqlite"
 ENV PORT=3000
 ENV DATA_DIR=/app/data
-ENV CONTEXT_DIR=/app/context
 
-CMD ["node", "backend/dist/index.js"]
+CMD ["sh", "-lc", "cd /app/backend && npx prisma migrate deploy && cd /app && node backend/dist/index.js"]

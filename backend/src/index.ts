@@ -1,5 +1,7 @@
+import "dotenv/config";
 import express from "express";
 import path from "path";
+import { ABSOLUTE_DATA_DIR, DATABASE_FILE_PATH, DATABASE_URL } from "./config";
 import { initializeApp } from "./init";
 import { router } from "./routes";
 
@@ -24,6 +26,10 @@ initializeApp()
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
+      console.log(`Data dir: ${ABSOLUTE_DATA_DIR}`);
+      console.log(
+        `Database: ${DATABASE_FILE_PATH ?? `non-file datasource (${DATABASE_URL})`}`,
+      );
     });
   })
   .catch((err) => {

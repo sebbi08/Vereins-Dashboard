@@ -1,5 +1,10 @@
 <script setup lang="ts">
 import AppSidebar from '@/components/AppSidebar.vue';
+import { useAppStore } from '@/stores/app';
+import { onMounted } from 'vue';
+
+const store = useAppStore();
+onMounted(() => store.pruefeVorlagen());
 </script>
 
 <template>

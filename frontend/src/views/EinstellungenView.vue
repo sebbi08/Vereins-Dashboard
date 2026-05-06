@@ -122,7 +122,7 @@ function formatDatum(iso: string) {
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Datum Freistellungsbescheid</label>
-          <input v-model="einstellungen.freistellungsdatum" type="text" placeholder="01.01.2024" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          <input v-model="einstellungen.freistellungsdatum" type="date" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
         </div>
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Veranlagungszeitraum</label>

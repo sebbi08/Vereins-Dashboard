@@ -3,9 +3,11 @@ import type { QuittungEingaben, SpenderDto, SystemEinstellungen } from 'shared';
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import SpenderAutocomplete from '../components/SpenderAutocomplete.vue';
+import { useAppStore } from '../stores/app';
 
 const router = useRouter();
 const route = useRoute();
+const store = useAppStore();
 
 const quittungId = route.params.id ? parseInt(String(route.params.id)) : null;
 const istNeueRevision = !!quittungId;
@@ -73,6 +75,19 @@ async function ladeAktiveRevision() {
 }
 
 onMounted(async () => {
+  // Redirect zurück zur Liste wenn keine aktive Quittungs-Vorlage hinterlegt ist
+  if (store.quittungsVorlageVorhanden === false) {
+    router.replace('/spenden-quittung');
+    return;
+  }
+  // Falls der Store noch nicht geprüft hat (z.B. direkter URL-Aufruf), jetzt prüfen
+  if (store.quittungsVorlageVorhanden === null) {
+    await store.pruefeVorlagen();
+    if (!store.quittungsVorlageVorhanden) {
+      router.replace('/spenden-quittung');
+      return;
+    }
+  }
   await ladeEinstellungen();
   if (istNeueRevision) {
     await ladeAktiveRevision();
@@ -279,7 +294,7 @@ async function absenden() {
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Datum Freistellungsbescheid</label>
-            <input v-model="eingaben.freistellungsdatum" type="text" placeholder="01.01.2024" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input v-model="eingaben.freistellungsdatum" type="date" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Veranlagungszeitraum</label>

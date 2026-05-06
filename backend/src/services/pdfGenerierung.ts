@@ -154,6 +154,16 @@ async function verbindePdfs(pdfs: Buffer[]): Promise<Buffer> {
   return Buffer.from(await merged.save());
 }
 
+/** Wandelt ein ISO-Datum (YYYY-MM-DD) ins deutsche Format (DD.MM.YYYY) um.
+ *  Gibt den Eingabewert unverändert zurück, falls er kein ISO-Datum ist. */
+function formatiereDatum(iso: string): string {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split("-");
+    return `${d}.${m}.${y}`;
+  }
+  return iso;
+}
+
 export async function generiereQuittungPdf(
   prisma: PrismaClient,
   revisionId: number,
@@ -203,7 +213,7 @@ export async function generiereQuittungPdf(
     tagDerZuwendung: spendendatumFormatiert,
     zweck: revision.gemeinnuetzigerZweck,
     steuerNr: revision.steuernummer,
-    steuerNrDatum: revision.freistellungsdatum,
+    steuerNrDatum: formatiereDatum(revision.freistellungsdatum),
     veranlagungsZeitraum: revision.veranlagungszeitraum,
     finanzamtName: revision.finanzamtName,
     zahlungsweg: revision.zahlungsweg as "BANK" | "BAR",

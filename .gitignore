@@ -28,3 +28,4 @@ frontend/src/**/*.js
 frontend/src/**/*.js.map
 
 context
+dev-data
