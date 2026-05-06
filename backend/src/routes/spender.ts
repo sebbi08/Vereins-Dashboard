@@ -1,22 +1,22 @@
-import { Router } from "express";
-import { prisma } from "../prismaClient";
+import { Router } from 'express';
+import { prisma } from '../prismaClient';
 
 export const spenderRouter = Router();
 
-spenderRouter.get("/", async (req, res) => {
-  const q = String(req.query.q ?? "");
+spenderRouter.get('/', async (req, res) => {
+  const q = String(req.query.q ?? '');
   const spender = await prisma.spender.findMany({
     where: q ? { name: { contains: q } } : undefined,
-    orderBy: { name: "asc" },
+    orderBy: { name: 'asc' },
     take: 20,
   });
   res.json(spender);
 });
 
-spenderRouter.patch("/:id", async (req, res) => {
+spenderRouter.patch('/:id', async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
-    res.status(400).json({ error: "Ungültige ID" });
+    res.status(400).json({ error: 'Ungültige ID' });
     return;
   }
 

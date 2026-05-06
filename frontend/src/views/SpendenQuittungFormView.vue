@@ -174,15 +174,27 @@ async function absenden() {
       </h2>
     </div>
 
-    <div v-if="fehler" class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm">{{ fehler }}</div>
-    <div v-if="erfolg" class="bg-green-50 border border-green-200 text-green-700 p-3 rounded-lg mb-4 text-sm">{{ erfolg }}</div>
+    <div
+      v-if="fehler"
+      class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm"
+    >
+      {{ fehler }}
+    </div>
+    <div
+      v-if="erfolg"
+      class="bg-green-50 border border-green-200 text-green-700 p-3 rounded-lg mb-4 text-sm"
+    >
+      {{ erfolg }}
+    </div>
 
     <form class="space-y-6" @submit.prevent="absenden">
       <!-- Spender -->
       <div v-if="!istNeueRevision" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 class="font-semibold text-gray-800 mb-4">Spender</h3>
         <div class="mb-3">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Spender suchen oder neu anlegen</label>
+          <label class="block text-sm font-medium text-gray-700 mb-1"
+            >Spender suchen oder neu anlegen</label
+          >
           <SpenderAutocomplete
             :model-value="spender"
             @update:model-value="onSpenderAusgewaehlt"
@@ -266,7 +278,12 @@ async function absenden() {
             </select>
           </div>
           <div class="flex items-center gap-2 pt-6">
-            <input id="mitAnschreiben" v-model="eingaben.mitAnschreiben" type="checkbox" class="rounded" />
+            <input
+              id="mitAnschreiben"
+              v-model="eingaben.mitAnschreiben"
+              type="checkbox"
+              class="rounded"
+            />
             <label for="mitAnschreiben" class="text-sm text-gray-700">Mit Anschreiben</label>
           </div>
         </div>
@@ -278,33 +295,64 @@ async function absenden() {
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Kassenwart</label>
-            <input v-model="eingaben.kassenwart" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input
+              v-model="eingaben.kassenwart"
+              type="text"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Gemeinnütziger Zweck</label>
-            <input v-model="eingaben.gemeinnuetzigerZweck" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input
+              v-model="eingaben.gemeinnuetzigerZweck"
+              type="text"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Finanzamt</label>
-            <input v-model="eingaben.finanzamtName" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input
+              v-model="eingaben.finanzamtName"
+              type="text"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Steuernummer</label>
-            <input v-model="eingaben.steuernummer" type="text" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input
+              v-model="eingaben.steuernummer"
+              type="text"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Datum Freistellungsbescheid</label>
-            <input v-model="eingaben.freistellungsdatum" type="date" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <label class="block text-sm font-medium text-gray-700 mb-1"
+              >Datum Freistellungsbescheid</label
+            >
+            <input
+              v-model="eingaben.freistellungsdatum"
+              type="date"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Veranlagungszeitraum</label>
-            <input v-model="eingaben.veranlagungszeitraum" type="text" placeholder="2021–2023" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            <input
+              v-model="eingaben.veranlagungszeitraum"
+              type="text"
+              placeholder="2021–2023"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
         </div>
       </div>
 
       <div class="flex justify-end gap-3">
-        <button type="button" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800" @click="router.back()">
+        <button
+          type="button"
+          class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+          @click="router.back()"
+        >
           Abbrechen
         </button>
         <button

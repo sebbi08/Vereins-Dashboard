@@ -6,7 +6,7 @@ const navItems = [
   { name: 'Spenden Quittung', to: '/spenden-quittung' },
   { name: 'Rechnung', to: '/rechnung' },
   { name: 'Einstellungen', to: '/einstellungen' },
-]
+];
 </script>
 
 <template>

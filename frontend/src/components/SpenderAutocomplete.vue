@@ -8,7 +8,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: SpenderDto | null];
-  'neu': [daten: { anrede: string; name: string; strasse: string; ort: string }];
+  neu: [daten: { anrede: string; name: string; strasse: string; ort: string }];
 }>();
 
 const query = ref(props.modelValue?.name ?? '');
@@ -20,7 +20,7 @@ watch(
   () => props.modelValue,
   (v) => {
     if (v) query.value = v.name;
-  }
+  },
 );
 
 function onBlur() {

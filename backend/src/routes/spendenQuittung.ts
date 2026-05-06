@@ -1,8 +1,8 @@
-import { Router } from "express";
-import type { QuittungEingaben, SpendenQuittungListItem } from "shared";
-import { prisma } from "../prismaClient";
-import { generiereQuittungPdf } from "../services/pdfGenerierung";
-import { generiereQuittungsNummer } from "../services/quittungsNummer";
+import { Router } from 'express';
+import type { QuittungEingaben, SpendenQuittungListItem } from 'shared';
+import { prisma } from '../prismaClient';
+import { generiereQuittungPdf } from '../services/pdfGenerierung';
+import { generiereQuittungsNummer } from '../services/quittungsNummer';
 
 export const spendenQuittungRouter = Router();
 
@@ -53,46 +53,37 @@ function revisionZuDto(rev: {
 }
 
 // GET /api/spenden-quittung
-spendenQuittungRouter.get("/", async (req, res) => {
-  const search = String(req.query.search ?? "");
-  const vonDatum = req.query.vonDatum
-    ? new Date(String(req.query.vonDatum))
-    : undefined;
-  const bisDatum = req.query.bisDatum
-    ? new Date(String(req.query.bisDatum))
-    : undefined;
-  const mitStorniert = req.query.mitStorniert === "true";
+spendenQuittungRouter.get('/', async (req, res) => {
+  const search = String(req.query.search ?? '');
+  const vonDatum = req.query.vonDatum ? new Date(String(req.query.vonDatum)) : undefined;
+  const bisDatum = req.query.bisDatum ? new Date(String(req.query.bisDatum)) : undefined;
+  const mitStorniert = req.query.mitStorniert === 'true';
 
   const quittungen = await prisma.spendenQuittung.findMany({
     where: {
-      ...(mitStorniert ? {} : { status: "AKTIV" }),
-      ...(vonDatum || bisDatum
-        ? { spendendatum: { gte: vonDatum, lte: bisDatum } }
-        : {}),
+      ...(mitStorniert ? {} : { status: 'AKTIV' }),
+      ...(vonDatum || bisDatum ? { spendendatum: { gte: vonDatum, lte: bisDatum } } : {}),
       ...(search
         ? {
-            OR: [
-              { nummer: { contains: search } },
-              { spender: { name: { contains: search } } },
-            ],
+            OR: [{ nummer: { contains: search } }, { spender: { name: { contains: search } } }],
           }
         : {}),
     },
     include: {
       spender: true,
       revisionen: {
-        where: { status: "AKTIV" },
-        orderBy: { revisionNummer: "desc" },
+        where: { status: 'AKTIV' },
+        orderBy: { revisionNummer: 'desc' },
         take: 1,
       },
     },
-    orderBy: { spendendatum: "desc" },
+    orderBy: { spendendatum: 'desc' },
   });
 
   const list: SpendenQuittungListItem[] = quittungen.map((q) => ({
     id: q.id,
     nummer: q.nummer,
-    status: q.status as "AKTIV" | "STORNIERT",
+    status: q.status as 'AKTIV' | 'STORNIERT',
     spenderName: q.spender.name,
     spendenbetragCents: q.revisionen[0]?.spendenbetragCents ?? 0,
     spendendatum: q.spendendatum.toISOString(),
@@ -104,40 +95,37 @@ spendenQuittungRouter.get("/", async (req, res) => {
 });
 
 // GET /api/spenden-quittung/revision/:revisionId/download
-spendenQuittungRouter.get(
-  "/revision/:revisionId/download",
-  async (req, res) => {
-    const id = parseInt(req.params.revisionId);
-    if (isNaN(id)) {
-      res.status(400).json({ error: "Ungültige Revisions-ID" });
-      return;
-    }
+spendenQuittungRouter.get('/revision/:revisionId/download', async (req, res) => {
+  const id = parseInt(req.params.revisionId);
+  if (isNaN(id)) {
+    res.status(400).json({ error: 'Ungültige Revisions-ID' });
+    return;
+  }
 
-    const revision = await prisma.spendenQuittungRevision.findUnique({
-      where: { id },
-      include: { quittung: true },
-    });
+  const revision = await prisma.spendenQuittungRevision.findUnique({
+    where: { id },
+    include: { quittung: true },
+  });
 
-    if (!revision) {
-      res.status(404).json({ error: "Revision nicht gefunden" });
-      return;
-    }
+  if (!revision) {
+    res.status(404).json({ error: 'Revision nicht gefunden' });
+    return;
+  }
 
-    if (!revision.dateiPfad) {
-      res.status(404).json({ error: "Datei nicht vorhanden" });
-      return;
-    }
+  if (!revision.dateiPfad) {
+    res.status(404).json({ error: 'Datei nicht vorhanden' });
+    return;
+  }
 
-    const dateiName = `${revision.quittung.nummer}-R${revision.revisionNummer}.pdf`;
-    res.download(revision.dateiPfad, dateiName);
-  },
-);
+  const dateiName = `${revision.quittung.nummer}-R${revision.revisionNummer}.pdf`;
+  res.download(revision.dateiPfad, dateiName);
+});
 
 // GET /api/spenden-quittung/:id
-spendenQuittungRouter.get("/:id", async (req, res) => {
+spendenQuittungRouter.get('/:id', async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
-    res.status(400).json({ error: "Ungültige ID" });
+    res.status(400).json({ error: 'Ungültige ID' });
     return;
   }
 
@@ -145,16 +133,16 @@ spendenQuittungRouter.get("/:id", async (req, res) => {
     where: { id },
     include: {
       spender: true,
-      revisionen: { orderBy: { revisionNummer: "desc" } },
+      revisionen: { orderBy: { revisionNummer: 'desc' } },
     },
   });
 
   if (!quittung) {
-    res.status(404).json({ error: "Quittung nicht gefunden" });
+    res.status(404).json({ error: 'Quittung nicht gefunden' });
     return;
   }
 
-  const aktiveRevision = quittung.revisionen.find((r) => r.status === "AKTIV");
+  const aktiveRevision = quittung.revisionen.find((r) => r.status === 'AKTIV');
 
   res.json({
     id: quittung.id,
@@ -169,7 +157,7 @@ spendenQuittungRouter.get("/:id", async (req, res) => {
 });
 
 // POST /api/spenden-quittung
-spendenQuittungRouter.post("/", async (req, res) => {
+spendenQuittungRouter.post('/', async (req, res) => {
   const body = req.body as {
     spenderId?: number;
     spenderDaten?: {
@@ -182,23 +170,21 @@ spendenQuittungRouter.post("/", async (req, res) => {
   };
 
   const quittungsVorlage = await prisma.vorlage.findFirst({
-    where: { typ: "QUITTUNG", aktiv: true },
+    where: { typ: 'QUITTUNG', aktiv: true },
   });
   if (!quittungsVorlage) {
-    res.status(400).json({ error: "Keine aktive Quittungsvorlage vorhanden" });
+    res.status(400).json({ error: 'Keine aktive Quittungsvorlage vorhanden' });
     return;
   }
 
   const anschreibenVorlage = body.eingaben.mitAnschreiben
     ? await prisma.vorlage.findFirst({
-        where: { typ: "ANSCHREIBEN", aktiv: true },
+        where: { typ: 'ANSCHREIBEN', aktiv: true },
       })
     : null;
 
   if (body.eingaben.mitAnschreiben && !anschreibenVorlage) {
-    res
-      .status(400)
-      .json({ error: "Keine aktive Anschreibenvorlage vorhanden" });
+    res.status(400).json({ error: 'Keine aktive Anschreibenvorlage vorhanden' });
     return;
   }
 
@@ -208,12 +194,11 @@ spendenQuittungRouter.post("/", async (req, res) => {
     spenderId = spender.id;
   }
   if (!spenderId) {
-    res.status(400).json({ error: "Kein Spender angegeben" });
+    res.status(400).json({ error: 'Kein Spender angegeben' });
     return;
   }
 
-  const { nummer, jahr, laufendeNummer } =
-    await generiereQuittungsNummer(prisma);
+  const { nummer, jahr, laufendeNummer } = await generiereQuittungsNummer(prisma);
   const spendendatum = new Date(body.eingaben.spendendatum);
 
   const { quittung, revision } = await prisma.$transaction(async (tx) => {
@@ -259,58 +244,54 @@ spendenQuittungRouter.post("/", async (req, res) => {
     data: { dateiPfad },
   });
 
-  res
-    .status(201)
-    .json({ quittungId: quittung.id, revisionId: revision.id, dateiPfad });
+  res.status(201).json({ quittungId: quittung.id, revisionId: revision.id, dateiPfad });
 });
 
 // POST /api/spenden-quittung/:id/revision
-spendenQuittungRouter.post("/:id/revision", async (req, res) => {
+spendenQuittungRouter.post('/:id/revision', async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
-    res.status(400).json({ error: "Ungültige ID" });
+    res.status(400).json({ error: 'Ungültige ID' });
     return;
   }
 
   const quittung = await prisma.spendenQuittung.findUnique({ where: { id } });
   if (!quittung) {
-    res.status(404).json({ error: "Quittung nicht gefunden" });
+    res.status(404).json({ error: 'Quittung nicht gefunden' });
     return;
   }
-  if (quittung.status === "STORNIERT") {
-    res
-      .status(400)
-      .json({ error: "Stornierte Quittungen können nicht revidiert werden" });
+  if (quittung.status === 'STORNIERT') {
+    res.status(400).json({ error: 'Stornierte Quittungen können nicht revidiert werden' });
     return;
   }
 
   const body = req.body as { eingaben: QuittungEingaben };
 
   const quittungsVorlage = await prisma.vorlage.findFirst({
-    where: { typ: "QUITTUNG", aktiv: true },
+    where: { typ: 'QUITTUNG', aktiv: true },
   });
   if (!quittungsVorlage) {
-    res.status(400).json({ error: "Keine aktive Quittungsvorlage vorhanden" });
+    res.status(400).json({ error: 'Keine aktive Quittungsvorlage vorhanden' });
     return;
   }
 
   const anschreibenVorlage = body.eingaben.mitAnschreiben
     ? await prisma.vorlage.findFirst({
-        where: { typ: "ANSCHREIBEN", aktiv: true },
+        where: { typ: 'ANSCHREIBEN', aktiv: true },
       })
     : null;
 
   const letzteRevision = await prisma.spendenQuittungRevision.findFirst({
     where: { quittungId: id },
-    orderBy: { revisionNummer: "desc" },
+    orderBy: { revisionNummer: 'desc' },
   });
   const neueRevisionNummer = (letzteRevision?.revisionNummer ?? 0) + 1;
   const spendendatum = new Date(body.eingaben.spendendatum);
 
   const neueRevision = await prisma.$transaction(async (tx) => {
     await tx.spendenQuittungRevision.updateMany({
-      where: { quittungId: id, status: "AKTIV" },
-      data: { status: "ERSETZT" },
+      where: { quittungId: id, status: 'AKTIV' },
+      data: { status: 'ERSETZT' },
     });
     await tx.spendenQuittung.update({ where: { id }, data: { spendendatum } });
 
@@ -348,23 +329,23 @@ spendenQuittungRouter.post("/:id/revision", async (req, res) => {
 });
 
 // PATCH /api/spenden-quittung/:id/stornieren
-spendenQuittungRouter.patch("/:id/stornieren", async (req, res) => {
+spendenQuittungRouter.patch('/:id/stornieren', async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
-    res.status(400).json({ error: "Ungültige ID" });
+    res.status(400).json({ error: 'Ungültige ID' });
     return;
   }
 
   const quittung = await prisma.spendenQuittung.findUnique({ where: { id } });
   if (!quittung) {
-    res.status(404).json({ error: "Quittung nicht gefunden" });
+    res.status(404).json({ error: 'Quittung nicht gefunden' });
     return;
   }
 
   await prisma.spendenQuittung.update({
     where: { id },
-    data: { status: "STORNIERT" },
+    data: { status: 'STORNIERT' },
   });
 
-  res.json({ message: "Quittung storniert" });
+  res.json({ message: 'Quittung storniert' });
 });

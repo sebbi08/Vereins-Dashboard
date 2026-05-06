@@ -44,7 +44,9 @@ function formatDatum(iso: string) {
 }
 
 function formatDateTime(iso: string) {
-  return new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(iso));
+  return new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short' }).format(
+    new Date(iso),
+  );
 }
 </script>
 
@@ -57,7 +59,12 @@ function formatDateTime(iso: string) {
       <h2 class="text-2xl font-bold text-gray-800">Quittung Details</h2>
     </div>
 
-    <div v-if="fehler" class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm">{{ fehler }}</div>
+    <div
+      v-if="fehler"
+      class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm"
+    >
+      {{ fehler }}
+    </div>
     <div v-if="laden" class="text-gray-400 text-sm">Lädt…</div>
 
     <template v-if="quittung">
@@ -70,12 +77,19 @@ function formatDateTime(iso: string) {
               <span
                 :class="[
                   'text-xs font-medium px-2 py-0.5 rounded-full',
-                  quittung.status === 'AKTIV' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500',
+                  quittung.status === 'AKTIV'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-500',
                 ]"
-              >{{ quittung.status }}</span>
+                >{{ quittung.status }}</span
+              >
             </div>
-            <p class="text-gray-600 text-sm">{{ quittung.spender.anrede }} {{ quittung.spender.name }}</p>
-            <p class="text-gray-500 text-xs">{{ quittung.spender.strasse }}, {{ quittung.spender.ort }}</p>
+            <p class="text-gray-600 text-sm">
+              {{ quittung.spender.anrede }} {{ quittung.spender.name }}
+            </p>
+            <p class="text-gray-500 text-xs">
+              {{ quittung.spender.strasse }}, {{ quittung.spender.ort }}
+            </p>
           </div>
           <div class="flex gap-2">
             <button
@@ -98,10 +112,20 @@ function formatDateTime(iso: string) {
 
       <!-- Stornieren Bestätigung -->
       <div v-if="stornierBestaetigung" class="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
-        <p class="text-sm text-red-700 mb-3">Quittung <strong>{{ quittung.nummer }}</strong> wirklich stornieren? Diese Aktion kann nicht rückgängig gemacht werden.</p>
+        <p class="text-sm text-red-700 mb-3">
+          Quittung <strong>{{ quittung.nummer }}</strong> wirklich stornieren? Diese Aktion kann
+          nicht rückgängig gemacht werden.
+        </p>
         <div class="flex gap-2">
-          <button class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm" @click="stornieren">Ja, stornieren</button>
-          <button class="border border-gray-300 px-4 py-2 rounded-lg text-sm" @click="stornierBestaetigung = false">Abbrechen</button>
+          <button class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm" @click="stornieren">
+            Ja, stornieren
+          </button>
+          <button
+            class="border border-gray-300 px-4 py-2 rounded-lg text-sm"
+            @click="stornierBestaetigung = false"
+          >
+            Abbrechen
+          </button>
         </div>
       </div>
 
@@ -110,16 +134,23 @@ function formatDateTime(iso: string) {
         <div class="px-6 py-4 border-b border-gray-100">
           <h3 class="font-semibold text-gray-800">Revisionen</h3>
         </div>
-        <div v-for="rev in quittung.revisionen" :key="rev.id" class="border-b border-gray-100 last:border-0 p-6">
+        <div
+          v-for="rev in quittung.revisionen"
+          :key="rev.id"
+          class="border-b border-gray-100 last:border-0 p-6"
+        >
           <div class="flex items-start justify-between mb-3">
             <div class="flex items-center gap-2">
               <span class="font-medium text-gray-800">R{{ rev.revisionNummer }}</span>
               <span
                 :class="[
                   'text-xs font-medium px-2 py-0.5 rounded-full',
-                  rev.status === 'AKTIV' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400',
+                  rev.status === 'AKTIV'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-400',
                 ]"
-              >{{ rev.status }}</span>
+                >{{ rev.status }}</span
+              >
               <span class="text-xs text-gray-400">{{ formatDateTime(rev.erstelltAm) }}</span>
             </div>
             <a
@@ -134,7 +165,9 @@ function formatDateTime(iso: string) {
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <div>
               <span class="text-gray-500 text-xs">Betrag</span>
-              <p class="font-medium text-gray-800">{{ formatBetrag(rev.eingaben.spendenbetragCents) }}</p>
+              <p class="font-medium text-gray-800">
+                {{ formatBetrag(rev.eingaben.spendenbetragCents) }}
+              </p>
             </div>
             <div>
               <span class="text-gray-500 text-xs">Spendendatum</span>
@@ -142,7 +175,9 @@ function formatDateTime(iso: string) {
             </div>
             <div>
               <span class="text-gray-500 text-xs">Zahlungsweg</span>
-              <p class="text-gray-700">{{ rev.eingaben.zahlungsweg === 'BANK' ? 'Banküberweisung' : 'Bar' }}</p>
+              <p class="text-gray-700">
+                {{ rev.eingaben.zahlungsweg === 'BANK' ? 'Banküberweisung' : 'Bar' }}
+              </p>
             </div>
             <div>
               <span class="text-gray-500 text-xs">Mit Anschreiben</span>

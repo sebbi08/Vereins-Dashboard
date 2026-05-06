@@ -1,14 +1,14 @@
-import type { PrismaClient } from "@prisma/client";
-import { exec } from "child_process";
-import Docxtemplater from "docxtemplater";
-import fs from "fs";
-import os from "os";
-import path from "path";
-import { PDFDocument } from "pdf-lib";
-import PizZip from "pizzip";
-import { promisify } from "util";
-import { QUITTUNGEN_DIR } from "../config";
-import { betragInWorten, formatBetrag, formatDatum } from "./betragInWorten";
+import type { PrismaClient } from '@prisma/client';
+import { exec } from 'child_process';
+import Docxtemplater from 'docxtemplater';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { PDFDocument } from 'pdf-lib';
+import PizZip from 'pizzip';
+import { promisify } from 'util';
+import { QUITTUNGEN_DIR } from '../config';
+import { betragInWorten, formatBetrag, formatDatum } from './betragInWorten';
 
 const execAsync = promisify(exec);
 
@@ -25,10 +25,10 @@ interface AnschreibenDaten {
 }
 
 function konstruiereBriefAnrede(anrede: string, name: string): string {
-  const nachname = name.split(" ").pop() ?? name;
-  if (anrede.toLowerCase() === "herr") return `Sehr geehrter Herr ${nachname}`;
-  if (anrede.toLowerCase() === "frau") return `Sehr geehrte Frau ${nachname}`;
-  return "Sehr geehrte Damen und Herren";
+  const nachname = name.split(' ').pop() ?? name;
+  if (anrede.toLowerCase() === 'herr') return `Sehr geehrter Herr ${nachname}`;
+  if (anrede.toLowerCase() === 'frau') return `Sehr geehrte Frau ${nachname}`;
+  return 'Sehr geehrte Damen und Herren';
 }
 
 async function fuelleAnschreibenVorlage(
@@ -41,21 +41,17 @@ async function fuelleAnschreibenVorlage(
     linebreaks: true,
   });
   doc.render(daten);
-  return doc
-    .getZip()
-    .generate({ type: "nodebuffer", compression: "DEFLATE" }) as Buffer;
+  return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
 }
 
 async function docxZuPdf(docxBuffer: Buffer): Promise<Buffer> {
-  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "lo-"));
-  const docxPath = path.join(tmpDir, "input.docx");
-  const pdfPath = path.join(tmpDir, "input.pdf");
+  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lo-'));
+  const docxPath = path.join(tmpDir, 'input.docx');
+  const pdfPath = path.join(tmpDir, 'input.pdf');
 
   try {
     await fs.promises.writeFile(docxPath, docxBuffer);
-    await execAsync(
-      `libreoffice --headless --convert-to pdf --outdir "${tmpDir}" "${docxPath}"`,
-    );
+    await execAsync(`libreoffice --headless --convert-to pdf --outdir "${tmpDir}" "${docxPath}"`);
     return await fs.promises.readFile(pdfPath);
   } finally {
     await fs.promises.rm(tmpDir, { recursive: true, force: true });
@@ -74,7 +70,7 @@ async function fuellePdfFormular(
     steuerNrDatum: string;
     veranlagungsZeitraum: string;
     finanzamtName: string;
-    zahlungsweg: "BANK" | "BAR";
+    zahlungsweg: 'BANK' | 'BAR';
   },
 ): Promise<Buffer> {
   const pdfDoc = await PDFDocument.load(vorlageBuffer);
@@ -96,20 +92,20 @@ async function fuellePdfFormular(
     }
   };
 
-  setTextField("Name", daten.name);
-  setTextField("Betrag", daten.betrag);
-  setTextField("BetragInBuchstaben", daten.betragInBuchstaben);
-  setTextField("TagDerZuwendung", daten.tagDerZuwendung);
-  setTextField("Zweck", daten.zweck);
-  setTextField("Steuer Nr", daten.steuerNr);
-  setTextField("SteuerNrDatum", daten.steuerNrDatum);
-  setTextField("VeranlagungsZeitraum", daten.veranlagungsZeitraum);
-  setTextField("NameFinanzamt", daten.finanzamtName);
-  setTextField("Finanzamt", daten.finanzamtName);
+  setTextField('Name', daten.name);
+  setTextField('Betrag', daten.betrag);
+  setTextField('BetragInBuchstaben', daten.betragInBuchstaben);
+  setTextField('TagDerZuwendung', daten.tagDerZuwendung);
+  setTextField('Zweck', daten.zweck);
+  setTextField('Steuer Nr', daten.steuerNr);
+  setTextField('SteuerNrDatum', daten.steuerNrDatum);
+  setTextField('VeranlagungsZeitraum', daten.veranlagungsZeitraum);
+  setTextField('NameFinanzamt', daten.finanzamtName);
+  setTextField('Finanzamt', daten.finanzamtName);
 
   try {
-    if (daten.zahlungsweg === "BANK") {
-      form.getCheckBox("Kontrollkästchen1").check();
+    if (daten.zahlungsweg === 'BANK') {
+      form.getCheckBox('Kontrollkästchen1').check();
     }
   } catch {
     // Checkbox nicht vorhanden — ignorieren
@@ -158,7 +154,7 @@ async function verbindePdfs(pdfs: Buffer[]): Promise<Buffer> {
  *  Gibt den Eingabewert unverändert zurück, falls er kein ISO-Datum ist. */
 function formatiereDatum(iso: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
-    const [y, m, d] = iso.split("-");
+    const [y, m, d] = iso.split('-');
     return `${d}.${m}.${y}`;
   }
   return iso;
@@ -184,9 +180,7 @@ export async function generiereQuittungPdf(
   const pdfs: Buffer[] = [];
 
   if (revision.mitAnschreiben && revision.anschreibenVorlage) {
-    const vorlageBuffer = await fs.promises.readFile(
-      revision.anschreibenVorlage.dateiPfad,
-    );
+    const vorlageBuffer = await fs.promises.readFile(revision.anschreibenVorlage.dateiPfad);
     const briefAnrede = konstruiereBriefAnrede(revision.anrede, revision.name);
     const filledDocx = await fuelleAnschreibenVorlage(vorlageBuffer, {
       Anrede: revision.anrede,
@@ -203,9 +197,7 @@ export async function generiereQuittungPdf(
     pdfs.push(anschreibenPdf);
   }
 
-  const quittungsVorlageBuffer = await fs.promises.readFile(
-    revision.quittungsVorlage.dateiPfad,
-  );
+  const quittungsVorlageBuffer = await fs.promises.readFile(revision.quittungsVorlage.dateiPfad);
   const quittungPdf = await fuellePdfFormular(quittungsVorlageBuffer, {
     name: revision.name,
     betrag: betragFormatiert,
@@ -216,7 +208,7 @@ export async function generiereQuittungPdf(
     steuerNrDatum: formatiereDatum(revision.freistellungsdatum),
     veranlagungsZeitraum: revision.veranlagungszeitraum,
     finanzamtName: revision.finanzamtName,
-    zahlungsweg: revision.zahlungsweg as "BANK" | "BAR",
+    zahlungsweg: revision.zahlungsweg as 'BANK' | 'BAR',
   });
   pdfs.push(quittungPdf);
 

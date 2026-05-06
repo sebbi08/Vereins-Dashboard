@@ -16,7 +16,7 @@ export interface SpenderDto {
   ort: string;
 }
 
-export type VorlageTyp = "ANSCHREIBEN" | "QUITTUNG";
+export type VorlageTyp = 'ANSCHREIBEN' | 'QUITTUNG';
 
 export interface VorlageDto {
   id: number;
@@ -27,7 +27,7 @@ export interface VorlageDto {
   hochgeladenAm: string;
 }
 
-export type Zahlungsweg = "BANK" | "BAR";
+export type Zahlungsweg = 'BANK' | 'BAR';
 
 export interface QuittungEingaben {
   anrede: string;
@@ -46,8 +46,8 @@ export interface QuittungEingaben {
   veranlagungszeitraum: string;
 }
 
-export type RevisionStatus = "AKTIV" | "ERSETZT";
-export type QuittungStatus = "AKTIV" | "STORNIERT";
+export type RevisionStatus = 'AKTIV' | 'ERSETZT';
+export type QuittungStatus = 'AKTIV' | 'STORNIERT';
 
 export interface SpendenQuittungRevisionDto {
   id: number;

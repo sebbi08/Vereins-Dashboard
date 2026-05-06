@@ -1,14 +1,14 @@
-import fs from "fs";
-import { QUITTUNGEN_DIR, VORLAGEN_DIR } from "./config";
-import { prisma } from "./prismaClient";
+import fs from 'fs';
+import { QUITTUNGEN_DIR, VORLAGEN_DIR } from './config';
+import { prisma } from './prismaClient';
 
 const DEFAULT_EINSTELLUNGEN: Record<string, string> = {
-  kassenwart: "",
-  gemeinnuetzigerZweck: "Förderung der Jugend- und Musikkultur",
-  finanzamtName: "",
-  steuernummer: "",
-  freistellungsdatum: "",
-  veranlagungszeitraum: "",
+  kassenwart: '',
+  gemeinnuetzigerZweck: 'Förderung der Jugend- und Musikkultur',
+  finanzamtName: '',
+  steuernummer: '',
+  freistellungsdatum: '',
+  veranlagungszeitraum: '',
 };
 
 export async function initializeApp() {

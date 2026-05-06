@@ -42,9 +42,7 @@ function onSearchInput() {
 }
 
 function formatBetrag(cents: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(
-    cents / 100
-  );
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cents / 100);
 }
 
 function formatDatum(iso: string) {
@@ -60,7 +58,11 @@ const anzahlGesamt = computed(() => quittungen.value.length);
       <h2 class="text-2xl font-bold text-gray-800">Spenden Quittungen</h2>
       <button
         :disabled="!store.quittungsVorlageVorhanden"
-        :title="!store.quittungsVorlageVorhanden ? 'Bitte zuerst eine Vorlage in den Einstellungen hochladen' : undefined"
+        :title="
+          !store.quittungsVorlageVorhanden
+            ? 'Bitte zuerst eine Vorlage in den Einstellungen hochladen'
+            : undefined
+        "
         class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         @click="router.push('/spenden-quittung/neu')"
       >
@@ -75,8 +77,11 @@ const anzahlGesamt = computed(() => quittungen.value.length);
     >
       <span class="mt-0.5 text-lg leading-none">⚠️</span>
       <span>
-        Keine Spendenquittungs-Vorlage hinterlegt. Bitte zuerst eine Vorlage hochladen, bevor Quittungen erstellt werden können.
-        <router-link to="/einstellungen" class="ml-1 font-medium underline hover:text-amber-900">Zu den Einstellungen →</router-link>
+        Keine Spendenquittungs-Vorlage hinterlegt. Bitte zuerst eine Vorlage hochladen, bevor
+        Quittungen erstellt werden können.
+        <router-link to="/einstellungen" class="ml-1 font-medium underline hover:text-amber-900"
+          >Zu den Einstellungen →</router-link
+        >
       </span>
     </div>
 
@@ -117,7 +122,10 @@ const anzahlGesamt = computed(() => quittungen.value.length);
     </div>
 
     <!-- Fehler -->
-    <div v-if="fehler" class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm">
+    <div
+      v-if="fehler"
+      class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm"
+    >
       {{ fehler }}
     </div>
 
@@ -151,9 +159,7 @@ const anzahlGesamt = computed(() => quittungen.value.length);
               {{ formatBetrag(q.spendenbetragCents) }}
             </td>
             <td class="px-4 py-3 text-gray-600">{{ formatDatum(q.spendendatum) }}</td>
-            <td class="px-4 py-3 text-gray-500">
-              R{{ q.aktiveRevisionNummer ?? '–' }}
-            </td>
+            <td class="px-4 py-3 text-gray-500">R{{ q.aktiveRevisionNummer ?? '–' }}</td>
             <td class="px-4 py-3">
               <span
                 :class="[
@@ -180,4 +186,3 @@ const anzahlGesamt = computed(() => quittungen.value.length);
     </div>
   </div>
 </template>
-

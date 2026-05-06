@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "scripts": {
     "dev": "prisma migrate deploy && ts-node-dev --respawn --transpile-only src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsc",
     "start": "node dist/index.js",
     "db:migrate": "prisma migrate dev",
