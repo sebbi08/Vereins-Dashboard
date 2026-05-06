@@ -23,17 +23,21 @@ RUN apk add --no-cache libreoffice ttf-freefont
 
 WORKDIR /app
 
+# Copy root/workspace manifests so npm can use the monorepo lockfile in runtime stage
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/frontend/package*.json ./frontend/
+COPY --from=builder /app/backend/package*.json ./backend/
+COPY --from=builder /app/shared/package*.json ./shared/
+
 # Copy backend build and its dependencies
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/prisma ./backend/prisma
-COPY --from=builder /app/backend/package*.json ./backend/
 
 # Copy frontend build
 COPY --from=builder /app/frontend/dist ./frontend/dist
 
 # Install runtime dependencies including Prisma CLI for deploy-time migrations
-WORKDIR /app/backend
-RUN npm ci && npx prisma generate
+RUN npm ci --workspace=backend && npm exec --workspace=backend prisma generate
 
 # Create data directories
 RUN mkdir -p /app/data/vorlagen /app/data/quittungen
