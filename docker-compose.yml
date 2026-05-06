@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - db-data:/app/data
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: "file:/app/data/db.sqlite"
+      PORT: "3000"
+      DATA_DIR: "/app/data"
+      CONTEXT_DIR: "/app/context"
+    restart: unless-stopped
+
+volumes:
+  db-data:

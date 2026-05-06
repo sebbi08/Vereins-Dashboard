@@ -1,0 +1,33 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: sh -lc "cd backend && npx prisma migrate deploy && cd /app && npx concurrently -n backend,frontend -c blue,green \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend -- --host\""
+    ports:
+      - "3000:3000"
+      - "5173:5173"
+    volumes:
+      - ./backend/src:/app/backend/src
+      - ./backend/prisma:/app/backend/prisma
+      - ./backend/tsconfig.json:/app/backend/tsconfig.json
+      - ./frontend/src:/app/frontend/src
+      - ./frontend/index.html:/app/frontend/index.html
+      - ./frontend/vite.config.ts:/app/frontend/vite.config.ts
+      - ./frontend/tsconfig.json:/app/frontend/tsconfig.json
+      - ./frontend/tsconfig.app.json:/app/frontend/tsconfig.app.json
+      - ./frontend/tsconfig.node.json:/app/frontend/tsconfig.node.json
+      - ./frontend/vite-env.d.ts:/app/frontend/vite-env.d.ts
+      - ./shared/src:/app/shared/src
+      - ./context:/app/context
+      - dev-data:/app/data
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: "file:/app/data/db.sqlite"
+      PORT: "3000"
+      DATA_DIR: "/app/data"
+      CONTEXT_DIR: "/app/context"
+      VITE_API_TARGET: "http://localhost:3000"
+
+volumes:
+  dev-data:

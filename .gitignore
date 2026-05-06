@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+frontend/dist/
+backend/dist/
+shared/dist/
+
+# SQLite database
+*.sqlite
+*.sqlite-journal
+data/
+
+# Environment files
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Stale TS compilation artifacts (never commit .js into src/)
+frontend/src/**/*.js
+frontend/src/**/*.js.map
+
+context

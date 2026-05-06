@@ -1,0 +1,81 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Spender {
+  id         Int               @id @default(autoincrement())
+  anrede     String
+  name       String
+  strasse    String
+  ort        String
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  quittungen SpendenQuittung[]
+}
+
+model Vorlage {
+  id            Int                       @id @default(autoincrement())
+  typ           String
+  version       Int
+  dateiName     String
+  dateiPfad     String
+  aktiv         Boolean                   @default(false)
+  hochgeladenAm DateTime                  @default(now())
+  revisionenAnschreiben SpendenQuittungRevision[] @relation("AnschreibenVorlage")
+  revisionenQuittung    SpendenQuittungRevision[] @relation("QuittungsVorlage")
+}
+
+model SpendenQuittung {
+  id             Int                       @id @default(autoincrement())
+  nummer         String                    @unique
+  jahr           Int
+  laufendeNummer Int
+  status         String                    @default("AKTIV")
+  spenderId      Int
+  spender        Spender                   @relation(fields: [spenderId], references: [id])
+  spendendatum   DateTime
+  createdAt      DateTime                  @default(now())
+  revisionen     SpendenQuittungRevision[]
+}
+
+model SpendenQuittungRevision {
+  id                   Int             @id @default(autoincrement())
+  quittungId           Int
+  quittung             SpendenQuittung @relation(fields: [quittungId], references: [id])
+  revisionNummer       Int
+  status               String          @default("AKTIV")
+
+  anrede               String
+  name                 String
+  strasse              String
+  ort                  String
+  spendenbetragCents   Int
+  spendendatum         DateTime
+  mitAnschreiben       Boolean
+  zahlungsweg          String          @default("BANK")
+  kassenwart           String
+  gemeinnuetzigerZweck String
+  finanzamtName        String
+  steuernummer         String
+  freistellungsdatum   String
+  veranlagungszeitraum String
+
+  anschreibenVorlageId Int?
+  anschreibenVorlage   Vorlage?        @relation("AnschreibenVorlage", fields: [anschreibenVorlageId], references: [id])
+  quittungsVorlageId   Int
+  quittungsVorlage     Vorlage         @relation("QuittungsVorlage", fields: [quittungsVorlageId], references: [id])
+
+  dateiPfad            String?
+  erstelltAm           DateTime        @default(now())
+}
+
+model SystemEinstellung {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+}

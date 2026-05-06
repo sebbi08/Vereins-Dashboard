@@ -1,0 +1,28 @@
+{
+  "name": "backend",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.0.0",
+    "docxtemplater": "^3.68.6",
+    "express": "^4.21.0",
+    "multer": "^2.1.1",
+    "pdf-lib": "^1.17.1",
+    "pizzip": "^3.2.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^22.0.0",
+    "prisma": "^6.0.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.5.0"
+  }
+}
