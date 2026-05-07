@@ -5,7 +5,6 @@ const navItems = [
   { name: 'Dashboard', to: '/' },
   { name: 'Spenden Quittung', to: '/spenden-quittung' },
   { name: 'Rechnung', to: '/rechnung' },
-  { name: 'Einstellungen', to: '/einstellungen' },
 ];
 </script>
 

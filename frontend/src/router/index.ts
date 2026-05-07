@@ -32,9 +32,13 @@ const router = createRouter({
     },
     { path: '/rechnung', name: 'rechnung', component: RechnungView },
     {
-      path: '/einstellungen',
-      name: 'einstellungen',
+      path: '/spenden-quittung/einstellungen',
+      name: 'spenden-quittung-einstellungen',
       component: EinstellungenView,
+    },
+    {
+      path: '/einstellungen',
+      redirect: '/spenden-quittung/einstellungen',
     },
   ],
 });

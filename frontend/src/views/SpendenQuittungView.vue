@@ -54,20 +54,28 @@ const anzahlGesamt = computed(() => quittungen.value.length);
 
 <template>
   <div>
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center justify-between mb-6 gap-3">
       <h2 class="text-2xl font-bold text-gray-800">Spenden Quittungen</h2>
-      <button
-        :disabled="!store.quittungsVorlageVorhanden"
-        :title="
-          !store.quittungsVorlageVorhanden
-            ? 'Bitte zuerst eine Vorlage in den Einstellungen hochladen'
-            : undefined
-        "
-        class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-        @click="router.push('/spenden-quittung/neu')"
-      >
-        + Neue Quittung
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+          @click="router.push('/spenden-quittung/einstellungen')"
+        >
+          Einstellungen
+        </button>
+        <button
+          :disabled="!store.quittungsVorlageVorhanden"
+          :title="
+            !store.quittungsVorlageVorhanden
+              ? 'Bitte zuerst eine Vorlage in den Einstellungen hochladen'
+              : undefined
+          "
+          class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          @click="router.push('/spenden-quittung/neu')"
+        >
+          + Neue Quittung
+        </button>
+      </div>
     </div>
 
     <!-- Vorlage fehlt Banner -->
@@ -79,7 +87,10 @@ const anzahlGesamt = computed(() => quittungen.value.length);
       <span>
         Keine Spendenquittungs-Vorlage hinterlegt. Bitte zuerst eine Vorlage hochladen, bevor
         Quittungen erstellt werden können.
-        <router-link to="/einstellungen" class="ml-1 font-medium underline hover:text-amber-900"
+        <router-link
+          to="/spenden-quittung/einstellungen"
+          class="ml-1 font-medium underline hover:text-amber-900"
+        >
           >Zu den Einstellungen →</router-link
         >
       </span>

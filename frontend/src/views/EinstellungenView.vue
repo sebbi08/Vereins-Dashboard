@@ -94,7 +94,7 @@ function formatDatum(iso: string) {
 
 <template>
   <div>
-    <h2 class="text-2xl font-bold text-gray-800 mb-6">Einstellungen</h2>
+    <h2 class="text-2xl font-bold text-gray-800 mb-6">Spenden Quittung Einstellungen</h2>
 
     <div
       v-if="fehler"
