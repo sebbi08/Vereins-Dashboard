@@ -26,34 +26,8 @@ const ERLAUBTE_ENDUNGEN: Record<VorlageTyp, string> = {
 
 const GUELTIGE_TYPEN: VorlageTyp[] = ['ANSCHREIBEN', 'QUITTUNG'];
 
-type VorlagePreviewDelegate = {
-  findUnique: (args: {
-    where: { typ: VorlageTyp };
-  }) => Promise<{ dateiPfad: string | null } | null>;
-  upsert: (args: {
-    where: { typ: VorlageTyp };
-    update: { dateiPfad: string; erstelltAm: Date };
-    create: { typ: VorlageTyp; dateiPfad: string };
-  }) => Promise<unknown>;
-};
-
-function serialisiereTechnischenFehler(error: unknown): string {
-  if (error instanceof Error) {
-    return error.stack || `${error.name}: ${error.message}`;
-  }
-  return String(error);
-}
-
 function istGueltigerTyp(typ: string): typ is VorlageTyp {
   return GUELTIGE_TYPEN.includes(typ as VorlageTyp);
-}
-
-function holeVorlagePreviewDelegate(): VorlagePreviewDelegate | null {
-  const delegate = (prisma as unknown as Record<string, unknown>).vorlagePreview;
-  if (!delegate) {
-    return null;
-  }
-  return delegate as VorlagePreviewDelegate;
 }
 
 async function ladeVorschauEinstellungen(): Promise<VorschauEinstellungen> {
@@ -125,33 +99,28 @@ vorlagenRouter.get('/preview/:typ', async (req, res) => {
     return;
   }
 
-  const standardPreviewPath = path.join(
-    VORLAGEN_DIR,
-    'preview',
-    `${typ.toLowerCase()}_preview.pdf`,
-  );
-  let previewPfad = standardPreviewPath;
-
-  const vorlagePreview = holeVorlagePreviewDelegate();
-  if (vorlagePreview) {
-    const preview = await vorlagePreview.findUnique({
-      where: { typ },
-    });
-    if (preview?.dateiPfad) {
-      previewPfad = preview.dateiPfad;
-    }
-  }
-
-  try {
-    await fs.promises.access(previewPfad, fs.constants.R_OK);
-  } catch {
-    res.status(404).json({ error: 'Keine Vorschau vorhanden' });
+  const vorlage = await prisma.vorlage.findFirst({
+    where: { typ, aktiv: true },
+  });
+  if (!vorlage) {
+    res.status(404).json({ error: 'Keine aktive Vorlage vorhanden' });
     return;
   }
 
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${typ.toLowerCase()}_preview.pdf"`);
-  fs.createReadStream(previewPfad).pipe(res);
+  try {
+    const einstellungen = await ladeVorschauEinstellungen();
+    const daten = getDummyDaten(typ, einstellungen);
+    const vorlageBuffer = await fs.promises.readFile(vorlage.dateiPfad);
+    const previewBuffer = await generierePreviewVorlage(typ, vorlageBuffer, daten);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${typ.toLowerCase()}_preview.pdf"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.status(200).send(previewBuffer);
+  } catch (error) {
+    console.error(`[vorlagen] Live preview generation failed for typ=${typ}`, error);
+    res.status(500).json({ error: 'Vorschau konnte nicht generiert werden' });
+  }
 });
 
 vorlagenRouter.post('/:typ/preview', upload.single('vorlage'), async (req, res) => {
@@ -189,42 +158,15 @@ vorlagenRouter.post('/:typ/preview', upload.single('vorlage'), async (req, res) 
   try {
     const previewBuffer = await generierePreviewVorlage(typ, req.file.buffer, daten);
 
-    const previewDir = path.join(VORLAGEN_DIR, 'preview');
-    await fs.promises.mkdir(previewDir, { recursive: true });
-    const previewPath = path.join(previewDir, `${typ.toLowerCase()}_preview.pdf`);
-    await fs.promises.writeFile(previewPath, previewBuffer);
-
-    const vorlagePreview = holeVorlagePreviewDelegate();
-    if (vorlagePreview) {
-      try {
-        await vorlagePreview.upsert({
-          where: { typ },
-          update: { dateiPfad: previewPath, erstelltAm: new Date() },
-          create: { typ, dateiPfad: previewPath },
-        });
-        console.info(`[vorlagen] Preview persisted in DB for typ=${typ} path=${previewPath}`);
-      } catch (persistError) {
-        console.warn(
-          `[vorlagen] Preview DB persistence failed for typ=${typ}; file fallback remains active`,
-          persistError,
-        );
-      }
-    } else {
-      console.warn(
-        `[vorlagen] Prisma delegate 'vorlagePreview' unavailable; using file-only preview fallback for typ=${typ}`,
-      );
-    }
-
+    res.setHeader('Cache-Control', 'no-store');
     res.json({
       success: true,
       data: previewBuffer.toString('base64'),
       typ,
     });
   } catch (error) {
-    res.status(500).json({
-      error: 'Vorschau konnte nicht generiert werden',
-      technicalError: serialisiereTechnischenFehler(error),
-    });
+    console.error(`[vorlagen] Upload preview generation failed for typ=${typ}`, error);
+    res.status(500).json({ error: 'Vorschau konnte nicht generiert werden' });
   }
 });
 

@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { Router } from 'express';
+import fs from 'fs';
 import type { PdfStatus, QuittungEingaben, SpendenQuittungListItem } from 'shared';
 import { prisma } from '../prismaClient';
 import { generiereQuittungPdf } from '../services/pdfGenerierung';
@@ -215,7 +216,9 @@ spendenQuittungRouter.get('/revision/:revisionId/download', async (req, res) => 
   }
 
   const dateiName = `${revision.quittung.nummer}-R${revision.revisionNummer}.pdf`;
-  res.download(revision.dateiPfad, dateiName);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${dateiName}"`);
+  fs.createReadStream(revision.dateiPfad).pipe(res);
 });
 
 // POST /api/spenden-quittung/revision/:revisionId/retry-pdf

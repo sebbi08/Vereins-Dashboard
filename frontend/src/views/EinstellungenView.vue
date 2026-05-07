@@ -104,13 +104,25 @@ function schliesseVorschauModal() {
   aktuelleVorschauTyp.value = null;
 }
 
+function hatAktiveVorlage(typ: VorlageTyp): boolean {
+  return Boolean(vorlageVonTyp(typ));
+}
+
+function hatPendingUpload(typ: VorlageTyp | null): boolean {
+  if (!typ) return false;
+  return Boolean(pendingUploadDateien.value[typ]);
+}
+
 async function zeigeAktuelleVorschau(typ: VorlageTyp) {
+  if (!hatAktiveVorlage(typ)) return;
+
   uploadFehler.value[typ] = '';
   uploadErfolg.value[typ] = '';
   vorschauFehler.value = '';
   vorschauDataUrl.value = null;
   vorschauLaden.value = true;
   aktuelleVorschauTyp.value = typ;
+  pendingUploadDateien.value[typ] = null;
   showVorschauModal.value = true;
 
   if (vorschauObjektUrl.value) {
@@ -352,11 +364,15 @@ function formatDatum(iso: string) {
           </label>
           <button
             type="button"
-            class="ml-2 inline-block border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-50"
+            class="ml-2 inline-block border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            :disabled="!hatAktiveVorlage(typ)"
             @click="zeigeAktuelleVorschau(typ)"
           >
             Aktuelle Vorschau anzeigen
           </button>
+          <p v-if="!hatAktiveVorlage(typ)" class="mt-2 text-xs text-orange-500">
+            Keine aktive Vorlage vorhanden
+          </p>
         </div>
       </div>
     </div>
@@ -406,7 +422,7 @@ function formatDatum(iso: string) {
         </div>
 
         <div
-          v-if="vorschauDataUrl && !vorschauFehler"
+          v-if="vorschauDataUrl && !vorschauFehler && hatPendingUpload(aktuelleVorschauTyp)"
           class="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50"
         >
           <button

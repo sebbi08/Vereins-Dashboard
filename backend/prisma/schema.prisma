@@ -31,13 +31,6 @@ model Vorlage {
   revisionenQuittung    SpendenQuittungRevision[] @relation("QuittungsVorlage")
 }
 
-model VorlagePreview {
-  id         Int      @id @default(autoincrement())
-  typ        String   @unique
-  dateiPfad  String?
-  erstelltAm DateTime @default(now())
-}
-
 model SpendenQuittung {
   id             Int                       @id @default(autoincrement())
   nummer         String                    @unique
