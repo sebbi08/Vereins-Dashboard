@@ -6,7 +6,7 @@
     "dev": "prisma generate && prisma migrate deploy && ts-node-dev --respawn --transpile-only src/index.ts",
     "typecheck": "prisma generate && tsc --noEmit -p tsconfig.json",
     "build": "prisma generate && tsc",
-    "start": "prisma generate && node dist/index.js",
+    "start": "prisma generate && node dist/backend/src/index.js",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate"
   },
