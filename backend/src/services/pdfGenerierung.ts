@@ -77,10 +77,7 @@ async function docxZuPdf(docxBuffer: Buffer): Promise<Buffer> {
   }
 }
 
-async function fuellePdfFormular(
-  vorlageBuffer: Buffer,
-  daten: PdfFormularDaten,
-): Promise<Buffer> {
+async function fuellePdfFormular(vorlageBuffer: Buffer, daten: PdfFormularDaten): Promise<Buffer> {
   const pdfDoc = await PDFDocument.load(vorlageBuffer);
   const form = pdfDoc.getForm();
 

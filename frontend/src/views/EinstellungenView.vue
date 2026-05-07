@@ -368,9 +368,13 @@ function formatDatum(iso: string) {
       <div class="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
         <div class="flex items-center justify-between px-6 py-4 border-b">
           <h3 class="text-lg font-semibold text-gray-800">
-            {{ aktuelleVorschauTyp === 'ANSCHREIBEN' ? 'Anschreiben Vorschau' : 'Quittung Vorschau' }}
+            {{
+              aktuelleVorschauTyp === 'ANSCHREIBEN' ? 'Anschreiben Vorschau' : 'Quittung Vorschau'
+            }}
           </h3>
-          <button @click="schliesseVorschauModal" class="text-gray-400 hover:text-gray-600">×</button>
+          <button @click="schliesseVorschauModal" class="text-gray-400 hover:text-gray-600">
+            ×
+          </button>
         </div>
 
         <div class="p-6 overflow-auto">
@@ -393,7 +397,10 @@ function formatDatum(iso: string) {
             title="Vorlagen Vorschau"
           ></iframe>
 
-          <div v-else-if="!vorschauLaden && !vorschauFehler" class="text-center text-gray-500 py-12">
+          <div
+            v-else-if="!vorschauLaden && !vorschauFehler"
+            class="text-center text-gray-500 py-12"
+          >
             Keine Vorschau verfügbar
           </div>
         </div>
