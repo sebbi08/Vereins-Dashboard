@@ -4,7 +4,7 @@ import Docxtemplater from 'docxtemplater';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, RotationTypes, StandardFonts } from 'pdf-lib';
 import PizZip from 'pizzip';
 import type { VorlageTyp } from 'shared';
 import { promisify } from 'util';
@@ -14,12 +14,8 @@ import { betragInWorten, formatBetrag, formatDatum } from './betragInWorten';
 const execAsync = promisify(exec);
 
 export interface AnschreibenDaten {
-  AdressAnrede: string;
-  adressAnrede: string;
   BriefAnrede: string;
-  briefAnrede: string;
   Anrede: string;
-  BriefAnreden: { Anrede: string }[];
   Name: string;
   Strasse: string;
   Ort: string;
@@ -39,6 +35,8 @@ export interface PdfFormularDaten {
   steuerNrDatum: string;
   veranlagungsZeitraum: string;
   finanzamtName: string;
+  ortDatumUnterschrift: string;
+  quittungsNummer?: string;
 }
 
 export interface VorschauEinstellungen {
@@ -105,8 +103,8 @@ async function fuellePdfFormular(vorlageBuffer: Buffer, daten: PdfFormularDaten)
   setTextField('Steuer Nr', daten.steuerNr);
   setTextField('SteuerNrDatum', daten.steuerNrDatum);
   setTextField('VeranlagungsZeitraum', daten.veranlagungsZeitraum);
-  setTextField('NameFinanzamt', daten.finanzamtName);
   setTextField('Finanzamt', daten.finanzamtName);
+  setTextField('OrtDatum', daten.ortDatumUnterschrift);
 
   try {
     form.flatten();
@@ -120,6 +118,21 @@ async function fuellePdfFormular(vorlageBuffer: Buffer, daten: PdfFormularDaten)
       } catch {
         // Nicht jedes Feld lässt sich in jeder Vorlage mutieren.
       }
+    }
+  }
+
+  if (daten.quittungsNummer) {
+    const pages = pdfDoc.getPages();
+    const firstPage = pages[0];
+    if (firstPage) {
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      firstPage.drawText(`${daten.quittungsNummer}`, {
+        x: 32,
+        y: 20,
+        size: 9,
+        font,
+        rotate: { type: RotationTypes.Degrees, angle: 90 },
+      });
     }
   }
 
@@ -142,15 +155,10 @@ export function getDummyDaten(
   einstellungen: VorschauEinstellungen,
 ): AnschreibenDaten | PdfFormularDaten {
   if (typ === 'ANSCHREIBEN') {
-    const defaultAnrede = 'Sehr geehrte Damen und Herren';
     return {
-      AdressAnrede: defaultAnrede,
-      adressAnrede: '',
-      BriefAnrede: defaultAnrede,
-      briefAnrede: '',
-      Anrede: defaultAnrede,
-      BriefAnreden: [{ Anrede: defaultAnrede }],
-      Name: 'Max Mustermann',
+      BriefAnrede: 'Sehr geehrte Damen und Herren',
+      Anrede: 'Max Mustermann',
+      Name: 'Muserfirma GmbH',
       Strasse: 'Musterstraße 1',
       Ort: '67105 Schifferstadt',
       Heute: formatDatum(new Date()),
@@ -170,6 +178,8 @@ export function getDummyDaten(
     steuerNrDatum: formatiereDatum(einstellungen.freistellungsdatum),
     veranlagungsZeitraum: einstellungen.veranlagungszeitraum,
     finanzamtName: einstellungen.finanzamtName,
+    ortDatumUnterschrift: `Schifferstadt, ${formatDatum(new Date())}`,
+    quittungsNummer: '000001',
   };
 }
 
@@ -233,12 +243,8 @@ export async function generiereQuittungPdf(
     const adressAnrede = revisionMitAnrede.adressAnrede ?? '';
     const briefAnrede = revisionMitAnrede.briefAnrede ?? '';
     const filledDocx = await fuelleAnschreibenVorlage(vorlageBuffer, {
-      AdressAnrede: adressAnrede,
-      adressAnrede,
       BriefAnrede: briefAnrede,
-      briefAnrede,
       Anrede: adressAnrede,
-      BriefAnreden: [{ Anrede: briefAnrede }],
       Name: revision.name,
       Strasse: revision.strasse,
       Ort: revision.ort,
@@ -262,6 +268,8 @@ export async function generiereQuittungPdf(
     steuerNrDatum: formatiereDatum(revision.freistellungsdatum),
     veranlagungsZeitraum: revision.veranlagungszeitraum,
     finanzamtName: revision.finanzamtName,
+    ortDatumUnterschrift: `Schifferstadt, ${formatDatum(new Date())}`,
+    quittungsNummer: revision.quittung.nummer,
   });
   pdfs.push(quittungPdf);
 
