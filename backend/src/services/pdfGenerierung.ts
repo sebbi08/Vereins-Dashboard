@@ -6,13 +6,14 @@ import os from 'os';
 import path from 'path';
 import { PDFDocument } from 'pdf-lib';
 import PizZip from 'pizzip';
+import type { VorlageTyp } from 'shared';
 import { promisify } from 'util';
 import { QUITTUNGEN_DIR } from '../config';
 import { betragInWorten, formatBetrag, formatDatum } from './betragInWorten';
 
 const execAsync = promisify(exec);
 
-interface AnschreibenDaten {
+export interface AnschreibenDaten {
   AdressAnrede: string;
   adressAnrede: string;
   BriefAnrede: string;
@@ -26,6 +27,27 @@ interface AnschreibenDaten {
   Betrag: string;
   TagDerZuwendung: string;
   Kassenwart: string;
+}
+
+export interface PdfFormularDaten {
+  name: string;
+  betrag: string;
+  betragInBuchstaben: string;
+  tagDerZuwendung: string;
+  zweck: string;
+  steuerNr: string;
+  steuerNrDatum: string;
+  veranlagungsZeitraum: string;
+  finanzamtName: string;
+}
+
+export interface VorschauEinstellungen {
+  kassenwart: string;
+  gemeinnuetzigerZweck: string;
+  finanzamtName: string;
+  steuernummer: string;
+  freistellungsdatum: string;
+  veranlagungszeitraum: string;
 }
 
 async function fuelleAnschreibenVorlage(
@@ -57,17 +79,7 @@ async function docxZuPdf(docxBuffer: Buffer): Promise<Buffer> {
 
 async function fuellePdfFormular(
   vorlageBuffer: Buffer,
-  daten: {
-    name: string;
-    betrag: string;
-    betragInBuchstaben: string;
-    tagDerZuwendung: string;
-    zweck: string;
-    steuerNr: string;
-    steuerNrDatum: string;
-    veranlagungsZeitraum: string;
-    finanzamtName: string;
-  },
+  daten: PdfFormularDaten,
 ): Promise<Buffer> {
   const pdfDoc = await PDFDocument.load(vorlageBuffer);
   const form = pdfDoc.getForm();
@@ -126,6 +138,54 @@ async function fuellePdfFormular(
       }),
     );
   }
+}
+
+export function getDummyDaten(
+  typ: VorlageTyp,
+  einstellungen: VorschauEinstellungen,
+): AnschreibenDaten | PdfFormularDaten {
+  if (typ === 'ANSCHREIBEN') {
+    const defaultAnrede = 'Sehr geehrte Damen und Herren';
+    return {
+      AdressAnrede: defaultAnrede,
+      adressAnrede: '',
+      BriefAnrede: defaultAnrede,
+      briefAnrede: '',
+      Anrede: defaultAnrede,
+      BriefAnreden: [{ Anrede: defaultAnrede }],
+      Name: 'Max Mustermann',
+      Strasse: 'Musterstraße 1',
+      Ort: '67105 Schifferstadt',
+      Heute: formatDatum(new Date()),
+      Betrag: '100,00 €',
+      TagDerZuwendung: '01.01.2024',
+      Kassenwart: einstellungen.kassenwart || 'Kassenwart Max Mustermann',
+    };
+  }
+
+  return {
+    name: 'Max Mustermann, Musterstraße 1, 67105 Schifferstadt',
+    betrag: '100,00 €',
+    betragInBuchstaben: betragInWorten(10000).replace(/^./, (first) => first.toLowerCase()),
+    tagDerZuwendung: '01.01.2024',
+    zweck: einstellungen.gemeinnuetzigerZweck,
+    steuerNr: einstellungen.steuernummer,
+    steuerNrDatum: formatiereDatum(einstellungen.freistellungsdatum),
+    veranlagungsZeitraum: einstellungen.veranlagungszeitraum,
+    finanzamtName: einstellungen.finanzamtName,
+  };
+}
+
+export async function generierePreviewVorlage(
+  typ: VorlageTyp,
+  vorlageBuffer: Buffer,
+  daten: AnschreibenDaten | PdfFormularDaten,
+): Promise<Buffer> {
+  if (typ === 'ANSCHREIBEN') {
+    const filledDocx = await fuelleAnschreibenVorlage(vorlageBuffer, daten as AnschreibenDaten);
+    return docxZuPdf(filledDocx);
+  }
+  return fuellePdfFormular(vorlageBuffer, daten as PdfFormularDaten);
 }
 
 async function verbindePdfs(pdfs: Buffer[]): Promise<Buffer> {

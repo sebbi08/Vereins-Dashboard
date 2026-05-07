@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SystemEinstellungen, VorlageDto } from 'shared';
+import type { SystemEinstellungen, VorlageDto, VorlageTyp } from 'shared';
 import { onMounted, ref } from 'vue';
 
 const einstellungen = ref<SystemEinstellungen>({
@@ -17,6 +17,17 @@ const erfolg = ref('');
 const fehler = ref('');
 const uploadFehler = ref<Record<string, string>>({});
 const uploadErfolg = ref<Record<string, string>>({});
+
+const showVorschauModal = ref(false);
+const vorschauLaden = ref(false);
+const vorschauFehler = ref('');
+const vorschauDataUrl = ref<string | null>(null);
+const vorschauObjektUrl = ref<string | null>(null);
+const aktuelleVorschauTyp = ref<VorlageTyp | null>(null);
+const pendingUploadDateien = ref<Record<VorlageTyp, File | null>>({
+  ANSCHREIBEN: null,
+  QUITTUNG: null,
+});
 
 async function ladeEinstellungen() {
   const res = await fetch('/api/einstellungen');
@@ -54,11 +65,7 @@ async function einstellungenSpeichern() {
   }
 }
 
-async function vorlageHochladen(typ: 'ANSCHREIBEN' | 'QUITTUNG', event: Event) {
-  const input = event.target as HTMLInputElement;
-  const datei = input.files?.[0];
-  if (!datei) return;
-
+async function vorlageHochladenDatei(typ: VorlageTyp, datei: File): Promise<boolean> {
   uploadFehler.value[typ] = '';
   uploadErfolg.value[typ] = '';
 
@@ -73,14 +80,131 @@ async function vorlageHochladen(typ: 'ANSCHREIBEN' | 'QUITTUNG', event: Event) {
   if (res.ok) {
     uploadErfolg.value[typ] = 'Vorlage erfolgreich hochgeladen';
     await ladeVorlagen();
-  } else {
-    const err = await res.json();
-    uploadFehler.value[typ] = err.fehlendePflichtfelder
-      ? `Fehlende Pflichtfelder: ${err.fehlendePflichtfelder.join(', ')}`
-      : err.error || 'Unbekannter Fehler';
+    return true;
   }
 
-  input.value = '';
+  const err = await res.json();
+  uploadFehler.value[typ] = err.fehlendePflichtfelder
+    ? `Fehlende Pflichtfelder: ${err.fehlendePflichtfelder.join(', ')}`
+    : err.error || 'Unbekannter Fehler';
+  return false;
+}
+
+function schliesseVorschauModal() {
+  if (aktuelleVorschauTyp.value) {
+    pendingUploadDateien.value[aktuelleVorschauTyp.value] = null;
+  }
+  if (vorschauObjektUrl.value) {
+    URL.revokeObjectURL(vorschauObjektUrl.value);
+    vorschauObjektUrl.value = null;
+  }
+  showVorschauModal.value = false;
+  vorschauDataUrl.value = null;
+  vorschauFehler.value = '';
+  aktuelleVorschauTyp.value = null;
+}
+
+async function zeigeAktuelleVorschau(typ: VorlageTyp) {
+  uploadFehler.value[typ] = '';
+  uploadErfolg.value[typ] = '';
+  vorschauFehler.value = '';
+  vorschauDataUrl.value = null;
+  vorschauLaden.value = true;
+  aktuelleVorschauTyp.value = typ;
+  showVorschauModal.value = true;
+
+  if (vorschauObjektUrl.value) {
+    URL.revokeObjectURL(vorschauObjektUrl.value);
+    vorschauObjektUrl.value = null;
+  }
+
+  try {
+    const res = await fetch(`/api/vorlagen/preview/${typ}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      const message = err?.error || 'Keine Vorschau vorhanden';
+      vorschauFehler.value = message;
+      uploadFehler.value[typ] = message;
+      return;
+    }
+
+    const blob = await res.blob();
+    const objektUrl = URL.createObjectURL(blob);
+    vorschauObjektUrl.value = objektUrl;
+    vorschauDataUrl.value = objektUrl;
+  } catch {
+    const message = 'Netzwerkfehler beim Laden der Vorschau';
+    vorschauFehler.value = message;
+    uploadFehler.value[typ] = message;
+  } finally {
+    vorschauLaden.value = false;
+  }
+}
+
+async function vorlagePreview(typ: VorlageTyp, event: Event) {
+  const input = event.target as HTMLInputElement;
+  const datei = input.files?.[0];
+  if (!datei) return;
+
+  uploadFehler.value[typ] = '';
+  uploadErfolg.value[typ] = '';
+  vorschauFehler.value = '';
+  vorschauDataUrl.value = null;
+  vorschauLaden.value = true;
+  aktuelleVorschauTyp.value = typ;
+
+  try {
+    const formData = new FormData();
+    formData.append('vorlage', datei);
+
+    const res = await fetch(`/api/vorlagen/${typ}/preview`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      const message = err.fehlendePflichtfelder
+        ? `Fehlende Pflichtfelder: ${err.fehlendePflichtfelder.join(', ')}`
+        : err.error || 'Vorschau konnte nicht generiert werden';
+      vorschauFehler.value = message;
+      uploadFehler.value[typ] = message;
+      return;
+    }
+
+    const result = await res.json();
+    vorschauDataUrl.value = `data:application/pdf;base64,${result.data}`;
+    pendingUploadDateien.value[typ] = datei;
+    showVorschauModal.value = true;
+  } catch {
+    const message = 'Netzwerkfehler beim Generieren der Vorschau';
+    vorschauFehler.value = message;
+    uploadFehler.value[typ] = message;
+  } finally {
+    vorschauLaden.value = false;
+    input.value = '';
+  }
+}
+
+async function speichernUndSchliessen(typ: VorlageTyp) {
+  const datei = pendingUploadDateien.value[typ];
+  if (!datei) {
+    vorschauFehler.value = 'Keine Datei für den Upload vorhanden';
+    return;
+  }
+
+  vorschauLaden.value = true;
+  const success = await vorlageHochladenDatei(typ, datei);
+  vorschauLaden.value = false;
+
+  if (success) {
+    schliesseVorschauModal();
+  }
+}
+
+async function speichernAktuelleVorschau() {
+  if (!aktuelleVorschauTyp.value) return;
+  await speichernUndSchliessen(aktuelleVorschauTyp.value);
 }
 
 function vorlageVonTyp(typ: string): VorlageDto | undefined {
@@ -223,9 +347,74 @@ function formatDatum(iso: string) {
               type="file"
               class="hidden"
               :accept="typ === 'ANSCHREIBEN' ? '.docx' : '.pdf'"
-              @change="vorlageHochladen(typ, $event)"
+              @change="vorlagePreview(typ, $event)"
             />
           </label>
+          <button
+            type="button"
+            class="ml-2 inline-block border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-50"
+            @click="zeigeAktuelleVorschau(typ)"
+          >
+            Aktuelle Vorschau anzeigen
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="showVorschauModal"
+      class="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
+    >
+      <div class="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b">
+          <h3 class="text-lg font-semibold text-gray-800">
+            {{ aktuelleVorschauTyp === 'ANSCHREIBEN' ? 'Anschreiben Vorschau' : 'Quittung Vorschau' }}
+          </h3>
+          <button @click="schliesseVorschauModal" class="text-gray-400 hover:text-gray-600">×</button>
+        </div>
+
+        <div class="p-6 overflow-auto">
+          <div v-if="vorschauLaden" class="flex items-center justify-center py-12">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            <span class="ml-3 text-gray-600">Vorschau wird generiert...</span>
+          </div>
+
+          <div
+            v-if="vorschauFehler"
+            class="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700"
+          >
+            {{ vorschauFehler }}
+          </div>
+
+          <iframe
+            v-if="vorschauDataUrl && !vorschauFehler"
+            :src="vorschauDataUrl"
+            class="w-full h-[600px] border rounded-lg"
+            title="Vorlagen Vorschau"
+          ></iframe>
+
+          <div v-else-if="!vorschauLaden && !vorschauFehler" class="text-center text-gray-500 py-12">
+            Keine Vorschau verfügbar
+          </div>
+        </div>
+
+        <div
+          v-if="vorschauDataUrl && !vorschauFehler"
+          class="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50"
+        >
+          <button
+            @click="schliesseVorschauModal"
+            class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+          >
+            Schließen
+          </button>
+          <button
+            :disabled="vorschauLaden || !aktuelleVorschauTyp"
+            @click="speichernAktuelleVorschau"
+            class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+          >
+            Vorlage speichern
+          </button>
         </div>
       </div>
     </div>
