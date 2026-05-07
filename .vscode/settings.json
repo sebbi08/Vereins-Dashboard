@@ -5,7 +5,20 @@
     "npm run db:migrate": true,
     "npm run db:generate": true,
     "npx prisma": true,
-    "npx tsc": true
+    "npx tsc": true,
+    "npm install": true,
+    "/^node -e \"const \\{ toWords \\} = require\\('number-to-words'\\); console\\.log\\(toWords\\(100, 'de'\\)\\); console\\.log\\(toWords\\(100, \\{lang: 'de'\\}\\)\\);\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^node -e \"const ntw = require\\('number-to-words'\\); console\\.log\\(Object\\.keys\\(ntw\\)\\);\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^node -e \"const ntw = require\\('number-to-words'\\); console\\.log\\(ntw\\.toWords\\(100\\)\\); console\\.log\\(typeof ntw\\.toWords\\);\"$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
   },
   "js/ts.tsdk.path": "node_modules/typescript/lib"
 }
