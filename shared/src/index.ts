@@ -10,10 +10,11 @@ export interface ApiError {
 
 export interface SpenderDto {
   id: number;
-  anrede: string;
   name: string;
   strasse: string;
   ort: string;
+  briefAnrede: string;
+  adressAnrede?: string | null;
 }
 
 export type VorlageTyp = 'ANSCHREIBEN' | 'QUITTUNG';
@@ -27,17 +28,15 @@ export interface VorlageDto {
   hochgeladenAm: string;
 }
 
-export type Zahlungsweg = 'BANK' | 'BAR';
-
 export interface QuittungEingaben {
-  anrede: string;
   name: string;
   strasse: string;
   ort: string;
+  briefAnrede: string;
+  adressAnrede?: string | null;
   spendenbetragCents: number;
   spendendatum: string;
   mitAnschreiben: boolean;
-  zahlungsweg: Zahlungsweg;
   kassenwart: string;
   gemeinnuetzigerZweck: string;
   finanzamtName: string;
@@ -48,11 +47,15 @@ export interface QuittungEingaben {
 
 export type RevisionStatus = 'AKTIV' | 'ERSETZT';
 export type QuittungStatus = 'AKTIV' | 'STORNIERT';
+export type PdfStatus = 'PENDING' | 'OK' | 'FAILED';
 
 export interface SpendenQuittungRevisionDto {
   id: number;
   revisionNummer: number;
   status: RevisionStatus;
+  pdfStatus: PdfStatus;
+  pdfFehler: string | null;
+  pdfTechFehler: string | null;
   eingaben: QuittungEingaben;
   dateiPfad: string | null;
   erstelltAm: string;

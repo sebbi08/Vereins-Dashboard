@@ -1,7 +1,11 @@
 {
   "chat.tools.terminal.autoApprove": {
     "npx vite": true,
-    "strings": true
+    "strings": true,
+    "npm run db:migrate": true,
+    "npm run db:generate": true,
+    "npx prisma": true,
+    "npx tsc": true
   },
   "js/ts.tsdk.path": "node_modules/typescript/lib"
 }

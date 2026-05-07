@@ -11,6 +11,8 @@ const quittung = ref<SpendenQuittungDto | null>(null);
 const laden = ref(false);
 const fehler = ref('');
 const stornierBestaetigung = ref(false);
+const retryLaufend = ref(false);
+const detailsOffen = ref<Record<number, boolean>>({});
 
 async function ladeQuittung() {
   laden.value = true;
@@ -30,6 +32,33 @@ async function stornieren() {
   if (res.ok) {
     stornierBestaetigung.value = false;
     await ladeQuittung();
+  }
+}
+
+function istAktiveRevision(revId: number): boolean {
+  return quittung.value?.aktiveRevision?.id === revId;
+}
+
+function kannRetry(rev: { id: number; pdfStatus: string }): boolean {
+  return istAktiveRevision(rev.id) && rev.pdfStatus === 'FAILED';
+}
+
+async function retryPdf(revisionId: number) {
+  retryLaufend.value = true;
+  try {
+    const res = await fetch(`/api/spenden-quittung/revision/${revisionId}/retry-pdf`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      fehler.value = body?.error || 'PDF konnte nicht erneut erzeugt werden';
+      return;
+    }
+    await ladeQuittung();
+  } catch {
+    fehler.value = 'PDF konnte nicht erneut erzeugt werden';
+  } finally {
+    retryLaufend.value = false;
   }
 }
 
@@ -68,7 +97,6 @@ function formatDateTime(iso: string) {
     <div v-if="laden" class="text-gray-400 text-sm">Lädt…</div>
 
     <template v-if="quittung">
-      <!-- Header -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4">
         <div class="flex items-start justify-between">
           <div>
@@ -84,9 +112,7 @@ function formatDateTime(iso: string) {
                 >{{ quittung.status }}</span
               >
             </div>
-            <p class="text-gray-600 text-sm">
-              {{ quittung.spender.anrede }} {{ quittung.spender.name }}
-            </p>
+            <p class="text-gray-600 text-sm">{{ quittung.spender.name }}</p>
             <p class="text-gray-500 text-xs">
               {{ quittung.spender.strasse }}, {{ quittung.spender.ort }}
             </p>
@@ -110,7 +136,6 @@ function formatDateTime(iso: string) {
         </div>
       </div>
 
-      <!-- Stornieren Bestätigung -->
       <div v-if="stornierBestaetigung" class="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
         <p class="text-sm text-red-700 mb-3">
           Quittung <strong>{{ quittung.nummer }}</strong> wirklich stornieren? Diese Aktion kann
@@ -129,7 +154,6 @@ function formatDateTime(iso: string) {
         </div>
       </div>
 
-      <!-- Revisionshistorie -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-100">
           <h3 class="font-semibold text-gray-800">Revisionen</h3>
@@ -140,7 +164,7 @@ function formatDateTime(iso: string) {
           class="border-b border-gray-100 last:border-0 p-6"
         >
           <div class="flex items-start justify-between mb-3">
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <span class="font-medium text-gray-800">R{{ rev.revisionNummer }}</span>
               <span
                 :class="[
@@ -151,17 +175,58 @@ function formatDateTime(iso: string) {
                 ]"
                 >{{ rev.status }}</span
               >
+              <span
+                :class="[
+                  'text-xs font-medium px-2 py-0.5 rounded-full',
+                  rev.pdfStatus === 'OK'
+                    ? 'bg-green-100 text-green-700'
+                    : rev.pdfStatus === 'FAILED'
+                      ? 'bg-amber-100 text-amber-800'
+                      : 'bg-gray-100 text-gray-600',
+                ]"
+                >PDF {{ rev.pdfStatus }}</span
+              >
               <span class="text-xs text-gray-400">{{ formatDateTime(rev.erstelltAm) }}</span>
             </div>
-            <a
-              v-if="rev.dateiPfad"
-              :href="`/api/spenden-quittung/revision/${rev.id}/download`"
-              target="_blank"
-              class="text-blue-600 hover:underline text-sm"
-            >
-              PDF herunterladen
-            </a>
+            <div class="flex items-center gap-3">
+              <button
+                v-if="kannRetry(rev)"
+                :disabled="retryLaufend"
+                class="text-amber-700 hover:text-amber-900 text-sm disabled:opacity-50"
+                @click="retryPdf(rev.id)"
+              >
+                {{ retryLaufend ? 'Wird erneut generiert…' : 'PDF erneut erzeugen' }}
+              </button>
+              <a
+                v-if="rev.dateiPfad && rev.pdfStatus === 'OK'"
+                :href="`/api/spenden-quittung/revision/${rev.id}/download`"
+                target="_blank"
+                class="text-blue-600 hover:underline text-sm"
+              >
+                PDF herunterladen
+              </a>
+            </div>
           </div>
+
+          <div
+            v-if="rev.pdfStatus === 'FAILED'"
+            class="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+          >
+            <p>{{ rev.pdfFehler || 'PDF konnte nicht erzeugt werden. Bitte Retry ausführen.' }}</p>
+            <button
+              v-if="rev.pdfTechFehler"
+              class="mt-2 text-xs underline"
+              @click="detailsOffen[rev.id] = !detailsOffen[rev.id]"
+            >
+              {{ detailsOffen[rev.id] ? 'Details ausblenden' : 'Details anzeigen' }}
+            </button>
+            <pre
+              v-if="rev.pdfTechFehler && detailsOffen[rev.id]"
+              class="mt-2 whitespace-pre-wrap rounded border border-amber-300 bg-white p-2 text-xs text-amber-900"
+              >{{ rev.pdfTechFehler }}</pre
+            >
+          </div>
+
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <div>
               <span class="text-gray-500 text-xs">Betrag</span>
@@ -172,12 +237,6 @@ function formatDateTime(iso: string) {
             <div>
               <span class="text-gray-500 text-xs">Spendendatum</span>
               <p class="text-gray-700">{{ formatDatum(rev.eingaben.spendendatum) }}</p>
-            </div>
-            <div>
-              <span class="text-gray-500 text-xs">Zahlungsweg</span>
-              <p class="text-gray-700">
-                {{ rev.eingaben.zahlungsweg === 'BANK' ? 'Banküberweisung' : 'Bar' }}
-              </p>
             </div>
             <div>
               <span class="text-gray-500 text-xs">Mit Anschreiben</span>

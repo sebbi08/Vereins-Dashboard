@@ -2,13 +2,12 @@ import { PDFDocument } from 'pdf-lib';
 import PizZip from 'pizzip';
 import type { VorlageTyp, VorlagenValidierungsfehler } from 'shared';
 
-const PFLICHTFELDER_ANSCHREIBEN = [
-  'Anrede',
+const PFLICHTFELDER_ANSCHREIBEN: Array<string | string[]> = [
+  ['BriefAnrede', 'briefAnrede'],
   'Name',
   'Strasse',
   'Ort',
   'Heute',
-  'BriefAnreden',
   'Betrag',
   'TagDerZuwendung',
   'Kassenwart',
@@ -29,7 +28,12 @@ export function validiereAnschreibenVorlage(buffer: Buffer): VorlagenValidierung
   const zip = new PizZip(buffer);
   const docXml = zip.files['word/document.xml']?.asText() ?? '';
 
-  const fehlend = PFLICHTFELDER_ANSCHREIBEN.filter((p) => !docXml.includes(p));
+  const fehlend = PFLICHTFELDER_ANSCHREIBEN.filter((pflichtfeld) => {
+    if (Array.isArray(pflichtfeld)) {
+      return !pflichtfeld.some((variante) => docXml.includes(variante));
+    }
+    return !docXml.includes(pflichtfeld);
+  }).map((pflichtfeld) => (Array.isArray(pflichtfeld) ? pflichtfeld[0] : pflichtfeld));
 
   if (fehlend.length > 0) {
     return { typ: 'ANSCHREIBEN', fehlendePflichtfelder: fehlend };

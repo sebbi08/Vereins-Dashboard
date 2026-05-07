@@ -20,20 +20,22 @@ spenderRouter.patch('/:id', async (req, res) => {
     return;
   }
 
-  const { anrede, name, strasse, ort } = req.body as {
-    anrede?: string;
+  const { name, strasse, ort, briefAnrede, adressAnrede } = req.body as {
     name?: string;
     strasse?: string;
     ort?: string;
+    briefAnrede?: string;
+    adressAnrede?: string | null;
   };
 
   const spender = await prisma.spender.update({
     where: { id },
     data: {
-      ...(anrede !== undefined && { anrede }),
       ...(name !== undefined && { name }),
       ...(strasse !== undefined && { strasse }),
       ...(ort !== undefined && { ort }),
+      ...(briefAnrede !== undefined && { briefAnrede }),
+      ...(adressAnrede !== undefined && { adressAnrede }),
     },
   });
   res.json(spender);

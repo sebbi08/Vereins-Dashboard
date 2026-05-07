@@ -8,7 +8,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: SpenderDto | null];
-  neu: [daten: { anrede: string; name: string; strasse: string; ort: string }];
+  neu: [daten: { name: string; strasse: string; ort: string }];
 }>();
 
 const query = ref(props.modelValue?.name ?? '');
@@ -52,7 +52,7 @@ function auswaehlen(spender: SpenderDto) {
 
 function neu() {
   offen.value = false;
-  emit('neu', { anrede: '', name: query.value, strasse: '', ort: '' });
+  emit('neu', { name: query.value, strasse: '', ort: '' });
 }
 </script>
 

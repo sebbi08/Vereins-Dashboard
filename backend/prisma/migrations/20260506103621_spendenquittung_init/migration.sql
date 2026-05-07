@@ -46,7 +46,6 @@ CREATE TABLE "SpendenQuittungRevision" (
     "spendenbetragCents" INTEGER NOT NULL,
     "spendendatum" DATETIME NOT NULL,
     "mitAnschreiben" BOOLEAN NOT NULL,
-    "zahlungsweg" TEXT NOT NULL DEFAULT 'BANK',
     "kassenwart" TEXT NOT NULL,
     "gemeinnuetzigerZweck" TEXT NOT NULL,
     "finanzamtName" TEXT NOT NULL,

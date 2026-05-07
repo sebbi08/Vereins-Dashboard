@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { QuittungEingaben, SpenderDto, SystemEinstellungen } from 'shared';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import SpenderAutocomplete from '../components/SpenderAutocomplete.vue';
 import { useAppStore } from '../stores/app';
@@ -15,19 +15,23 @@ const istNeueRevision = !!quittungId;
 const senden = ref(false);
 const fehler = ref('');
 const erfolg = ref('');
+const warnung = ref('');
+const info = ref('');
+const stammdatenHinweis = ref(false);
 
 const spender = ref<SpenderDto | null>(null);
 const neuerSpender = ref(false);
+const validationAttempted = ref(false);
 
 const eingaben = ref<QuittungEingaben>({
-  anrede: '',
   name: '',
   strasse: '',
   ort: '',
+  briefAnrede: '',
+  adressAnrede: '',
   spendenbetragCents: 0,
   spendendatum: new Date().toISOString().split('T')[0],
   mitAnschreiben: true,
-  zahlungsweg: 'BANK',
   kassenwart: '',
   gemeinnuetzigerZweck: '',
   finanzamtName: '',
@@ -38,6 +42,11 @@ const eingaben = ref<QuittungEingaben>({
 
 const betragEuro = ref('');
 
+const briefAnredeFehlt = computed(
+  () => eingaben.value.mitAnschreiben && !eingaben.value.briefAnrede.trim(),
+);
+const zeigeBriefAnredeFehler = computed(() => briefAnredeFehlt.value && validationAttempted.value);
+
 function betragVonEuro(val: string): number {
   const cleaned = val.replace(',', '.').replace(/[^0-9.]/g, '');
   return Math.round(parseFloat(cleaned || '0') * 100);
@@ -45,6 +54,10 @@ function betragVonEuro(val: string): number {
 
 function betragZuEuro(cents: number): string {
   return (cents / 100).toFixed(2).replace('.', ',');
+}
+
+function normalizeDateInputValue(value: string): string {
+  return value.includes('T') ? value.split('T')[0] : value;
 }
 
 async function ladeEinstellungen() {
@@ -59,28 +72,51 @@ async function ladeEinstellungen() {
   if (data.veranlagungszeitraum) eingaben.value.veranlagungszeitraum = data.veranlagungszeitraum;
 }
 
-async function ladeAktiveRevision() {
+async function ladeRevisionUndStammdaten() {
   if (!quittungId) return;
   const res = await fetch(`/api/spenden-quittung/${quittungId}`);
   if (!res.ok) return;
   const data = await res.json();
+
   if (data.aktiveRevision) {
     const e = data.aktiveRevision.eingaben as QuittungEingaben;
-    eingaben.value = { ...e };
+    eingaben.value = {
+      ...e,
+      spendendatum: normalizeDateInputValue(e.spendendatum),
+    };
     betragEuro.value = betragZuEuro(e.spendenbetragCents);
-    if (data.spender) {
-      spender.value = data.spender;
-    }
+  }
+
+  if (data.spender) {
+    spender.value = data.spender;
+    const vorher = {
+      name: eingaben.value.name,
+      strasse: eingaben.value.strasse,
+      ort: eingaben.value.ort,
+      briefAnrede: eingaben.value.briefAnrede,
+      adressAnrede: eingaben.value.adressAnrede ?? '',
+    };
+
+    eingaben.value.name = data.spender.name;
+    eingaben.value.strasse = data.spender.strasse;
+    eingaben.value.ort = data.spender.ort;
+    eingaben.value.briefAnrede = data.spender.briefAnrede;
+    eingaben.value.adressAnrede = data.spender.adressAnrede ?? '';
+
+    stammdatenHinweis.value =
+      vorher.name !== eingaben.value.name ||
+      vorher.strasse !== eingaben.value.strasse ||
+      vorher.ort !== eingaben.value.ort ||
+      vorher.briefAnrede !== eingaben.value.briefAnrede ||
+      vorher.adressAnrede !== (eingaben.value.adressAnrede ?? '');
   }
 }
 
 onMounted(async () => {
-  // Redirect zurück zur Liste wenn keine aktive Quittungs-Vorlage hinterlegt ist
   if (store.quittungsVorlageVorhanden === false) {
     router.replace('/spenden-quittung');
     return;
   }
-  // Falls der Store noch nicht geprüft hat (z.B. direkter URL-Aufruf), jetzt prüfen
   if (store.quittungsVorlageVorhanden === null) {
     await store.pruefeVorlagen();
     if (!store.quittungsVorlageVorhanden) {
@@ -88,9 +124,10 @@ onMounted(async () => {
       return;
     }
   }
+
   await ladeEinstellungen();
   if (istNeueRevision) {
-    await ladeAktiveRevision();
+    await ladeRevisionUndStammdaten();
   }
 });
 
@@ -98,30 +135,43 @@ function onSpenderAusgewaehlt(s: SpenderDto | null) {
   spender.value = s;
   if (s) {
     neuerSpender.value = false;
-    eingaben.value.anrede = s.anrede;
     eingaben.value.name = s.name;
     eingaben.value.strasse = s.strasse;
     eingaben.value.ort = s.ort;
+    eingaben.value.briefAnrede = s.briefAnrede;
+    eingaben.value.adressAnrede = s.adressAnrede ?? '';
   }
 }
 
-function onNeuerSpender(daten: { anrede: string; name: string; strasse: string; ort: string }) {
+function onNeuerSpender(daten: { name: string; strasse: string; ort: string }) {
   neuerSpender.value = true;
   spender.value = null;
-  eingaben.value.anrede = daten.anrede;
   eingaben.value.name = daten.name;
   eingaben.value.strasse = daten.strasse;
   eingaben.value.ort = daten.ort;
+  if (!eingaben.value.briefAnrede) {
+    eingaben.value.briefAnrede = 'Sehr geehrte Damen und Herren';
+  }
 }
 
 async function absenden() {
+  validationAttempted.value = true;
   fehler.value = '';
-  senden.value = true;
+  warnung.value = '';
+  info.value = '';
+  erfolg.value = '';
 
+  if (briefAnredeFehlt.value) {
+    fehler.value = 'Bitte BriefAnrede ausfüllen, wenn ein Anschreiben erstellt wird.';
+    return;
+  }
+
+  senden.value = true;
   eingaben.value.spendenbetragCents = betragVonEuro(betragEuro.value);
 
   try {
     let res: Response;
+
     if (istNeueRevision) {
       res = await fetch(`/api/spenden-quittung/${quittungId}/revision`, {
         method: 'POST',
@@ -134,10 +184,11 @@ async function absenden() {
         body.spenderId = spender.value.id;
       } else {
         body.spenderDaten = {
-          anrede: eingaben.value.anrede,
           name: eingaben.value.name,
           strasse: eingaben.value.strasse,
           ort: eingaben.value.ort,
+          briefAnrede: eingaben.value.briefAnrede,
+          adressAnrede: eingaben.value.adressAnrede,
         };
       }
       res = await fetch('/api/spenden-quittung', {
@@ -147,16 +198,27 @@ async function absenden() {
       });
     }
 
+    const result = await res.json();
+
     if (!res.ok) {
-      const err = await res.json();
-      fehler.value = err.error || 'Unbekannter Fehler';
+      fehler.value = result.error || 'Unbekannter Fehler';
       return;
     }
 
-    const result = await res.json();
-    erfolg.value = 'Quittung erfolgreich erstellt!';
+    if (result.pdfStatus === 'FAILED') {
+      warnung.value = result.pdfFehler || 'PDF konnte nicht erzeugt werden. Bitte Retry versuchen.';
+      if (result.spenderUpdated) {
+        info.value = 'Spender-Stammdaten wurden aktualisiert.';
+      }
+    } else {
+      erfolg.value = 'Quittung erfolgreich gespeichert.';
+      if (result.spenderUpdated) {
+        info.value = 'Spender-Stammdaten wurden aktualisiert.';
+      }
+    }
+
     const zielId = result.quittungId ?? quittungId;
-    setTimeout(() => router.push(`/spenden-quittung/${zielId}`), 800);
+    setTimeout(() => router.push(`/spenden-quittung/${zielId}`), 1000);
   } catch {
     fehler.value = 'Netzwerkfehler beim Speichern';
   } finally {
@@ -181,6 +243,18 @@ async function absenden() {
       {{ fehler }}
     </div>
     <div
+      v-if="warnung"
+      class="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-lg mb-4 text-sm"
+    >
+      {{ warnung }}
+    </div>
+    <div
+      v-if="info"
+      class="bg-blue-50 border border-blue-200 text-blue-700 p-3 rounded-lg mb-4 text-sm"
+    >
+      {{ info }}
+    </div>
+    <div
       v-if="erfolg"
       class="bg-green-50 border border-green-200 text-green-700 p-3 rounded-lg mb-4 text-sm"
     >
@@ -188,10 +262,10 @@ async function absenden() {
     </div>
 
     <form class="space-y-6" @submit.prevent="absenden">
-      <!-- Spender -->
-      <div v-if="!istNeueRevision" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 class="font-semibold text-gray-800 mb-4">Spender</h3>
-        <div class="mb-3">
+
+        <div v-if="!istNeueRevision" class="mb-3">
           <label class="block text-sm font-medium text-gray-700 mb-1"
             >Spender suchen oder neu anlegen</label
           >
@@ -201,18 +275,15 @@ async function absenden() {
             @neu="onNeuerSpender"
           />
         </div>
-        <div v-if="neuerSpender || spender" class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Anrede</label>
-            <select
-              v-model="eingaben.anrede"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Ohne</option>
-              <option value="Herr">Herr</option>
-              <option value="Frau">Frau</option>
-            </select>
-          </div>
+
+        <div
+          v-if="istNeueRevision && stammdatenHinweis"
+          class="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700"
+        >
+          Diese Revision wurde mit den aktuellen Spender-Stammdaten vorbefüllt.
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
             <input
@@ -241,10 +312,37 @@ async function absenden() {
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">BriefAnrede</label>
+            <input
+              v-model="eingaben.briefAnrede"
+              type="text"
+              :class="[
+                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
+                zeigeBriefAnredeFehler
+                  ? 'border-red-300 focus:ring-red-500'
+                  : 'border-gray-300 focus:ring-blue-500',
+              ]"
+              placeholder="Sehr geehrte Damen und Herren"
+            />
+            <p v-if="zeigeBriefAnredeFehler" class="mt-1 text-xs text-red-600">
+              BriefAnrede ist erforderlich, wenn ein Anschreiben erstellt wird.
+            </p>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1"
+              >AdressAnrede (optional)</label
+            >
+            <input
+              v-model="eingaben.adressAnrede"
+              type="text"
+              placeholder="z. B. z. Hd. Frau Mustermann"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
         </div>
       </div>
 
-      <!-- Spende -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 class="font-semibold text-gray-800 mb-4">Spende</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -267,16 +365,6 @@ async function absenden() {
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Zahlungsweg</label>
-            <select
-              v-model="eingaben.zahlungsweg"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="BANK">Banküberweisung</option>
-              <option value="BAR">Bar</option>
-            </select>
-          </div>
           <div class="flex items-center gap-2 pt-6">
             <input
               id="mitAnschreiben"
@@ -289,7 +377,6 @@ async function absenden() {
         </div>
       </div>
 
-      <!-- Vereinsdaten -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 class="font-semibold text-gray-800 mb-4">Vereinsdaten (aus Einstellungen)</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -360,7 +447,15 @@ async function absenden() {
           :disabled="senden"
           class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
-          {{ senden ? 'Wird generiert…' : 'Quittung erstellen' }}
+          {{
+            senden
+              ? istNeueRevision
+                ? 'Revision wird gespeichert…'
+                : 'Wird generiert…'
+              : istNeueRevision
+                ? 'Revision speichern'
+                : 'Quittung erstellen'
+          }}
         </button>
       </div>
     </form>

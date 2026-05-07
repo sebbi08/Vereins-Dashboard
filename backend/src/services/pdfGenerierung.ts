@@ -13,22 +13,19 @@ import { betragInWorten, formatBetrag, formatDatum } from './betragInWorten';
 const execAsync = promisify(exec);
 
 interface AnschreibenDaten {
+  AdressAnrede: string;
+  adressAnrede: string;
+  BriefAnrede: string;
+  briefAnrede: string;
   Anrede: string;
+  BriefAnreden: { Anrede: string }[];
   Name: string;
   Strasse: string;
   Ort: string;
   Heute: string;
-  BriefAnreden: { Anrede: string }[];
   Betrag: string;
   TagDerZuwendung: string;
   Kassenwart: string;
-}
-
-function konstruiereBriefAnrede(anrede: string, name: string): string {
-  const nachname = name.split(' ').pop() ?? name;
-  if (anrede.toLowerCase() === 'herr') return `Sehr geehrter Herr ${nachname}`;
-  if (anrede.toLowerCase() === 'frau') return `Sehr geehrte Frau ${nachname}`;
-  return 'Sehr geehrte Damen und Herren';
 }
 
 async function fuelleAnschreibenVorlage(
@@ -70,7 +67,6 @@ async function fuellePdfFormular(
     steuerNrDatum: string;
     veranlagungsZeitraum: string;
     finanzamtName: string;
-    zahlungsweg: 'BANK' | 'BAR';
   },
 ): Promise<Buffer> {
   const pdfDoc = await PDFDocument.load(vorlageBuffer);
@@ -102,14 +98,6 @@ async function fuellePdfFormular(
   setTextField('VeranlagungsZeitraum', daten.veranlagungsZeitraum);
   setTextField('NameFinanzamt', daten.finanzamtName);
   setTextField('Finanzamt', daten.finanzamtName);
-
-  try {
-    if (daten.zahlungsweg === 'BANK') {
-      form.getCheckBox('Kontrollkästchen1').check();
-    }
-  } catch {
-    // Checkbox nicht vorhanden — ignorieren
-  }
 
   try {
     form.flatten();
@@ -181,14 +169,23 @@ export async function generiereQuittungPdf(
 
   if (revision.mitAnschreiben && revision.anschreibenVorlage) {
     const vorlageBuffer = await fs.promises.readFile(revision.anschreibenVorlage.dateiPfad);
-    const briefAnrede = konstruiereBriefAnrede(revision.anrede, revision.name);
+    const revisionMitAnrede = revision as typeof revision & {
+      adressAnrede?: string | null;
+      briefAnrede?: string | null;
+    };
+    const adressAnrede = revisionMitAnrede.adressAnrede ?? '';
+    const briefAnrede = revisionMitAnrede.briefAnrede ?? '';
     const filledDocx = await fuelleAnschreibenVorlage(vorlageBuffer, {
-      Anrede: revision.anrede,
+      AdressAnrede: adressAnrede,
+      adressAnrede,
+      BriefAnrede: briefAnrede,
+      briefAnrede,
+      Anrede: adressAnrede,
+      BriefAnreden: [{ Anrede: briefAnrede }],
       Name: revision.name,
       Strasse: revision.strasse,
       Ort: revision.ort,
       Heute: formatDatum(new Date()),
-      BriefAnreden: [{ Anrede: briefAnrede }],
       Betrag: betragFormatiert,
       TagDerZuwendung: spendendatumFormatiert,
       Kassenwart: revision.kassenwart,
@@ -199,7 +196,7 @@ export async function generiereQuittungPdf(
 
   const quittungsVorlageBuffer = await fs.promises.readFile(revision.quittungsVorlage.dateiPfad);
   const quittungPdf = await fuellePdfFormular(quittungsVorlageBuffer, {
-    name: revision.name,
+    name: `${revision.name}, ${revision.strasse}, ${revision.ort}`,
     betrag: betragFormatiert,
     betragInBuchstaben: betragWorte,
     tagDerZuwendung: spendendatumFormatiert,
@@ -208,7 +205,6 @@ export async function generiereQuittungPdf(
     steuerNrDatum: formatiereDatum(revision.freistellungsdatum),
     veranlagungsZeitraum: revision.veranlagungszeitraum,
     finanzamtName: revision.finanzamtName,
-    zahlungsweg: revision.zahlungsweg as 'BANK' | 'BAR',
   });
   pdfs.push(quittungPdf);
 

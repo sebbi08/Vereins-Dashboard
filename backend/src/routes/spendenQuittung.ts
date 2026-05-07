@@ -1,24 +1,31 @@
 import type { Prisma } from '@prisma/client';
 import { Router } from 'express';
-import type { QuittungEingaben, SpendenQuittungListItem } from 'shared';
+import type { PdfStatus, QuittungEingaben, SpendenQuittungListItem } from 'shared';
 import { prisma } from '../prismaClient';
 import { generiereQuittungPdf } from '../services/pdfGenerierung';
 import { generiereQuittungsNummer } from '../services/quittungsNummer';
 
 export const spendenQuittungRouter = Router();
 
+const DEFAULT_BRIEF_ANREDE = 'Sehr geehrte Damen und Herren';
+const PDF_FEHLER_MELDUNG = 'PDF konnte nicht erzeugt werden. Bitte Retry versuchen.';
+const laufendeRetries = new Set<number>();
+
 function revisionZuDto(rev: {
   id: number;
   revisionNummer: number;
   status: string;
-  anrede: string;
+  pdfStatus: string;
+  pdfFehler: string | null;
+  pdfTechFehler: string | null;
   name: string;
   strasse: string;
   ort: string;
+  briefAnrede: string;
+  adressAnrede: string | null;
   spendenbetragCents: number;
   spendendatum: Date;
   mitAnschreiben: boolean;
-  zahlungsweg: string;
   kassenwart: string;
   gemeinnuetzigerZweck: string;
   finanzamtName: string;
@@ -32,15 +39,18 @@ function revisionZuDto(rev: {
     id: rev.id,
     revisionNummer: rev.revisionNummer,
     status: rev.status,
+    pdfStatus: rev.pdfStatus as PdfStatus,
+    pdfFehler: rev.pdfFehler,
+    pdfTechFehler: rev.pdfTechFehler,
     eingaben: {
-      anrede: rev.anrede,
       name: rev.name,
       strasse: rev.strasse,
       ort: rev.ort,
+      briefAnrede: rev.briefAnrede,
+      adressAnrede: rev.adressAnrede ?? '',
       spendenbetragCents: rev.spendenbetragCents,
       spendendatum: rev.spendendatum.toISOString(),
       mitAnschreiben: rev.mitAnschreiben,
-      zahlungsweg: rev.zahlungsweg,
       kassenwart: rev.kassenwart,
       gemeinnuetzigerZweck: rev.gemeinnuetzigerZweck,
       finanzamtName: rev.finanzamtName,
@@ -51,6 +61,92 @@ function revisionZuDto(rev: {
     dateiPfad: rev.dateiPfad,
     erstelltAm: rev.erstelltAm.toISOString(),
   };
+}
+
+function validierePflichtfelder(eingaben: QuittungEingaben): string | null {
+  if (!eingaben.name.trim()) return 'Name ist erforderlich';
+  if (!eingaben.strasse.trim()) return 'Straße ist erforderlich';
+  if (!eingaben.ort.trim()) return 'Ort ist erforderlich';
+  if (eingaben.mitAnschreiben && !eingaben.briefAnrede.trim()) {
+    return 'BriefAnrede ist erforderlich, wenn ein Anschreiben erstellt wird';
+  }
+  return null;
+}
+
+function normalizeAdressAnrede(value: string | null | undefined): string | null {
+  const normalized = value?.trim() ?? '';
+  return normalized ? normalized : null;
+}
+
+function normalizeBriefAnrede(eingaben: QuittungEingaben): string {
+  if (eingaben.mitAnschreiben) {
+    return eingaben.briefAnrede.trim();
+  }
+  return DEFAULT_BRIEF_ANREDE;
+}
+
+async function updateRevisionPdfStatus(
+  revisionId: number,
+  update: {
+    pdfStatus: PdfStatus;
+    dateiPfad?: string | null;
+    pdfFehler?: string | null;
+    pdfTechFehler?: string | null;
+  },
+) {
+  await prisma.spendenQuittungRevision.update({
+    where: { id: revisionId },
+    data: {
+      pdfStatus: update.pdfStatus,
+      ...(update.dateiPfad !== undefined && { dateiPfad: update.dateiPfad }),
+      ...(update.pdfFehler !== undefined && { pdfFehler: update.pdfFehler }),
+      ...(update.pdfTechFehler !== undefined && { pdfTechFehler: update.pdfTechFehler }),
+    },
+  });
+}
+
+function serialisiereTechnischenFehler(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack || `${error.name}: ${error.message}`;
+  }
+  return String(error);
+}
+
+async function versuchePdfErzeugung(revisionId: number) {
+  try {
+    const dateiPfad = await generiereQuittungPdf(prisma, revisionId);
+    await updateRevisionPdfStatus(revisionId, {
+      pdfStatus: 'OK',
+      dateiPfad,
+      pdfFehler: null,
+      pdfTechFehler: null,
+    });
+    return {
+      pdfStatus: 'OK' as const,
+      pdfFehler: null,
+      pdfTechFehler: null,
+      dateiPfad,
+    };
+  } catch (error) {
+    await updateRevisionPdfStatus(revisionId, {
+      pdfStatus: 'FAILED',
+      dateiPfad: null,
+      pdfFehler: PDF_FEHLER_MELDUNG,
+      pdfTechFehler: serialisiereTechnischenFehler(error),
+    });
+
+    const failed = await prisma.spendenQuittungRevision.findUniqueOrThrow({
+      where: { id: revisionId },
+      select: { pdfFehler: true, pdfTechFehler: true },
+    });
+
+    return {
+      pdfStatus: 'FAILED' as const,
+      pdfFehler: failed.pdfFehler,
+      pdfTechFehler: failed.pdfTechFehler,
+      dateiPfad: null,
+    };
+  }
 }
 
 // GET /api/spenden-quittung
@@ -113,13 +209,57 @@ spendenQuittungRouter.get('/revision/:revisionId/download', async (req, res) => 
     return;
   }
 
-  if (!revision.dateiPfad) {
+  if (!revision.dateiPfad || revision.pdfStatus !== 'OK') {
     res.status(404).json({ error: 'Datei nicht vorhanden' });
     return;
   }
 
   const dateiName = `${revision.quittung.nummer}-R${revision.revisionNummer}.pdf`;
   res.download(revision.dateiPfad, dateiName);
+});
+
+// POST /api/spenden-quittung/revision/:revisionId/retry-pdf
+spendenQuittungRouter.post('/revision/:revisionId/retry-pdf', async (req, res) => {
+  const id = parseInt(req.params.revisionId);
+  if (isNaN(id)) {
+    res.status(400).json({ error: 'Ungültige Revisions-ID' });
+    return;
+  }
+
+  const revision = await prisma.spendenQuittungRevision.findUnique({ where: { id } });
+  if (!revision) {
+    res.status(404).json({ error: 'Revision nicht gefunden' });
+    return;
+  }
+
+  if (revision.status !== 'AKTIV') {
+    res.status(400).json({ error: 'Retry ist nur für aktive Revisionen erlaubt' });
+    return;
+  }
+
+  if (revision.pdfStatus !== 'FAILED') {
+    res.status(400).json({ error: 'Retry ist nur bei fehlgeschlagenem PDF möglich' });
+    return;
+  }
+
+  if (laufendeRetries.has(id)) {
+    res.status(409).json({ error: 'Für diese Revision läuft bereits ein Retry' });
+    return;
+  }
+
+  laufendeRetries.add(id);
+  try {
+    const pdf = await versuchePdfErzeugung(id);
+    res.json({
+      revisionId: id,
+      pdfStatus: pdf.pdfStatus,
+      pdfFehler: pdf.pdfFehler,
+      pdfTechFehler: pdf.pdfTechFehler,
+      dateiPfad: pdf.dateiPfad,
+    });
+  } finally {
+    laufendeRetries.delete(id);
+  }
 });
 
 // GET /api/spenden-quittung/:id
@@ -162,13 +302,20 @@ spendenQuittungRouter.post('/', async (req, res) => {
   const body = req.body as {
     spenderId?: number;
     spenderDaten?: {
-      anrede: string;
       name: string;
       strasse: string;
       ort: string;
+      briefAnrede?: string;
+      adressAnrede?: string;
     };
     eingaben: QuittungEingaben;
   };
+
+  const validierungsfehler = validierePflichtfelder(body.eingaben);
+  if (validierungsfehler) {
+    res.status(400).json({ error: validierungsfehler });
+    return;
+  }
 
   const quittungsVorlage = await prisma.vorlage.findFirst({
     where: { typ: 'QUITTUNG', aktiv: true },
@@ -189,21 +336,61 @@ spendenQuittungRouter.post('/', async (req, res) => {
     return;
   }
 
-  let spenderId = body.spenderId;
-  if (!spenderId && body.spenderDaten) {
-    const spender = await prisma.spender.create({ data: body.spenderDaten });
-    spenderId = spender.id;
-  }
-  if (!spenderId) {
-    res.status(400).json({ error: 'Kein Spender angegeben' });
-    return;
-  }
-
   const { nummer, jahr, laufendeNummer } = await generiereQuittungsNummer(prisma);
   const spendendatum = new Date(body.eingaben.spendendatum);
 
-  const { quittung, revision } = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    const q = await tx.spendenQuittung.create({
+  const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    let spenderUpdated = false;
+    let spenderId = body.spenderId;
+
+    if (spenderId) {
+      const bestehenderSpender = await tx.spender.findUnique({ where: { id: spenderId } });
+      if (!bestehenderSpender) {
+        throw new Error('Spender nicht gefunden');
+      }
+
+      const spenderUpdateData: {
+        name: string;
+        strasse: string;
+        ort: string;
+        briefAnrede?: string;
+        adressAnrede?: string | null;
+      } = {
+        name: body.eingaben.name,
+        strasse: body.eingaben.strasse,
+        ort: body.eingaben.ort,
+      };
+
+      if (body.eingaben.mitAnschreiben) {
+        spenderUpdateData.briefAnrede = body.eingaben.briefAnrede.trim();
+        spenderUpdateData.adressAnrede = normalizeAdressAnrede(body.eingaben.adressAnrede);
+      }
+
+      await tx.spender.update({ where: { id: spenderId }, data: spenderUpdateData });
+      spenderUpdated = true;
+    } else {
+      if (!body.spenderDaten) {
+        throw new Error('Kein Spender angegeben');
+      }
+
+      const neuerSpender = await tx.spender.create({
+        data: {
+          name: body.spenderDaten.name,
+          strasse: body.spenderDaten.strasse,
+          ort: body.spenderDaten.ort,
+          briefAnrede: body.eingaben.mitAnschreiben
+            ? body.eingaben.briefAnrede.trim()
+            : DEFAULT_BRIEF_ANREDE,
+          adressAnrede: body.eingaben.mitAnschreiben
+            ? normalizeAdressAnrede(body.eingaben.adressAnrede)
+            : null,
+        },
+      });
+      spenderId = neuerSpender.id;
+      spenderUpdated = true;
+    }
+
+    const quittung = await tx.spendenQuittung.create({
       data: {
         nummer,
         jahr,
@@ -213,18 +400,20 @@ spendenQuittungRouter.post('/', async (req, res) => {
       },
     });
 
-    const r = await tx.spendenQuittungRevision.create({
+    const revision = await tx.spendenQuittungRevision.create({
       data: {
-        quittungId: q.id,
+        quittungId: quittung.id,
         revisionNummer: 1,
-        anrede: body.eingaben.anrede,
         name: body.eingaben.name,
         strasse: body.eingaben.strasse,
         ort: body.eingaben.ort,
+        briefAnrede: normalizeBriefAnrede(body.eingaben),
+        adressAnrede: body.eingaben.mitAnschreiben
+          ? normalizeAdressAnrede(body.eingaben.adressAnrede)
+          : null,
         spendenbetragCents: body.eingaben.spendenbetragCents,
         spendendatum,
         mitAnschreiben: body.eingaben.mitAnschreiben,
-        zahlungsweg: body.eingaben.zahlungsweg,
         kassenwart: body.eingaben.kassenwart,
         gemeinnuetzigerZweck: body.eingaben.gemeinnuetzigerZweck,
         finanzamtName: body.eingaben.finanzamtName,
@@ -233,19 +422,27 @@ spendenQuittungRouter.post('/', async (req, res) => {
         veranlagungszeitraum: body.eingaben.veranlagungszeitraum,
         anschreibenVorlageId: anschreibenVorlage?.id ?? null,
         quittungsVorlageId: quittungsVorlage.id,
+        pdfStatus: 'PENDING',
       },
     });
 
-    return { quittung: q, revision: r };
+    const spender = await tx.spender.findUniqueOrThrow({ where: { id: spenderId! } });
+
+    return { quittung, revision, spender, spenderUpdated };
   });
 
-  const dateiPfad = await generiereQuittungPdf(prisma, revision.id);
-  await prisma.spendenQuittungRevision.update({
-    where: { id: revision.id },
-    data: { dateiPfad },
-  });
+  const pdf = await versuchePdfErzeugung(result.revision.id);
 
-  res.status(201).json({ quittungId: quittung.id, revisionId: revision.id, dateiPfad });
+  res.status(201).json({
+    quittungId: result.quittung.id,
+    revisionId: result.revision.id,
+    spender: result.spender,
+    spenderUpdated: result.spenderUpdated,
+    pdfStatus: pdf.pdfStatus,
+    pdfFehler: pdf.pdfFehler,
+    pdfTechFehler: pdf.pdfTechFehler,
+    dateiPfad: pdf.dateiPfad,
+  });
 });
 
 // POST /api/spenden-quittung/:id/revision
@@ -268,6 +465,12 @@ spendenQuittungRouter.post('/:id/revision', async (req, res) => {
 
   const body = req.body as { eingaben: QuittungEingaben };
 
+  const validierungsfehler = validierePflichtfelder(body.eingaben);
+  if (validierungsfehler) {
+    res.status(400).json({ error: validierungsfehler });
+    return;
+  }
+
   const quittungsVorlage = await prisma.vorlage.findFirst({
     where: { typ: 'QUITTUNG', aktiv: true },
   });
@@ -282,6 +485,11 @@ spendenQuittungRouter.post('/:id/revision', async (req, res) => {
       })
     : null;
 
+  if (body.eingaben.mitAnschreiben && !anschreibenVorlage) {
+    res.status(400).json({ error: 'Keine aktive Anschreibenvorlage vorhanden' });
+    return;
+  }
+
   const letzteRevision = await prisma.spendenQuittungRevision.findFirst({
     where: { quittungId: id },
     orderBy: { revisionNummer: 'desc' },
@@ -289,25 +497,49 @@ spendenQuittungRouter.post('/:id/revision', async (req, res) => {
   const neueRevisionNummer = (letzteRevision?.revisionNummer ?? 0) + 1;
   const spendendatum = new Date(body.eingaben.spendendatum);
 
-  const neueRevision = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+  const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.spendenQuittungRevision.updateMany({
       where: { quittungId: id, status: 'AKTIV' },
       data: { status: 'ERSETZT' },
     });
     await tx.spendenQuittung.update({ where: { id }, data: { spendendatum } });
 
-    return tx.spendenQuittungRevision.create({
+    const spenderUpdateData: {
+      name: string;
+      strasse: string;
+      ort: string;
+      briefAnrede?: string;
+      adressAnrede?: string | null;
+    } = {
+      name: body.eingaben.name,
+      strasse: body.eingaben.strasse,
+      ort: body.eingaben.ort,
+    };
+
+    if (body.eingaben.mitAnschreiben) {
+      spenderUpdateData.briefAnrede = body.eingaben.briefAnrede.trim();
+      spenderUpdateData.adressAnrede = normalizeAdressAnrede(body.eingaben.adressAnrede);
+    }
+
+    await tx.spender.update({
+      where: { id: quittung.spenderId },
+      data: spenderUpdateData,
+    });
+
+    const neueRevision = await tx.spendenQuittungRevision.create({
       data: {
         quittungId: id,
         revisionNummer: neueRevisionNummer,
-        anrede: body.eingaben.anrede,
         name: body.eingaben.name,
         strasse: body.eingaben.strasse,
         ort: body.eingaben.ort,
+        briefAnrede: normalizeBriefAnrede(body.eingaben),
+        adressAnrede: body.eingaben.mitAnschreiben
+          ? normalizeAdressAnrede(body.eingaben.adressAnrede)
+          : null,
         spendenbetragCents: body.eingaben.spendenbetragCents,
         spendendatum,
         mitAnschreiben: body.eingaben.mitAnschreiben,
-        zahlungsweg: body.eingaben.zahlungsweg,
         kassenwart: body.eingaben.kassenwart,
         gemeinnuetzigerZweck: body.eingaben.gemeinnuetzigerZweck,
         finanzamtName: body.eingaben.finanzamtName,
@@ -316,17 +548,27 @@ spendenQuittungRouter.post('/:id/revision', async (req, res) => {
         veranlagungszeitraum: body.eingaben.veranlagungszeitraum,
         anschreibenVorlageId: anschreibenVorlage?.id ?? null,
         quittungsVorlageId: quittungsVorlage.id,
+        pdfStatus: 'PENDING',
       },
     });
+
+    const spender = await tx.spender.findUniqueOrThrow({ where: { id: quittung.spenderId } });
+
+    return { neueRevision, spender, spenderUpdated: true };
   });
 
-  const dateiPfad = await generiereQuittungPdf(prisma, neueRevision.id);
-  await prisma.spendenQuittungRevision.update({
-    where: { id: neueRevision.id },
-    data: { dateiPfad },
-  });
+  const pdf = await versuchePdfErzeugung(result.neueRevision.id);
 
-  res.status(201).json({ revisionId: neueRevision.id, dateiPfad });
+  res.status(201).json({
+    quittungId: id,
+    revisionId: result.neueRevision.id,
+    spender: result.spender,
+    spenderUpdated: result.spenderUpdated,
+    pdfStatus: pdf.pdfStatus,
+    pdfFehler: pdf.pdfFehler,
+    pdfTechFehler: pdf.pdfTechFehler,
+    dateiPfad: pdf.dateiPfad,
+  });
 });
 
 // PATCH /api/spenden-quittung/:id/stornieren
