@@ -3,7 +3,7 @@ import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 import type { VorlageTyp } from 'shared';
-import { VORLAGEN_DIR } from '../config';
+import { VORLAGEN_DIR, toAbsolutePath, toRelativePath } from '../config';
 import { prisma } from '../prismaClient';
 import {
   generierePreviewVorlage,
@@ -89,7 +89,7 @@ vorlagenRouter.get('/:typ/download', async (req, res) => {
     return;
   }
 
-  res.download(vorlage.dateiPfad, vorlage.dateiName);
+  res.download(toAbsolutePath(vorlage.dateiPfad), vorlage.dateiName);
 });
 
 vorlagenRouter.get('/preview/:typ', async (req, res) => {
@@ -110,7 +110,7 @@ vorlagenRouter.get('/preview/:typ', async (req, res) => {
   try {
     const einstellungen = await ladeVorschauEinstellungen();
     const daten = getDummyDaten(typ, einstellungen);
-    const vorlageBuffer = await fs.promises.readFile(vorlage.dateiPfad);
+    const vorlageBuffer = await fs.promises.readFile(toAbsolutePath(vorlage.dateiPfad));
     const previewBuffer = await generierePreviewVorlage(typ, vorlageBuffer, daten);
 
     res.setHeader('Content-Type', 'application/pdf');
@@ -220,7 +220,7 @@ vorlagenRouter.post('/:typ/upload', upload.single('vorlage'), async (req, res) =
         typ,
         version: neueVersion,
         dateiName,
-        dateiPfad,
+        dateiPfad: toRelativePath(dateiPfad),
         aktiv: true,
       },
     }),

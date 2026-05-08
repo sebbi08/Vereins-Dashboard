@@ -1,4 +1,3 @@
-import type { PrismaClient } from '../../prisma/generated/client.js';
 import { exec } from 'child_process';
 import Docxtemplater from 'docxtemplater';
 import fs from 'fs';
@@ -8,7 +7,8 @@ import { PDFDocument, RotationTypes, StandardFonts } from 'pdf-lib';
 import PizZip from 'pizzip';
 import type { VorlageTyp } from 'shared';
 import { promisify } from 'util';
-import { QUITTUNGEN_DIR } from '../config';
+import type { PrismaClient } from '../../prisma/generated/client.js';
+import { QUITTUNGEN_DIR, toAbsolutePath, toRelativePath } from '../config';
 import { betragInWorten, formatBetrag, formatDatum } from './betragInWorten';
 
 const execAsync = promisify(exec);
@@ -235,7 +235,9 @@ export async function generiereQuittungPdf(
   const pdfs: Buffer[] = [];
 
   if (revision.mitAnschreiben && revision.anschreibenVorlage) {
-    const vorlageBuffer = await fs.promises.readFile(revision.anschreibenVorlage.dateiPfad);
+    const vorlageBuffer = await fs.promises.readFile(
+      toAbsolutePath(revision.anschreibenVorlage.dateiPfad),
+    );
     const revisionMitAnrede = revision as typeof revision & {
       adressAnrede?: string | null;
       briefAnrede?: string | null;
@@ -257,7 +259,9 @@ export async function generiereQuittungPdf(
     pdfs.push(anschreibenPdf);
   }
 
-  const quittungsVorlageBuffer = await fs.promises.readFile(revision.quittungsVorlage.dateiPfad);
+  const quittungsVorlageBuffer = await fs.promises.readFile(
+    toAbsolutePath(revision.quittungsVorlage.dateiPfad),
+  );
   const quittungPdf = await fuellePdfFormular(quittungsVorlageBuffer, {
     name: `${revision.name}, ${revision.strasse}, ${revision.ort}`,
     betrag: betragFormatiert,
@@ -286,5 +290,5 @@ export async function generiereQuittungPdf(
   const outputPath = path.join(outputDir, dateiName);
   await fs.promises.writeFile(outputPath, finalPdf);
 
-  return outputPath;
+  return toRelativePath(outputPath);
 }

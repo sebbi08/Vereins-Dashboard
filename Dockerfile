@@ -29,6 +29,9 @@ COPY --from=builder /app/frontend/package*.json ./frontend/
 COPY --from=builder /app/backend/package*.json ./backend/
 COPY --from=builder /app/shared/package*.json ./shared/
 
+# Install runtime dependencies (including Prisma CLI for deploy-time migrations)
+RUN npm ci --workspace=backend
+
 # Copy backend build and its dependencies
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/prisma ./backend/prisma
@@ -36,8 +39,9 @@ COPY --from=builder /app/backend/prisma ./backend/prisma
 # Copy frontend build
 COPY --from=builder /app/frontend/dist ./frontend/dist
 
-# Install runtime dependencies including Prisma CLI for deploy-time migrations
-RUN npm ci --workspace=backend && npm exec --workspace=backend prisma generate
+# Make frontend assets available at the path resolved by backend dist code
+RUN mkdir -p /app/backend/dist \
+	&& ln -s /app/frontend /app/backend/dist/frontend
 
 # Create data directories
 RUN mkdir -p /app/data/vorlagen /app/data/quittungen
