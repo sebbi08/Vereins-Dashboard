@@ -1,6 +1,6 @@
 import path from 'path';
 
-const SCHEMA_DIR = path.resolve(__dirname, '../prisma');
+const SCHEMA_DIR = path.resolve(import.meta.dirname, '../prisma');
 
 export const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '../../data');
 export const ABSOLUTE_DATA_DIR = path.resolve(DATA_DIR);

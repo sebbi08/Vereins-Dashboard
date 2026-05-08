@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from '../../prisma/generated/client.js';
 
 export async function generiereQuittungsNummer(
   prisma: PrismaClient,

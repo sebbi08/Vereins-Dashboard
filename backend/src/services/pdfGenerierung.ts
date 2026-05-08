@@ -1,4 +1,4 @@
-import type { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '../../prisma/generated/client.js';
 import { exec } from 'child_process';
 import Docxtemplater from 'docxtemplater';
 import fs from 'fs';

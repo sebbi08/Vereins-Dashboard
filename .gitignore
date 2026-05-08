@@ -29,4 +29,7 @@ frontend/src/**/*.js.map
 
 context
 dev-data
+dev-data-back
 AGENTS.md
+
+backend/prisma/generated

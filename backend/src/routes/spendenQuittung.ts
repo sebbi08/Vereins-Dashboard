@@ -1,4 +1,4 @@
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '../../prisma/generated/client.js';
 import { Router } from 'express';
 import fs from 'fs';
 import type { PdfStatus, QuittungEingaben, SpendenQuittungListItem } from 'shared';

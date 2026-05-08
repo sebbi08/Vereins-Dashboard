@@ -1,12 +1,12 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "outDir": "dist",
-    "rootDir": "..",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "ES2023",
     "strict": true,
     "esModuleInterop": true,
+    "outDir": "dist",
+    "rootDir": "..",
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "paths": {
