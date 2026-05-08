@@ -1,20 +1,18 @@
 import 'dotenv/config';
-import express from 'express';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { createApp } from './app';
 import { ABSOLUTE_DATA_DIR, DATABASE_FILE_PATH, DATABASE_URL } from './config';
 import { initializeApp } from './init';
-import { router } from './routes';
 
-const app = express();
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const app = createApp();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
-
-app.use(express.json());
-
-// API routes
-app.use('/api', router);
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {
+  const express = (await import('express')).default;
   const frontendDist = path.join(__dirname, '../../frontend/dist');
   app.use(express.static(frontendDist));
   app.get('*', (_req, res) => {

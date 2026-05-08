@@ -11,7 +11,9 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "generate": "prisma generate",
-    "migrate": "prisma migrate dev"
+    "migrate": "prisma migrate dev",
+    "test:unit": "vitest run --config vitest.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@prisma/adapter-better-sqlite3": "^7.8.0",
@@ -30,9 +32,13 @@
     "@types/express": "^5.0.0",
     "@types/multer": "^2.1.0",
     "@types/node": "^22.0.0",
+    "@types/supertest": "^7.2.0",
+    "@vitest/coverage-v8": "^4.1.5",
     "prisma": "^7.8.0",
+    "supertest": "^7.2.2",
     "ts-node-dev": "^2.0.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "vitest": "^4.1.5"
   }
 }
