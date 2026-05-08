@@ -55,4 +55,4 @@ ENV DATABASE_URL="file:/app/data/db.sqlite"
 ENV PORT=3000
 ENV DATA_DIR=/app/data
 
-CMD ["sh", "-lc", "cd /app/backend && npx prisma generate && npx prisma migrate deploy && cd /app && node backend/dist/backend/src/index.js"]
+CMD ["sh", "-lc", "cd /app/backend && npx prisma migrate deploy && cd /app && node backend/dist/backend/src/index.js"]
