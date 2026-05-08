@@ -64,14 +64,17 @@ describe('Einstellungen (Settings)', () => {
     await saveBtn.click();
 
     // Wait for success message by looking for the green success div
-    await browser.waitUntil(async () => {
-      try {
-        const msg = await $('.bg-green-50');
-        return await msg.isDisplayed();
-      } catch {
-        return false;
-      }
-    }, { timeout: 10000, timeoutMsg: 'Success message did not appear' });
+    await browser.waitUntil(
+      async () => {
+        try {
+          const msg = await $('.bg-green-50');
+          return await msg.isDisplayed();
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 10000, timeoutMsg: 'Success message did not appear' },
+    );
 
     const successDiv = await $('.bg-green-50');
     await expect(successDiv).toBeDisplayed();

@@ -44,11 +44,14 @@ describe('Spenden Quittungen list', () => {
 
   it('shows empty state when no quittungen exist', async () => {
     // Wait for the list to load
-    await browser.waitUntil(async () => {
-      const rows = await $$('tbody tr');
-      return rows.length === 0;
-    }, { timeout: 5000 });
-    
+    await browser.waitUntil(
+      async () => {
+        const rows = await $$('tbody tr');
+        return rows.length === 0;
+      },
+      { timeout: 5000 },
+    );
+
     // Check if empty message is displayed or just no rows
     const rows = await $$('tbody tr');
     expect(rows.length).toBe(0);
