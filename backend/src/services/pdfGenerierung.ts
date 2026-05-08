@@ -8,8 +8,8 @@ import PizZip from 'pizzip';
 import type { VorlageTyp } from 'shared';
 import { promisify } from 'util';
 import type { PrismaClient } from '../../prisma/generated/client.js';
-import { QUITTUNGEN_DIR, toAbsolutePath, toRelativePath } from '../config';
-import { betragInWorten, formatBetrag, formatDatum } from './betragInWorten';
+import { QUITTUNGEN_DIR, toAbsolutePath, toRelativePath } from '../config.js';
+import { betragInWorten, formatBetrag, formatDatum } from './betragInWorten.js';
 
 const execAsync = promisify(exec);
 

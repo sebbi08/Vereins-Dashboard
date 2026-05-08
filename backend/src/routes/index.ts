@@ -1,9 +1,9 @@
 import { Router } from 'express';
-import { einstellungenRouter } from './einstellungen';
-import { rechnungRouter } from './rechnung';
-import { spendenQuittungRouter } from './spendenQuittung';
-import { spenderRouter } from './spender';
-import { vorlagenRouter } from './vorlagen';
+import { einstellungenRouter } from './einstellungen.js';
+import { rechnungRouter } from './rechnung.js';
+import { spendenQuittungRouter } from './spendenQuittung.js';
+import { spenderRouter } from './spender.js';
+import { vorlagenRouter } from './vorlagen.js';
 
 export const router = Router();
 
