@@ -3,9 +3,13 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "test": "wdio run wdio.conf.ts"
+    "test": "wdio run wdio.conf.ts",
+    "test:headed": "WDIO_HEADLESS=false wdio run wdio.conf.ts",
+    "test:local": "WDIO_TARGET=local wdio run wdio.conf.ts",
+    "test:local:headed": "WDIO_TARGET=local WDIO_HEADLESS=false wdio run wdio.conf.ts"
   },
   "devDependencies": {
+    "@puppeteer/browsers": "^2.13.1",
     "@types/mocha": "^10.0.0",
     "@types/node": "^22.0.0",
     "@wdio/cli": "^8.0.0",
@@ -13,9 +17,11 @@
     "@wdio/mocha-framework": "^8.0.0",
     "@wdio/spec-reporter": "^8.0.0",
     "@wdio/types": "^8.0.0",
+    "chromedriver": "^148.0.2",
+    "testcontainers": "^10.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.0.0",
-    "webdriverio": "^8.0.0",
-    "wdio-chromedriver-service": "^8.0.0"
+    "wdio-chromedriver-service": "^8.0.0",
+    "webdriverio": "^8.0.0"
   }
 }

@@ -33,3 +33,4 @@ dev-data-back
 AGENTS.md
 
 backend/prisma/generated
+.browser-cache

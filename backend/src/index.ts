@@ -32,17 +32,3 @@ initializeApp()
     console.error('Initialisierung fehlgeschlagen:', err);
     process.exit(1);
   });
-
-
-initializeApp()
-  .then(() => {
-    app.listen(PORT, () => {
-      console.log(`Server running on http://localhost:${PORT}`);
-      console.log(`Data dir: ${ABSOLUTE_DATA_DIR}`);
-      console.log(`Database: ${DATABASE_FILE_PATH ?? `non-file datasource (${DATABASE_URL})`}`);
-    });
-  })
-  .catch((err) => {
-    console.error('Initialisierung fehlgeschlagen:', err);
-    process.exit(1);
-  });
