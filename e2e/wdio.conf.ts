@@ -1,5 +1,6 @@
 import { Browser, detectBrowserPlatform, install, resolveBuildId } from '@puppeteer/browsers';
 import type { Options } from '@wdio/types';
+
 import path from 'path';
 import { GenericContainerBuilder, Wait, type StartedTestContainer } from 'testcontainers';
 

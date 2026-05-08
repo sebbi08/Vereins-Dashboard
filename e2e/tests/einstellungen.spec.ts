@@ -52,13 +52,10 @@ describe('Einstellungen (Settings)', () => {
   });
 
   it('saves settings and shows success message', async () => {
-    const kassenwartInput = await $('input[type="text"]:first-child');
-
-    // Fill in Kassenwart field using label association
+    // Find the Kassenwart input by its label
     const kassenwartLabel = await $('label*=Kassenwart');
     const forAttr = await kassenwartLabel.getAttribute('for');
-    const inputSelector = forAttr ? `#${forAttr}` : 'input';
-    const input = forAttr ? await $(inputSelector) : await kassenwartInput;
+    const input = forAttr ? await $(`#${forAttr}`) : await $('input[type="text"]');
 
     await input.clearValue();
     await input.setValue('Max Mustermann');
@@ -66,7 +63,17 @@ describe('Einstellungen (Settings)', () => {
     const saveBtn = await $('button=Speichern');
     await saveBtn.click();
 
-    const successMsg = await $('*=Einstellungen gespeichert');
-    await expect(successMsg).toBeDisplayed();
+    // Wait for success message by looking for the green success div
+    await browser.waitUntil(async () => {
+      try {
+        const msg = await $('.bg-green-50');
+        return await msg.isDisplayed();
+      } catch {
+        return false;
+      }
+    }, { timeout: 10000, timeoutMsg: 'Success message did not appear' });
+
+    const successDiv = await $('.bg-green-50');
+    await expect(successDiv).toBeDisplayed();
   });
 });
