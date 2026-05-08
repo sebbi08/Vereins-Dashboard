@@ -18,7 +18,8 @@
     "/^node -e \"const ntw = require\\('number-to-words'\\); console\\.log\\(ntw\\.toWords\\(100\\)\\); console\\.log\\(typeof ntw\\.toWords\\);\"$/": {
       "approve": true,
       "matchCommandLine": true
-    }
+    },
+    "npx vitest": true
   },
   "js/ts.tsdk.path": "node_modules/typescript/lib"
 }

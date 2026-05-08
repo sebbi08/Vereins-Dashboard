@@ -2,10 +2,10 @@ import { Router } from 'express';
 import fs from 'fs';
 import type { PdfStatus, QuittungEingaben, SpendenQuittungListItem } from 'shared';
 import type { Prisma } from '../../prisma/generated/client.js';
-import { toAbsolutePath } from '../config';
-import { prisma } from '../prismaClient';
-import { generiereQuittungPdf } from '../services/pdfGenerierung';
-import { generiereQuittungsNummer } from '../services/quittungsNummer';
+import { toAbsolutePath } from '../config.js';
+import { prisma } from '../prismaClient.js';
+import { generiereQuittungPdf } from '../services/pdfGenerierung.js';
+import { generiereQuittungsNummer } from '../services/quittungsNummer.js';
 
 export const spendenQuittungRouter = Router();
 

@@ -3,14 +3,14 @@ import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
 import type { VorlageTyp } from 'shared';
-import { VORLAGEN_DIR, toAbsolutePath, toRelativePath } from '../config';
-import { prisma } from '../prismaClient';
+import { VORLAGEN_DIR, toAbsolutePath, toRelativePath } from '../config.js';
+import { prisma } from '../prismaClient.js';
 import {
   generierePreviewVorlage,
   getDummyDaten,
   type VorschauEinstellungen,
-} from '../services/pdfGenerierung';
-import { validiereVorlage } from '../services/vorlagenValidierung';
+} from '../services/pdfGenerierung.js';
+import { validiereVorlage } from '../services/vorlagenValidierung.js';
 
 export const vorlagenRouter = Router();
 

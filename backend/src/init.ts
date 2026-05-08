@@ -1,6 +1,6 @@
 import fs from 'fs';
-import { QUITTUNGEN_DIR, VORLAGEN_DIR } from './config';
-import { prisma } from './prismaClient';
+import { QUITTUNGEN_DIR, VORLAGEN_DIR } from './config.js';
+import { prisma } from './prismaClient.js';
 
 const DEFAULT_EINSTELLUNGEN: Record<string, string> = {
   kassenwart: '',

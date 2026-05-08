@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { SystemEinstellungen } from 'shared';
-import { prisma } from '../prismaClient';
+import { prisma } from '../prismaClient.js';
 
 export const einstellungenRouter = Router();
 
