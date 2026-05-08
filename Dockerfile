@@ -35,6 +35,7 @@ RUN npm ci --workspace=backend
 # Copy backend build and its dependencies
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY --from=builder /app/backend/prisma ./backend/prisma
+COPY --from=builder /app/backend/prisma.config.ts ./backend/prisma.config.ts
 
 # Copy frontend build
 COPY --from=builder /app/frontend/dist ./frontend/dist
