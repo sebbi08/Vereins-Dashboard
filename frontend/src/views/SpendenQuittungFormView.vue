@@ -308,7 +308,6 @@ async function absenden() {
               v-model="eingaben.ort"
               type="text"
               required
-              placeholder="67105 Schifferstadt"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -323,7 +322,6 @@ async function absenden() {
                   ? 'border-red-300 focus:ring-red-500'
                   : 'border-gray-300 focus:ring-blue-500',
               ]"
-              placeholder="Sehr geehrte Damen und Herren"
             />
             <p v-if="zeigeBriefAnredeFehler" class="mt-1 text-xs text-red-600">
               BriefAnrede ist erforderlich, wenn ein Anschreiben erstellt wird.
@@ -336,7 +334,6 @@ async function absenden() {
             <input
               v-model="eingaben.adressAnrede"
               type="text"
-              placeholder="z. B. z. Hd. Frau Mustermann"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -352,7 +349,6 @@ async function absenden() {
               v-model="betragEuro"
               type="text"
               required
-              placeholder="100,00"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -427,7 +423,6 @@ async function absenden() {
             <input
               v-model="eingaben.veranlagungszeitraum"
               type="text"
-              placeholder="2021–2023"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

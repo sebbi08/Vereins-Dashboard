@@ -79,14 +79,14 @@ function positionEntfernen(index: number) {
   }
 }
 
-function preisZuEuro(index: number): string {
+function preisZuCentString(index: number): string {
   const cents = eingaben.value.positionen[index].priceInCents;
-  return cents ? (cents / 100).toFixed(2).replace('.', ',') : '';
+  return cents ? String(cents) : '';
 }
 
-function preisVonEuro(index: number, value: string) {
-  const cleaned = value.replace(',', '.').replace(/[^0-9.]/g, '');
-  eingaben.value.positionen[index].priceInCents = Math.round(parseFloat(cleaned || '0') * 100);
+function preisVonCentString(index: number, value: string) {
+  const cleaned = value.replace(/[^0-9]/g, '');
+  eingaben.value.positionen[index].priceInCents = parseInt(cleaned || '0', 10);
 }
 
 const brutto = ref('0,00');
@@ -322,7 +322,6 @@ async function absenden() {
               v-model="eingaben.ort"
               type="text"
               required
-              placeholder="67105 Schifferstadt"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -339,7 +338,6 @@ async function absenden() {
               v-model="eingaben.title"
               type="text"
               required
-              placeholder="Miete Musikheim April 2026"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
@@ -365,19 +363,18 @@ async function absenden() {
                 <input
                   v-model="pos.text"
                   type="text"
-                  placeholder="Leistungsbeschreibung"
                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   @input="updateBrutto"
                 />
               </div>
               <div class="w-24">
                 <input
-                  :value="preisZuEuro(idx)"
+                  :value="preisZuCentString(idx)"
                   type="text"
-                  placeholder="0,00"
+                  placeholder="Cent"
                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
                   @input="
-                    preisVonEuro(idx, ($event.target as HTMLInputElement).value);
+                    preisVonCentString(idx, ($event.target as HTMLInputElement).value);
                     updateBrutto();
                   "
                 />
@@ -454,7 +451,6 @@ async function absenden() {
             <input
               v-model="eingaben.mailAnrede"
               type="text"
-              placeholder="Sehr geehrte Damen und Herren"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>

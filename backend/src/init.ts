@@ -4,7 +4,7 @@ import { prisma } from './prismaClient.js';
 
 const DEFAULT_EINSTELLUNGEN: Record<string, string> = {
   kassenwart: '',
-  gemeinnuetzigerZweck: 'Förderung der Jugend- und Musikkultur',
+  gemeinnuetzigerZweck: '',
   finanzamtName: '',
   steuernummer: '',
   freistellungsdatum: '',
