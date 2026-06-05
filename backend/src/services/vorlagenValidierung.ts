@@ -24,6 +24,20 @@ const PFLICHTFELDER_QUITTUNG = [
   'VeranlagungsZeitraum',
 ];
 
+const PFLICHTFELDER_RECHNUNG = [
+  'Name',
+  'Strasse',
+  'Ort',
+  'Heute',
+  'Title',
+  'TableWithServices',
+  'Netto',
+  'Steuer',
+  'Brutto',
+  'ust',
+  'PaymentDetails',
+];
+
 export function validiereAnschreibenVorlage(buffer: Buffer): VorlagenValidierungsfehler | null {
   const zip = new PizZip(buffer);
   const docXml = zip.files['word/document.xml']?.asText() ?? '';
@@ -56,12 +70,27 @@ export async function validiereQuittungsVorlage(
   return null;
 }
 
+export function validiereRechnungsVorlage(buffer: Buffer): VorlagenValidierungsfehler | null {
+  const zip = new PizZip(buffer);
+  const docXml = zip.files['word/document.xml']?.asText() ?? '';
+
+  const fehlend = PFLICHTFELDER_RECHNUNG.filter((p) => !docXml.includes(p));
+
+  if (fehlend.length > 0) {
+    return { typ: 'RECHNUNG', fehlendePflichtfelder: fehlend };
+  }
+  return null;
+}
+
 export async function validiereVorlage(
   typ: VorlageTyp,
   buffer: Buffer,
 ): Promise<VorlagenValidierungsfehler | null> {
   if (typ === 'ANSCHREIBEN') {
     return validiereAnschreibenVorlage(buffer);
+  }
+  if (typ === 'RECHNUNG') {
+    return validiereRechnungsVorlage(buffer);
   }
   return validiereQuittungsVorlage(buffer);
 }
