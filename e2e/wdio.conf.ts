@@ -77,32 +77,27 @@ export const config: Options.Testrunner = {
     console.log(`[E2E] ChromeDriver: ${chromedriverInstall.executablePath}`);
 
     // Start chromedriver
-    chromedriverProcess = spawn(chromedriverInstall.executablePath, ['--port=9515', '--silent'], {
+    chromedriverProcess = spawn(chromedriverInstall.executablePath, ['--port=9515'], {
       stdio: 'pipe',
     });
 
-    chromedriverProcess.stderr?.on('data', (d) => process.stderr.write(`[CD] ${d}`));
+    // Wait for chromedriver status endpoint to respond
+    for (let i = 0; i < 40; i++) {
+      try {
+        const res = await fetch('http://localhost:9515/status');
+        if (res.ok) break;
+      } catch {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
 
-    // Wait for chromedriver to be ready
-    await new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error('ChromeDriver start timeout')), 20000);
-      chromedriverProcess!.stdout?.on('data', (data: Buffer) => {
-        if (data.toString().includes('ChromeDriver was started successfully')) {
-          clearTimeout(timeout);
-          resolve();
-        }
-      });
-      chromedriverProcess!.on('error', (err) => {
-        clearTimeout(timeout);
-        reject(err);
-      });
-      chromedriverProcess!.on('exit', (code) => {
-        if (code !== null && code !== 0) {
-          clearTimeout(timeout);
-          reject(new Error(`ChromeDriver exited with code ${code}`));
-        }
-      });
-    });
+    // Verify it's running
+    try {
+      const status = await fetch('http://localhost:9515/status');
+      if (!status.ok) throw new Error(`ChromeDriver status: ${status.status}`);
+    } catch {
+      throw new Error('ChromeDriver failed to start');
+    }
 
     console.log('[E2E] ChromeDriver started\n');
 
