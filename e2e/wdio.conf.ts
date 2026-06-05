@@ -2,6 +2,7 @@ import { Browser, detectBrowserPlatform, install, resolveBuildId } from '@puppet
 import type { Options } from '@wdio/types';
 
 import path from 'path';
+import { execSync } from 'child_process';
 import { GenericContainerBuilder, Wait, type StartedTestContainer } from 'testcontainers';
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -44,8 +45,9 @@ export const config: Options.Testrunner = {
       'chromedriver',
       {
         port: 9515,
-        args: ['--silent'],
-        chromedriverCustomPath: path.resolve(__dirname, '..', 'node_modules', 'chromedriver', 'bin', 'chromedriver'),
+        args: ['--silent', '--allowed-ips='],
+        chromedriverCustomPath: path.resolve(__dirname, '..', 'node_modules', 'chromedriver', 'lib', 'chromedriver', 'chromedriver'),
+        pollTimeout: 20000,
       },
     ],
   ],
@@ -58,6 +60,9 @@ export const config: Options.Testrunner = {
   },
 
   async onPrepare(_config, capabilities) {
+    // Kill leftover chromedriver from previous runs
+    try { execSync('fuser -k 9515/tcp 2>/dev/null || true', { stdio: 'ignore' }); } catch { /* ok */ }
+
     const platform = detectBrowserPlatform()!;
     const buildId = await resolveBuildId(Browser.CHROME, platform, 'stable');
     console.log(`\n[E2E] Ensuring Chrome ${buildId} is available…`);
