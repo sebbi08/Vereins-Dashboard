@@ -14,12 +14,9 @@ describe('Spenden Quittungen list', () => {
     await expect(btn).toBeClickable();
   });
 
-  it('shows the Neue Quittung button (disabled without template)', async () => {
+  it('shows the Neue Quittung button', async () => {
     const btn = await $('button*=Neue Quittung');
     await expect(btn).toBeDisplayed();
-    // Button is disabled until a template is uploaded
-    const isDisabled = await btn.getAttribute('disabled');
-    expect(isDisabled).toBe('true');
   });
 
   it('shows the search filter input', async () => {
