@@ -6,6 +6,7 @@ export const useAppStore = defineStore('app', () => {
 
   // true = aktive Quittungs-Vorlage vorhanden, false = keine, null = noch nicht geprüft
   const quittungsVorlageVorhanden = ref<boolean | null>(null);
+  const rechnungsVorlageVorhanden = ref<boolean | null>(null);
 
   async function pruefeVorlagen() {
     try {
@@ -16,10 +17,11 @@ export const useAppStore = defineStore('app', () => {
       }
       const vorlagen: { typ: string }[] = await res.json();
       quittungsVorlageVorhanden.value = vorlagen.some((v) => v.typ === 'QUITTUNG');
+      rechnungsVorlageVorhanden.value = vorlagen.some((v) => v.typ === 'RECHNUNG');
     } catch {
       quittungsVorlageVorhanden.value = false;
     }
   }
 
-  return { appName, quittungsVorlageVorhanden, pruefeVorlagen };
+  return { appName, quittungsVorlageVorhanden, rechnungsVorlageVorhanden, pruefeVorlagen };
 });

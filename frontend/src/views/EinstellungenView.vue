@@ -27,6 +27,7 @@ const aktuelleVorschauTyp = ref<VorlageTyp | null>(null);
 const pendingUploadDateien = ref<Record<VorlageTyp, File | null>>({
   ANSCHREIBEN: null,
   QUITTUNG: null,
+  RECHNUNG: null,
 });
 
 async function ladeEinstellungen() {
