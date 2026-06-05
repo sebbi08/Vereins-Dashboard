@@ -45,6 +45,7 @@ export const config: Options.Testrunner = {
       {
         port: 9515,
         args: ['--silent'],
+        chromedriverCustomPath: path.resolve(__dirname, '..', 'node_modules', 'chromedriver', 'bin', 'chromedriver'),
       },
     ],
   ],
