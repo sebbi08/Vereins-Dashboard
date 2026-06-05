@@ -1,9 +1,9 @@
 import js from "@eslint/js";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
-import vuePlugin from "eslint-plugin-vue";
 import prettierConfig from "eslint-config-prettier";
 import prettierPlugin from "eslint-plugin-prettier";
+import vuePlugin from "eslint-plugin-vue";
 import globals from "globals";
 import vueParser from "vue-eslint-parser";
 
@@ -13,7 +13,8 @@ export default [
       "**/node_modules/**",
       "**/dist/**",
       "**/.git/**",
-      "**/backend/prisma/migrations/**"
+      "**/backend/prisma/migrations/**",
+      "**/.browser-cache/**",
     ],
   },
   js.configs.recommended,

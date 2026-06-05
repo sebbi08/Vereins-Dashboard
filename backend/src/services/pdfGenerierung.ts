@@ -315,7 +315,10 @@ export function getDummyDaten(
       MailAnrede: 'Sehr geehrte Damen und Herren',
       PaymentDetails:
         'Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.',
-      TableWithServices: getDocxTablePositionen([{ text: 'Miete Musikheim', priceInCents: 8403 }], true),
+      TableWithServices: getDocxTablePositionen(
+        [{ text: 'Miete Musikheim', priceInCents: 8403 }],
+        true,
+      ),
     } as RechnungDaten;
   }
 
