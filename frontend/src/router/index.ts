@@ -1,6 +1,8 @@
 import EinstellungenView from '@/views/EinstellungenView.vue';
 import HomeView from '@/views/HomeView.vue';
 import RechnungView from '@/views/RechnungView.vue';
+import RechnungDetailView from '@/views/RechnungDetailView.vue';
+import RechnungFormView from '@/views/RechnungFormView.vue';
 import SpendenQuittungDetailView from '@/views/SpendenQuittungDetailView.vue';
 import SpendenQuittungFormView from '@/views/SpendenQuittungFormView.vue';
 import SpendenQuittungView from '@/views/SpendenQuittungView.vue';
@@ -31,6 +33,21 @@ const router = createRouter({
       component: SpendenQuittungFormView,
     },
     { path: '/rechnung', name: 'rechnung', component: RechnungView },
+    {
+      path: '/rechnung/neu',
+      name: 'rechnung-neu',
+      component: RechnungFormView,
+    },
+    {
+      path: '/rechnung/:id',
+      name: 'rechnung-detail',
+      component: RechnungDetailView,
+    },
+    {
+      path: '/rechnung/:id/revision',
+      name: 'rechnung-revision',
+      component: RechnungFormView,
+    },
     {
       path: '/spenden-quittung/einstellungen',
       name: 'spenden-quittung-einstellungen',
