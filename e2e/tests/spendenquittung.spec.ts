@@ -71,9 +71,6 @@ describe('Spenden Quittungen list', () => {
   });
 
   it('displays the warning banner when no template is uploaded', async () => {
-    // Look for the warning div or just verify the page shows expected state
-    const bannerElements = await $$('div, p, span');
-    // Just verify the page loaded correctly
     const heading = await $('h2=Spenden Quittungen');
     await expect(heading).toBeDisplayed();
   });
