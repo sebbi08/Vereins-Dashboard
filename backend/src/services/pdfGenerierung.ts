@@ -65,9 +65,14 @@ export interface RechnungDaten {
   TableWithServices: string;
 }
 
-function getDocxTablePositionen(positionen: Array<{ text: string; priceInCents: number }>): string {
+function getDocxTablePositionen(
+  positionen: Array<{ text: string; priceInCents: number }>,
+  resolved = false,
+): string {
   let tableItems = '';
-  positionen.forEach((_item, index) => {
+  positionen.forEach((item, index) => {
+    const textContent = resolved ? item.text : `{text${index}}`;
+    const priceContent = resolved ? (item.priceInCents / 100).toFixed(2) : `{price${index}}`;
     tableItems += `
         <w:tr>
             <w:tc>
@@ -76,7 +81,7 @@ function getDocxTablePositionen(positionen: Array<{ text: string; priceInCents: 
                 </w:tcPr>
                 <w:p>
                     <w:r>
-                        <w:t>{text${index}}</w:t>
+                        <w:t>${textContent}</w:t>
                     </w:r>
                 </w:p>
             </w:tc>
@@ -86,7 +91,7 @@ function getDocxTablePositionen(positionen: Array<{ text: string; priceInCents: 
                 </w:tcPr>
                 <w:p>
                     <w:r>
-                        <w:t>{price${index}}€</w:t>
+                        <w:t>${priceContent}€</w:t>
                     </w:r>
                 </w:p>
             </w:tc>
@@ -310,7 +315,7 @@ export function getDummyDaten(
       MailAnrede: 'Sehr geehrte Damen und Herren',
       PaymentDetails:
         'Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.',
-      TableWithServices: getDocxTablePositionen([{ text: 'Miete Musikheim', priceInCents: 8403 }]),
+      TableWithServices: getDocxTablePositionen([{ text: 'Miete Musikheim', priceInCents: 8403 }], true),
     } as RechnungDaten;
   }
 
