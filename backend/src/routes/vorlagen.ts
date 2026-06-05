@@ -22,9 +22,10 @@ const upload = multer({
 const ERLAUBTE_ENDUNGEN: Record<VorlageTyp, string> = {
   ANSCHREIBEN: '.docx',
   QUITTUNG: '.pdf',
+  RECHNUNG: '.docx',
 };
 
-const GUELTIGE_TYPEN: VorlageTyp[] = ['ANSCHREIBEN', 'QUITTUNG'];
+const GUELTIGE_TYPEN: VorlageTyp[] = ['ANSCHREIBEN', 'QUITTUNG', 'RECHNUNG'];
 
 function istGueltigerTyp(typ: string): typ is VorlageTyp {
   return GUELTIGE_TYPEN.includes(typ as VorlageTyp);

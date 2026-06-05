@@ -29,6 +29,7 @@ model Vorlage {
   hochgeladenAm DateTime                  @default(now())
   revisionenAnschreiben SpendenQuittungRevision[] @relation("AnschreibenVorlage")
   revisionenQuittung    SpendenQuittungRevision[] @relation("QuittungsVorlage")
+  revisionenRechnung    RechnungRevision[]
 }
 
 model SpendenQuittung {
@@ -82,4 +83,55 @@ model SystemEinstellung {
   id    Int    @id @default(autoincrement())
   key   String @unique
   value String
+}
+
+model Rechnungsempfaenger {
+  id          Int        @id @default(autoincrement())
+  name        String
+  strasse     String
+  ort         String
+  email       String?
+  anrede      String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  rechnungen  Rechnung[]
+}
+
+model Rechnung {
+  id               Int                    @id @default(autoincrement())
+  nummer           String                 @unique
+  jahr             Int
+  laufendeNummer   Int
+  status           String                 @default("AKTIV")
+  empfaengerId     Int
+  empfaenger       Rechnungsempfaenger    @relation(fields: [empfaengerId], references: [id])
+  rechnungsdatum   DateTime
+  createdAt        DateTime               @default(now())
+  revisionen       RechnungRevision[]
+}
+
+model RechnungRevision {
+  id              Int       @id @default(autoincrement())
+  rechnungId      Int
+  rechnung        Rechnung  @relation(fields: [rechnungId], references: [id])
+  revisionNummer  Int
+  status          String    @default("AKTIV")
+  anrede          String
+  name            String
+  strasse         String
+  ort             String
+  rechnungsdatum  DateTime
+  title           String
+  positionen      String
+  ust             Int
+  einzug          Boolean
+  email           String
+  mailAnrede      String
+  vorlageId       Int
+  vorlage         Vorlage   @relation(fields: [vorlageId], references: [id])
+  pdfStatus       String    @default("PENDING")
+  pdfFehler       String?
+  pdfTechFehler   String?
+  dateiPfad       String?
+  erstelltAm      DateTime  @default(now())
 }
