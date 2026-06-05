@@ -17,7 +17,69 @@ export interface SpenderDto {
   adressAnrede?: string | null;
 }
 
-export type VorlageTyp = 'ANSCHREIBEN' | 'QUITTUNG';
+export interface Rechnungsposition {
+  text: string;
+  priceInCents: number;
+}
+
+export interface RechnungEingaben {
+  anrede: string;
+  name: string;
+  strasse: string;
+  ort: string;
+  rechnungsdatum: string;
+  title: string;
+  positionen: Rechnungsposition[];
+  ust: number;
+  einzug: boolean;
+  email: string;
+  mailAnrede: string;
+}
+
+export interface RechnungsempfaengerDto {
+  id: number;
+  name: string;
+  strasse: string;
+  ort: string;
+  email: string | null;
+  anrede: string | null;
+}
+
+export interface RechnungListItem {
+  id: number;
+  nummer: string;
+  status: 'AKTIV' | 'STORNIERT';
+  empfaengerName: string;
+  betragCents: number;
+  rechnungsdatum: string;
+  createdAt: string;
+  aktiveRevisionNummer: number | null;
+}
+
+export interface RechnungRevisionDto {
+  id: number;
+  revisionNummer: number;
+  status: 'AKTIV' | 'ERSETZT';
+  pdfStatus: PdfStatus;
+  pdfFehler: string | null;
+  pdfTechFehler: string | null;
+  eingaben: RechnungEingaben;
+  dateiPfad: string | null;
+  erstelltAm: string;
+}
+
+export interface RechnungDto {
+  id: number;
+  nummer: string;
+  status: 'AKTIV' | 'STORNIERT';
+  empfaenger: RechnungsempfaengerDto;
+  rechnungsdatum: string;
+  createdAt: string;
+  aktiveRevision: RechnungRevisionDto | null;
+  revisionen: RechnungRevisionDto[];
+}
+
+export type VorlageTyp = 'ANSCHREIBEN' | 'QUITTUNG' | 'RECHNUNG';
 
 export interface VorlageDto {
   id: number;
