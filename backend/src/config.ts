@@ -24,6 +24,7 @@ export const DATABASE_FILE_PATH = resolveSqliteFilePath(DATABASE_URL);
 
 export const VORLAGEN_DIR = path.join(DATA_DIR, 'vorlagen');
 export const QUITTUNGEN_DIR = path.join(DATA_DIR, 'quittungen');
+export const RECHNUNGEN_DIR = path.join(DATA_DIR, 'rechnungen');
 
 /**
  * Converts an absolute file path to a relative path based on ABSOLUTE_DATA_DIR
