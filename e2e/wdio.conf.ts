@@ -1,8 +1,8 @@
 import { Browser, detectBrowserPlatform, install, resolveBuildId } from '@puppeteer/browsers';
 import type { Options } from '@wdio/types';
 
+import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
-import { execSync } from 'child_process';
 import { GenericContainerBuilder, Wait, type StartedTestContainer } from 'testcontainers';
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
@@ -14,6 +14,7 @@ const IS_HEADLESS = process.env.WDIO_HEADLESS !== 'false'; // true by default
 
 let startedContainer: StartedTestContainer | undefined;
 let chromeBinaryPath: string | undefined;
+let chromedriverProcess: ChildProcess | undefined;
 
 export const config: Options.Testrunner = {
   runner: 'local',
@@ -31,6 +32,9 @@ export const config: Options.Testrunner = {
           '--disable-gpu',
         ],
       },
+      hostname: 'localhost',
+      port: 9515,
+      path: '/',
     },
   ],
 
@@ -40,17 +44,7 @@ export const config: Options.Testrunner = {
   connectionRetryTimeout: 120_000,
   connectionRetryCount: 3,
 
-  services: [
-    [
-      'chromedriver',
-      {
-        port: 9515,
-        args: ['--silent', '--allowed-ips='],
-        chromedriverCustomPath: path.resolve(__dirname, '..', 'node_modules', 'chromedriver', 'lib', 'chromedriver', 'chromedriver'),
-        pollTimeout: 20000,
-      },
-    ],
-  ],
+  services: [],
 
   framework: 'mocha',
   reporters: ['spec'],
@@ -60,19 +54,57 @@ export const config: Options.Testrunner = {
   },
 
   async onPrepare(_config, capabilities) {
-    // Kill leftover chromedriver from previous runs
-    try { execSync('fuser -k 9515/tcp 2>/dev/null || true', { stdio: 'ignore' }); } catch { /* ok */ }
-
+    // Download and start chromedriver matching the Chrome version
     const platform = detectBrowserPlatform()!;
-    const buildId = await resolveBuildId(Browser.CHROME, platform, 'stable');
-    console.log(`\n[E2E] Ensuring Chrome ${buildId} is available…`);
-    const installed = await install({
-      browser: Browser.CHROME,
-      buildId,
-      cacheDir: BROWSER_CACHE_DIR,
-    });
-    chromeBinaryPath = installed.executablePath;
+    const chromeBuildId = await resolveBuildId(Browser.CHROME, platform, 'stable');
+    console.log(`\n[E2E] Ensuring Chrome ${chromeBuildId} is available…`);
+
+    const [chromeInstall, chromedriverInstall] = await Promise.all([
+      install({
+        browser: Browser.CHROME,
+        buildId: chromeBuildId,
+        cacheDir: BROWSER_CACHE_DIR,
+      }),
+      install({
+        browser: Browser.CHROMEDRIVER,
+        buildId: chromeBuildId,
+        cacheDir: BROWSER_CACHE_DIR,
+      }),
+    ]);
+
+    chromeBinaryPath = chromeInstall.executablePath;
     console.log(`[E2E] Chrome binary: ${chromeBinaryPath}`);
+    console.log(`[E2E] ChromeDriver: ${chromedriverInstall.executablePath}`);
+
+    // Start chromedriver
+    chromedriverProcess = spawn(chromedriverInstall.executablePath, ['--port=9515', '--silent'], {
+      stdio: 'pipe',
+    });
+
+    chromedriverProcess.stderr?.on('data', (d) => process.stderr.write(`[CD] ${d}`));
+
+    // Wait for chromedriver to be ready
+    await new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => reject(new Error('ChromeDriver start timeout')), 20000);
+      chromedriverProcess!.stdout?.on('data', (data: Buffer) => {
+        if (data.toString().includes('ChromeDriver was started successfully')) {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+      chromedriverProcess!.on('error', (err) => {
+        clearTimeout(timeout);
+        reject(err);
+      });
+      chromedriverProcess!.on('exit', (code) => {
+        if (code !== null && code !== 0) {
+          clearTimeout(timeout);
+          reject(new Error(`ChromeDriver exited with code ${code}`));
+        }
+      });
+    });
+
+    console.log('[E2E] ChromeDriver started\n');
 
     let baseUrl: string;
 
@@ -81,11 +113,10 @@ export const config: Options.Testrunner = {
       baseUrl = `http://localhost:${devServerPort}`;
       console.log(`\n[E2E] Using local dev server at ${baseUrl}`);
 
-      // Wait for the dev server to be ready
       console.log(`[E2E] Waiting for dev server to be ready…`);
       let isReady = false;
       let attempts = 0;
-      const maxAttempts = 60; // 60 seconds timeout
+      const maxAttempts = 60;
 
       while (!isReady && attempts < maxAttempts) {
         try {
@@ -93,7 +124,7 @@ export const config: Options.Testrunner = {
           const timeoutId = setTimeout(() => controller.abort(), 2000);
           const response = await fetch(baseUrl, { signal: controller.signal });
           clearTimeout(timeoutId);
-          isReady = response.status < 500; // Any non-500 response means server is up
+          isReady = response.status < 500;
           if (isReady) {
             console.log(`[E2E] Dev server is ready!`);
           }
@@ -103,7 +134,7 @@ export const config: Options.Testrunner = {
 
         if (!isReady) {
           attempts++;
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await new Promise((r) => setTimeout(r, 1000));
         }
       }
 
@@ -136,7 +167,6 @@ export const config: Options.Testrunner = {
 
     console.log(`[E2E] Tests will run against: ${baseUrl}\n`);
 
-    // Patch baseUrl so all tests use the dynamically assigned port
     _config.baseUrl = baseUrl;
     for (const cap of Array.isArray(capabilities) ? capabilities : [capabilities]) {
       const c = cap as Record<string, unknown>;
@@ -150,6 +180,16 @@ export const config: Options.Testrunner = {
   },
 
   async onComplete() {
+    if (chromedriverProcess) {
+      chromedriverProcess.kill('SIGTERM');
+      setTimeout(() => {
+        try {
+          chromedriverProcess?.kill('SIGKILL');
+        } catch {
+          /* ok */
+        }
+      }, 2000);
+    }
     if (startedContainer) {
       console.log('\n[E2E] Stopping container…');
       await startedContainer.stop();
