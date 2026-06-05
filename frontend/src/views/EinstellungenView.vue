@@ -24,10 +24,9 @@ const vorschauFehler = ref('');
 const vorschauDataUrl = ref<string | null>(null);
 const vorschauObjektUrl = ref<string | null>(null);
 const aktuelleVorschauTyp = ref<VorlageTyp | null>(null);
-const pendingUploadDateien = ref<Record<VorlageTyp, File | null>>({
+const pendingUploadDateien = ref<Partial<Record<VorlageTyp, File | null>>>({
   ANSCHREIBEN: null,
   QUITTUNG: null,
-  RECHNUNG: null,
 });
 
 async function ladeEinstellungen() {
@@ -321,20 +320,14 @@ function formatDatum(iso: string) {
       <h3 class="font-semibold text-gray-800 mb-4">Vorlagen</h3>
       <div class="space-y-4">
         <div
-          v-for="typ in ['ANSCHREIBEN', 'QUITTUNG', 'RECHNUNG'] as const"
+          v-for="typ in ['ANSCHREIBEN', 'QUITTUNG'] as const"
           :key="typ"
           class="border border-gray-200 rounded-lg p-4"
         >
           <div class="flex items-center justify-between mb-2">
             <div>
               <p class="font-medium text-gray-800 text-sm">
-                {{
-                  typ === 'ANSCHREIBEN'
-                    ? 'Anschreiben (.docx)'
-                    : typ === 'RECHNUNG'
-                      ? 'Rechnung (.docx)'
-                      : 'Spendenquittung (.pdf)'
-                }}
+                {{ typ === 'ANSCHREIBEN' ? 'Anschreiben (.docx)' : 'Spendenquittung (.pdf)' }}
               </p>
               <p v-if="vorlageVonTyp(typ)" class="text-xs text-gray-500">
                 Version {{ vorlageVonTyp(typ)!.version }} · hochgeladen am
@@ -365,7 +358,7 @@ function formatDatum(iso: string) {
             <input
               type="file"
               class="hidden"
-              :accept="typ === 'ANSCHREIBEN' ? '.docx' : typ === 'RECHNUNG' ? '.docx' : '.pdf'"
+              :accept="typ === 'ANSCHREIBEN' ? '.docx' : '.pdf'"
               @change="vorlagePreview(typ, $event)"
             />
           </label>
@@ -392,11 +385,7 @@ function formatDatum(iso: string) {
         <div class="flex items-center justify-between px-6 py-4 border-b">
           <h3 class="text-lg font-semibold text-gray-800">
             {{
-              aktuelleVorschauTyp === 'ANSCHREIBEN'
-                ? 'Anschreiben Vorschau'
-                : aktuelleVorschauTyp === 'RECHNUNG'
-                  ? 'Rechnung Vorschau'
-                  : 'Quittung Vorschau'
+              aktuelleVorschauTyp === 'ANSCHREIBEN' ? 'Anschreiben Vorschau' : 'Quittung Vorschau'
             }}
           </h3>
           <button @click="schliesseVorschauModal" class="text-gray-400 hover:text-gray-600">

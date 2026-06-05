@@ -59,7 +59,7 @@ const anzahlGesamt = computed(() => rechnungen.value.length);
       <div class="flex items-center gap-2">
         <button
           class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-          @click="router.push('/spenden-quittung/einstellungen')"
+          @click="router.push('/rechnung/einstellungen')"
         >
           Einstellungen
         </button>
@@ -87,7 +87,7 @@ const anzahlGesamt = computed(() => rechnungen.value.length);
         Keine Rechnungsvorlage hinterlegt. Bitte zuerst eine Vorlage hochladen, bevor Rechnungen
         erstellt werden können.
         <router-link
-          to="/spenden-quittung/einstellungen"
+          to="/rechnung/einstellungen"
           class="ml-1 font-medium underline hover:text-amber-900"
         >
           &gt;Zu den Einstellungen &rarr;</router-link

@@ -2,6 +2,7 @@ import EinstellungenView from '@/views/EinstellungenView.vue';
 import HomeView from '@/views/HomeView.vue';
 import RechnungView from '@/views/RechnungView.vue';
 import RechnungDetailView from '@/views/RechnungDetailView.vue';
+import RechnungEinstellungenView from '@/views/RechnungEinstellungenView.vue';
 import RechnungFormView from '@/views/RechnungFormView.vue';
 import SpendenQuittungDetailView from '@/views/SpendenQuittungDetailView.vue';
 import SpendenQuittungFormView from '@/views/SpendenQuittungFormView.vue';
@@ -47,6 +48,11 @@ const router = createRouter({
       path: '/rechnung/:id/revision',
       name: 'rechnung-revision',
       component: RechnungFormView,
+    },
+    {
+      path: '/rechnung/einstellungen',
+      name: 'rechnung-einstellungen',
+      component: RechnungEinstellungenView,
     },
     {
       path: '/spenden-quittung/einstellungen',
