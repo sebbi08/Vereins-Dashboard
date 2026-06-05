@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host",
     "typecheck": "vue-tsc --noEmit -p tsconfig.app.json",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",

@@ -4,9 +4,7 @@
   "version": "1.0.0",
   "scripts": {
     "test": "wdio run wdio.conf.ts",
-    "test:headed": "WDIO_HEADLESS=false wdio run wdio.conf.ts",
-    "test:local": "WDIO_TARGET=local wdio run wdio.conf.ts",
-    "test:local:headed": "WDIO_TARGET=local WDIO_HEADLESS=false wdio run wdio.conf.ts"
+    "test:headed": "WDIO_HEADLESS=false wdio run wdio.conf.ts"
   },
   "devDependencies": {
     "@puppeteer/browsers": "^2.13.1",

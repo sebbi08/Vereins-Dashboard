@@ -14,15 +14,10 @@
     "lint": "eslint . --max-warnings=0 && npm run typecheck",
     "lint:fix": "eslint . --max-warnings=0 --fix && npm run typecheck",
     "start": "npm run start --workspace=backend",
-    "docker:dev": "docker compose -f docker-compose.dev.yml up --build -d",
-    "docker:dev:logs": "docker compose -f docker-compose.dev.yml logs -f app",
-    "docker:dev:down": "docker compose -f docker-compose.dev.yml down",
     "test:unit": "npm run test:unit --workspace=backend && npm run test:unit --workspace=frontend",
     "test:integration": "npm run test:integration --workspace=backend",
     "test:e2e": "npm run test --workspace=e2e",
     "test:e2e:headed": "npm run test:headed --workspace=e2e",
-    "test:e2e:local": "npm run test:local --workspace=e2e",
-    "test:e2e:local:headed": "npm run test:local:headed --workspace=e2e",
     "test": "npm run test:unit && npm run test:integration && npm run test:e2e"
   },
   "devDependencies": {

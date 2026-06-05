@@ -3,13 +3,11 @@ import type { Options } from '@wdio/types';
 
 import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
-import { GenericContainerBuilder, Wait, type StartedTestContainer } from 'testcontainers';
+import { type StartedTestContainer } from 'testcontainers';
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const BROWSER_CACHE_DIR = path.join(PROJECT_ROOT, '.browser-cache');
 
-const WDIO_TARGET = process.env.WDIO_TARGET ?? 'container'; // 'container' or 'local'
-const IS_LOCAL_MODE = WDIO_TARGET === 'local';
 const IS_HEADLESS = process.env.WDIO_HEADLESS !== 'false'; // true by default
 
 let startedContainer: StartedTestContainer | undefined;
@@ -39,7 +37,7 @@ export const config: Options.Testrunner = {
   ],
 
   logLevel: 'error',
-  baseUrl: IS_LOCAL_MODE ? 'http://localhost:5173' : 'http://placeholder',
+  baseUrl: 'http://localhost:5173',
   waitforTimeout: 10_000,
   connectionRetryTimeout: 120_000,
   connectionRetryCount: 3,
@@ -103,61 +101,41 @@ export const config: Options.Testrunner = {
 
     let baseUrl: string;
 
-    if (IS_LOCAL_MODE) {
-      const devServerPort = process.env.WDIO_LOCAL_PORT ?? '5173';
-      baseUrl = `http://localhost:${devServerPort}`;
-      console.log(`\n[E2E] Using local dev server at ${baseUrl}`);
+    const devServerPort = process.env.WDIO_LOCAL_PORT ?? '5173';
+    baseUrl = `http://localhost:${devServerPort}`;
+    console.log(`\n[E2E] Using local dev server at ${baseUrl}`);
 
-      console.log(`[E2E] Waiting for dev server to be ready…`);
-      let isReady = false;
-      let attempts = 0;
-      const maxAttempts = 60;
+    console.log(`[E2E] Waiting for dev server to be ready…`);
+    let isReady = false;
+    let attempts = 0;
+    const maxAttempts = 60;
 
-      while (!isReady && attempts < maxAttempts) {
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 2000);
-          const response = await fetch(baseUrl, { signal: controller.signal });
-          clearTimeout(timeoutId);
-          isReady = response.status < 500;
-          if (isReady) {
-            console.log(`[E2E] Dev server is ready!`);
-          }
-        } catch {
-          // Server not ready yet
+    while (!isReady && attempts < maxAttempts) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        const response = await fetch(baseUrl, { signal: controller.signal });
+        clearTimeout(timeoutId);
+        isReady = response.status < 500;
+        if (isReady) {
+          console.log(`[E2E] Dev server is ready!`);
         }
-
-        if (!isReady) {
-          attempts++;
-          await new Promise((r) => setTimeout(r, 1000));
-        }
+      } catch {
+        // Server not ready yet
       }
 
       if (!isReady) {
-        throw new Error(
-          `Dev server at ${baseUrl} did not become ready within ${maxAttempts} seconds. ` +
-            `Make sure to run \`npm run dev\` before running local e2e tests. ` +
-            `(You can override the port with WDIO_LOCAL_PORT env var if running on a different port.)`,
-        );
+        attempts++;
+        await new Promise((r) => setTimeout(r, 1000));
       }
-    } else {
-      console.log('\n[E2E] Building Docker image from project root (this may take a few minutes)…');
-      const container = await new GenericContainerBuilder(PROJECT_ROOT, 'Dockerfile').build();
+    }
 
-      console.log(`[E2E] Starting container…`);
-      startedContainer = await container
-        .withExposedPorts(3000)
-        .withWaitStrategy(
-          Wait.forLogMessage(/Server running on http:\/\/localhost:\d+/).withStartupTimeout(
-            180_000,
-          ),
-        )
-        .start();
-
-      const host = startedContainer.getHost();
-      const port = startedContainer.getMappedPort(3000);
-      baseUrl = `http://${host}:${port}`;
-      console.log(`[E2E] App is ready at ${baseUrl} — starting tests.`);
+    if (!isReady) {
+      throw new Error(
+        `Dev server at ${baseUrl} did not become ready within ${maxAttempts} seconds. ` +
+          `Make sure to run \`npm run dev\` before running local e2e tests. ` +
+          `(You can override the port with WDIO_LOCAL_PORT env var if running on a different port.)`,
+      );
     }
 
     console.log(`[E2E] Tests will run against: ${baseUrl}\n`);

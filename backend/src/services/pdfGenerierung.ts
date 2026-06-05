@@ -199,7 +199,7 @@ async function docxZuPdf(docxBuffer: Buffer): Promise<Buffer> {
 
   try {
     await fs.promises.writeFile(docxPath, docxBuffer);
-    await execAsync(`libreoffice --headless --convert-to pdf --outdir "${tmpDir}" "${docxPath}"`);
+    await execAsync(`libreoffice --headless --norestore --nofirststartwizard --convert-to pdf --outdir "${tmpDir}" "${docxPath}"`);
     return await fs.promises.readFile(pdfPath);
   } finally {
     await fs.promises.rm(tmpDir, { recursive: true, force: true });
