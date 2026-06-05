@@ -8,7 +8,7 @@ import PizZip from 'pizzip';
 import type { VorlageTyp } from 'shared';
 import { promisify } from 'util';
 import type { PrismaClient } from '../../prisma/generated/client.js';
-import { QUITTUNGEN_DIR, toAbsolutePath, toRelativePath } from '../config.js';
+import { QUITTUNGEN_DIR, RECHNUNGEN_DIR, toAbsolutePath, toRelativePath } from '../config.js';
 import { betragInWorten, formatBetrag, formatDatum } from './betragInWorten.js';
 
 const execAsync = promisify(exec);
@@ -48,6 +48,101 @@ export interface VorschauEinstellungen {
   veranlagungszeitraum: string;
 }
 
+export interface RechnungDaten {
+  Anrede: string;
+  Name: string;
+  Strasse: string;
+  Ort: string;
+  Heute: string;
+  Title: string;
+  ReNr: string;
+  Netto: string;
+  Steuer: string;
+  Brutto: string;
+  ust: number;
+  MailAnrede: string;
+  PaymentDetails: string;
+  TableWithServices: string;
+}
+
+function getDocxTablePositionen(positionen: Array<{ text: string; priceInCents: number }>): string {
+  let tableItems = '';
+  positionen.forEach((_item, index) => {
+    tableItems += `
+        <w:tr>
+            <w:tc>
+                <w:tcPr>
+                    <w:tcW w:w="6912" w:type="dxa"/>
+                </w:tcPr>
+                <w:p>
+                    <w:r>
+                        <w:t>{text${index}}</w:t>
+                    </w:r>
+                </w:p>
+            </w:tc>
+            <w:tc>
+                <w:tcPr>
+                    <w:tcW w:w="1728" w:type="dxa"/>
+                </w:tcPr>
+                <w:p>
+                    <w:r>
+                        <w:t>{price${index}}€</w:t>
+                    </w:r>
+                </w:p>
+            </w:tc>
+        </w:tr>`;
+  });
+
+  return `
+        <w:tbl>
+            <w:tblGrid>
+                <w:gridCol w:w="2880"/>
+                <w:gridCol w:w="2880"/>
+                <w:gridCol w:w="2880"/>
+            </w:tblGrid>
+            <w:tblPr>
+                <w:tblStyle w:val="TableGrid"/>
+                <w:tblBorders>
+                    <w:top w:val="single" w:sz="1" w:space="0" w:color="000000"/>
+                    <w:start w:val="single" w:sz="1" w:space="0" w:color="000000"/>
+                    <w:bottom w:val="single" w:sz="1" w:space="0" w:color="000000"/>
+                    <w:end w:val="single" w:sz="1" w:space="0" w:color="000000"/>
+                    <w:insideH w:val="single" w:sz="1" w:space="0" w:color="000000"/>
+                    <w:insideV w:val="single" w:sz="1" w:space="0" w:color="000000"/>
+                </w:tblBorders>
+            </w:tblPr>
+            <w:tr>
+                <w:tc>
+                    <w:tcPr>
+                        <w:tcW w:w="6912" w:type="dxa"/>
+                    </w:tcPr>
+                    <w:p>
+                        <w:r>
+                            <w:rPr>
+                                <w:b w:val="true"/>
+                            </w:rPr>
+                            <w:t>Leistung</w:t>
+                        </w:r>
+                    </w:p>
+                </w:tc>
+                <w:tc>
+                    <w:tcPr>
+                        <w:tcW w:w="1728" w:type="dxa"/>
+                    </w:tcPr>
+                    <w:p>
+                        <w:r>
+                            <w:rPr>
+                                <w:b w:val="true"/>
+                            </w:rPr>
+                            <w:t>Preis</w:t>
+                        </w:r>
+                    </w:p>
+                </w:tc>
+            </w:tr>
+            ${tableItems}
+        </w:tbl>`;
+}
+
 async function fuelleAnschreibenVorlage(
   vorlageBuffer: Buffer,
   daten: AnschreibenDaten,
@@ -58,6 +153,37 @@ async function fuelleAnschreibenVorlage(
     linebreaks: true,
   });
   doc.render(daten);
+  return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
+}
+
+async function fuelleRechnungsVorlage(
+  vorlageBuffer: Buffer,
+  daten: RechnungDaten,
+): Promise<Buffer> {
+  const zip = new PizZip(vorlageBuffer);
+  const doc = new Docxtemplater(zip, {
+    paragraphLoop: true,
+    linebreaks: true,
+  });
+  doc.render({
+    Anrede: daten.Anrede,
+    Name: daten.Name,
+    Strasse: daten.Strasse,
+    Ort: daten.Ort,
+    Heute: daten.Heute,
+    Title: daten.Title,
+    ReNr: daten.ReNr,
+    Netto: daten.Netto,
+    Steuer: daten.Steuer,
+    Brutto: daten.Brutto,
+    ust: daten.ust,
+    MailAnrede: daten.MailAnrede,
+    PaymentDetails: daten.PaymentDetails,
+    TableWithServices: daten.TableWithServices,
+    monthlyPay: false,
+    MonthlyBruto: '',
+  });
+
   return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
 }
 
@@ -153,7 +279,7 @@ async function fuellePdfFormular(vorlageBuffer: Buffer, daten: PdfFormularDaten)
 export function getDummyDaten(
   typ: VorlageTyp,
   einstellungen: VorschauEinstellungen,
-): AnschreibenDaten | PdfFormularDaten {
+): AnschreibenDaten | PdfFormularDaten | RechnungDaten {
   if (typ === 'ANSCHREIBEN') {
     return {
       BriefAnrede: 'Sehr geehrte Damen und Herren',
@@ -166,6 +292,27 @@ export function getDummyDaten(
       TagDerZuwendung: '01.01.2024',
       Kassenwart: einstellungen.kassenwart || 'Kassenwart Max Mustermann',
     };
+  }
+
+  if (typ === 'RECHNUNG') {
+    return {
+      Anrede: '',
+      Name: 'Muserfirma GmbH',
+      Strasse: 'Musterstraße 1',
+      Ort: '67105 Schifferstadt',
+      Heute: formatDatum(new Date()),
+      Title: 'Miete Musikheim April 2026',
+      ReNr: '1 / 2026',
+      Netto: '84,03',
+      Steuer: '15,97',
+      Brutto: '100,00',
+      ust: 19,
+      MailAnrede: 'Sehr geehrte Damen und Herren',
+      PaymentDetails: 'Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.',
+      TableWithServices: getDocxTablePositionen([
+        { text: 'Miete Musikheim', priceInCents: 8403 },
+      ]),
+    } as RechnungDaten;
   }
 
   return {
@@ -186,10 +333,14 @@ export function getDummyDaten(
 export async function generierePreviewVorlage(
   typ: VorlageTyp,
   vorlageBuffer: Buffer,
-  daten: AnschreibenDaten | PdfFormularDaten,
+  daten: AnschreibenDaten | PdfFormularDaten | RechnungDaten,
 ): Promise<Buffer> {
   if (typ === 'ANSCHREIBEN') {
     const filledDocx = await fuelleAnschreibenVorlage(vorlageBuffer, daten as AnschreibenDaten);
+    return docxZuPdf(filledDocx);
+  }
+  if (typ === 'RECHNUNG') {
+    const filledDocx = await fuelleRechnungsVorlage(vorlageBuffer, daten as RechnungDaten);
     return docxZuPdf(filledDocx);
   }
   return fuellePdfFormular(vorlageBuffer, daten as PdfFormularDaten);
@@ -289,6 +440,88 @@ export async function generiereQuittungPdf(
   const dateiName = `${revision.quittung.nummer}-R${revision.revisionNummer}.pdf`;
   const outputPath = path.join(outputDir, dateiName);
   await fs.promises.writeFile(outputPath, finalPdf);
+
+  return toRelativePath(outputPath);
+}
+
+export async function generiereRechnungPdf(
+  prisma: PrismaClient,
+  revisionId: number,
+): Promise<string> {
+  const revision = await prisma.rechnungRevision.findUniqueOrThrow({
+    where: { id: revisionId },
+    include: {
+      rechnung: true,
+      vorlage: true,
+    },
+  });
+
+  const positionen: Array<{ text: string; priceInCents: number }> = JSON.parse(revision.positionen);
+  const netto = positionen.reduce((sum, p) => sum + p.priceInCents, 0);
+  const steuer = Math.round(netto * (revision.ust / 100));
+  const brutto = netto + steuer;
+
+  const invoiceDateFormatted = revision.rechnungsdatum.toLocaleDateString('de');
+
+  const paymentDetails = revision.einzug
+    ? `Der Betrag wird in den nächsten Tagen mit dem Vermerk "${revision.rechnung.nummer}" von Ihrem Konto eingezogen.`
+    : 'Bitte Überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.';
+
+  const tableXml = getDocxTablePositionen(positionen);
+
+  const vorlageBuffer = await fs.promises.readFile(toAbsolutePath(revision.vorlage.dateiPfad));
+
+  // Pass 1: Template-level placeholders
+  const zip1 = new PizZip(vorlageBuffer);
+  const doc1 = new Docxtemplater(zip1, {
+    paragraphLoop: true,
+    linebreaks: true,
+  });
+  doc1.render({
+    Anrede: revision.anrede,
+    Name: revision.name,
+    Strasse: revision.strasse,
+    Ort: revision.ort,
+    Heute: invoiceDateFormatted,
+    Title: revision.title,
+    ReNr: revision.rechnung.nummer,
+    Netto: (netto / 100).toFixed(2),
+    Steuer: (steuer / 100).toFixed(2),
+    Brutto: (brutto / 100).toFixed(2),
+    ust: revision.ust,
+    MailAnrede: revision.mailAnrede,
+    PaymentDetails: paymentDetails,
+    TableWithServices: tableXml,
+    monthlyPay: false,
+    MonthlyBruto: '',
+  });
+
+  // Pass 2: Per-position placeholders
+  const doc2 = new Docxtemplater(doc1.getZip(), {
+    paragraphLoop: true,
+    linebreaks: true,
+  });
+  const pass2Data: Record<string, string> = {};
+  positionen.forEach((pos, idx) => {
+    pass2Data[`text${idx}`] = pos.text;
+    pass2Data[`price${idx}`] = (pos.priceInCents / 100).toFixed(2);
+  });
+  doc2.render(pass2Data);
+
+  const docxBuffer = doc2.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
+  const pdfBuffer = await docxZuPdf(docxBuffer);
+
+  const outputDir = path.join(
+    RECHNUNGEN_DIR,
+    String(revision.rechnungId),
+    `r${revision.revisionNummer}`,
+  );
+  await fs.promises.mkdir(outputDir, { recursive: true });
+
+  const safeNum = revision.rechnung.nummer.replace(/\s*\/\s*/g, '-');
+  const dateiName = `${safeNum}-R${revision.revisionNummer}.pdf`;
+  const outputPath = path.join(outputDir, dateiName);
+  await fs.promises.writeFile(outputPath, pdfBuffer);
 
   return toRelativePath(outputPath);
 }
