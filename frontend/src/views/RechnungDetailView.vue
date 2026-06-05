@@ -109,12 +109,16 @@ function pdfStatusBadge(status: PdfStatus) {
 <template>
   <div>
     <div class="flex items-center gap-3 mb-6">
-      <button class="text-gray-400 hover:text-gray-700" @click="router.push('/rechnung')">← Zurück</button>
+      <button class="text-gray-400 hover:text-gray-700" @click="router.push('/rechnung')">
+        ← Zurück
+      </button>
       <h2 class="text-2xl font-bold text-gray-800">Rechnung {{ rechnung?.nummer }}</h2>
     </div>
 
     <div v-if="laden" class="p-8 text-center text-gray-400">Lädt…</div>
-    <div v-else-if="fehler" class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">{{ fehler }}</div>
+    <div v-else-if="fehler" class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">
+      {{ fehler }}
+    </div>
     <template v-else-if="rechnung">
       <div class="space-y-6">
         <!-- Status -->
@@ -125,7 +129,9 @@ function pdfStatusBadge(status: PdfStatus) {
               <span
                 :class="[
                   'inline-block text-sm font-medium px-2 py-0.5 rounded-full mt-1',
-                  rechnung.status === 'AKTIV' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500',
+                  rechnung.status === 'AKTIV'
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-500',
                 ]"
               >
                 {{ rechnung.status }}
@@ -133,7 +139,9 @@ function pdfStatusBadge(status: PdfStatus) {
             </div>
             <div>
               <p class="text-sm text-gray-500">Erstellt am</p>
-              <p class="text-sm font-medium text-gray-800 mt-1">{{ formatDatum(rechnung.createdAt) }}</p>
+              <p class="text-sm font-medium text-gray-800 mt-1">
+                {{ formatDatum(rechnung.createdAt) }}
+              </p>
             </div>
             <div>
               <p class="text-sm text-gray-500">Empfänger</p>
@@ -171,12 +179,16 @@ function pdfStatusBadge(status: PdfStatus) {
             <div v-for="rev in rechnung.revisionen" :key="rev.id" class="p-6">
               <div class="flex items-start justify-between mb-3">
                 <div class="flex items-center gap-3">
-                  <span class="text-sm font-semibold text-gray-800">Revision {{ rev.revisionNummer }}</span>
+                  <span class="text-sm font-semibold text-gray-800"
+                    >Revision {{ rev.revisionNummer }}</span
+                  >
                   <span :class="pdfStatusBadge(rev.pdfStatus)">{{ rev.pdfStatus }}</span>
                   <span
                     :class="[
                       'inline-block text-xs font-medium px-2 py-0.5 rounded-full',
-                      rev.status === 'AKTIV' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500',
+                      rev.status === 'AKTIV'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-gray-100 text-gray-500',
                     ]"
                   >
                     {{ rev.status }}
@@ -186,20 +198,46 @@ function pdfStatusBadge(status: PdfStatus) {
               </div>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                <div><span class="text-gray-500">Empfänger:</span> <span class="text-gray-800">{{ rev.eingaben.name }}, {{ rev.eingaben.strasse }}, {{ rev.eingaben.ort }}</span></div>
-                <div><span class="text-gray-500">Titel:</span> <span class="text-gray-800">{{ rev.eingaben.title }}</span></div>
-                <div><span class="text-gray-500">USt:</span> <span class="text-gray-800">{{ ustLabel(rev.eingaben.ust) }}</span></div>
-                <div><span class="text-gray-500">Zahlung:</span> <span class="text-gray-800">{{ zahlungsartLabel(rev.eingaben.einzug) }}</span></div>
-                <div class="md:col-span-2"><span class="text-gray-500">Betrag (Brutto):</span> <span class="text-gray-800 font-medium">{{ formatBetrag(berechneBrutto(rev)) }}</span></div>
+                <div>
+                  <span class="text-gray-500">Empfänger:</span>
+                  <span class="text-gray-800"
+                    >{{ rev.eingaben.name }}, {{ rev.eingaben.strasse }},
+                    {{ rev.eingaben.ort }}</span
+                  >
+                </div>
+                <div>
+                  <span class="text-gray-500">Titel:</span>
+                  <span class="text-gray-800">{{ rev.eingaben.title }}</span>
+                </div>
+                <div>
+                  <span class="text-gray-500">USt:</span>
+                  <span class="text-gray-800">{{ ustLabel(rev.eingaben.ust) }}</span>
+                </div>
+                <div>
+                  <span class="text-gray-500">Zahlung:</span>
+                  <span class="text-gray-800">{{ zahlungsartLabel(rev.eingaben.einzug) }}</span>
+                </div>
+                <div class="md:col-span-2">
+                  <span class="text-gray-500">Betrag (Brutto):</span>
+                  <span class="text-gray-800 font-medium">{{
+                    formatBetrag(berechneBrutto(rev))
+                  }}</span>
+                </div>
               </div>
 
               <!-- Positionen -->
               <div class="mt-3">
                 <p class="text-xs text-gray-500 mb-1">Positionen:</p>
                 <div class="bg-gray-50 rounded-lg p-3 text-sm">
-                  <div v-for="(pos, idx) in rev.eingaben.positionen" :key="idx" class="flex justify-between py-1 border-b border-gray-100 last:border-0">
+                  <div
+                    v-for="(pos, idx) in rev.eingaben.positionen"
+                    :key="idx"
+                    class="flex justify-between py-1 border-b border-gray-100 last:border-0"
+                  >
                     <span class="text-gray-700">{{ pos.text }}</span>
-                    <span class="text-gray-800 font-medium">{{ formatBetrag(pos.priceInCents) }}</span>
+                    <span class="text-gray-800 font-medium">{{
+                      formatBetrag(pos.priceInCents)
+                    }}</span>
                   </div>
                 </div>
               </div>
@@ -221,8 +259,12 @@ function pdfStatusBadge(status: PdfStatus) {
                 >
                   {{ retryLaden[rev.id] ? 'Generiere...' : 'PDF neu generieren' }}
                 </button>
-                <p v-if="retryPdfErfolg[rev.id]" class="text-green-600 text-xs">{{ retryPdfErfolg[rev.id] }}</p>
-                <p v-if="retryPdfFehler[rev.id]" class="text-red-600 text-xs">{{ retryPdfFehler[rev.id] }}</p>
+                <p v-if="retryPdfErfolg[rev.id]" class="text-green-600 text-xs">
+                  {{ retryPdfErfolg[rev.id] }}
+                </p>
+                <p v-if="retryPdfFehler[rev.id]" class="text-red-600 text-xs">
+                  {{ retryPdfFehler[rev.id] }}
+                </p>
               </div>
             </div>
           </div>

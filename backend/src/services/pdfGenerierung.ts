@@ -308,10 +308,9 @@ export function getDummyDaten(
       Brutto: '100,00',
       ust: 19,
       MailAnrede: 'Sehr geehrte Damen und Herren',
-      PaymentDetails: 'Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.',
-      TableWithServices: getDocxTablePositionen([
-        { text: 'Miete Musikheim', priceInCents: 8403 },
-      ]),
+      PaymentDetails:
+        'Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.',
+      TableWithServices: getDocxTablePositionen([{ text: 'Miete Musikheim', priceInCents: 8403 }]),
     } as RechnungDaten;
   }
 
@@ -508,7 +507,9 @@ export async function generiereRechnungPdf(
   });
   doc2.render(pass2Data);
 
-  const docxBuffer = doc2.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
+  const docxBuffer = doc2
+    .getZip()
+    .generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
   const pdfBuffer = await docxZuPdf(docxBuffer);
 
   const outputDir = path.join(

@@ -175,10 +175,7 @@ rechnungRouter.get('/', async (req, res) => {
       ...(vonDatum || bisDatum ? { rechnungsdatum: { gte: vonDatum, lte: bisDatum } } : {}),
       ...(search
         ? {
-            OR: [
-              { nummer: { contains: search } },
-              { empfaenger: { name: { contains: search } } },
-            ],
+            OR: [{ nummer: { contains: search } }, { empfaenger: { name: { contains: search } } }],
           }
         : {}),
     },

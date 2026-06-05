@@ -328,7 +328,13 @@ function formatDatum(iso: string) {
           <div class="flex items-center justify-between mb-2">
             <div>
               <p class="font-medium text-gray-800 text-sm">
-                {{ typ === 'ANSCHREIBEN' ? 'Anschreiben (.docx)' : typ === 'RECHNUNG' ? 'Rechnung (.docx)' : 'Spendenquittung (.pdf)' }}
+                {{
+                  typ === 'ANSCHREIBEN'
+                    ? 'Anschreiben (.docx)'
+                    : typ === 'RECHNUNG'
+                      ? 'Rechnung (.docx)'
+                      : 'Spendenquittung (.pdf)'
+                }}
               </p>
               <p v-if="vorlageVonTyp(typ)" class="text-xs text-gray-500">
                 Version {{ vorlageVonTyp(typ)!.version }} · hochgeladen am
@@ -386,7 +392,11 @@ function formatDatum(iso: string) {
         <div class="flex items-center justify-between px-6 py-4 border-b">
           <h3 class="text-lg font-semibold text-gray-800">
             {{
-              aktuelleVorschauTyp === 'ANSCHREIBEN' ? 'Anschreiben Vorschau' : aktuelleVorschauTyp === 'RECHNUNG' ? 'Rechnung Vorschau' : 'Quittung Vorschau'
+              aktuelleVorschauTyp === 'ANSCHREIBEN'
+                ? 'Anschreiben Vorschau'
+                : aktuelleVorschauTyp === 'RECHNUNG'
+                  ? 'Rechnung Vorschau'
+                  : 'Quittung Vorschau'
             }}
           </h3>
           <button @click="schliesseVorschauModal" class="text-gray-400 hover:text-gray-600">

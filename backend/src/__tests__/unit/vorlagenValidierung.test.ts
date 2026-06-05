@@ -1,6 +1,10 @@
 import PizZip from 'pizzip';
 import { describe, expect, it } from 'vitest';
-import { validiereAnschreibenVorlage, validiereRechnungsVorlage, validiereVorlage } from '../../services/vorlagenValidierung';
+import {
+  validiereAnschreibenVorlage,
+  validiereRechnungsVorlage,
+  validiereVorlage,
+} from '../../services/vorlagenValidierung';
 
 /** Creates a minimal DOCX buffer with the given XML body content. */
 function buildDocxBuffer(documentXml: string): Buffer {
@@ -100,7 +104,10 @@ describe('validiereRechnungsVorlage', () => {
   });
 
   it('returns specific missing fields', () => {
-    const xmlWithoutTitle = ALLE_PFLICHTFELDER_RECHNUNG_XML.replace('<w:p><w:t>Title</w:t></w:p>', '');
+    const xmlWithoutTitle = ALLE_PFLICHTFELDER_RECHNUNG_XML.replace(
+      '<w:p><w:t>Title</w:t></w:p>',
+      '',
+    );
     const buffer = buildDocxBuffer(xmlWithoutTitle);
     const result = validiereRechnungsVorlage(buffer);
     expect(result).not.toBeNull();
