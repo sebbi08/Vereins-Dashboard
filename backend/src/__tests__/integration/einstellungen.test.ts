@@ -30,7 +30,7 @@ describe('GET /api/einstellungen', () => {
   it('returns the default gemeinnuetzigerZweck value', async () => {
     await initializeApp();
     const res = await request.get('/api/einstellungen');
-    expect(res.body.gemeinnuetzigerZweck).toBe('Förderung der Jugend- und Musikkultur');
+    expect(res.body.gemeinnuetzigerZweck).toBe('');
   });
 });
 
