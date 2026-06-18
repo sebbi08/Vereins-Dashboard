@@ -15,6 +15,7 @@ const vorschauFehler = ref('');
 const vorschauDataUrl = ref<string | null>(null);
 const vorschauObjektUrl = ref<string | null>(null);
 const pendingUploadDatei = ref<File | null>(null);
+const uploadLaden = ref(false);
 
 async function ladeVorlage() {
   const res = await fetch('/api/vorlagen');
@@ -29,26 +30,31 @@ onMounted(ladeVorlage);
 async function vorlageHochladen(datei: File): Promise<boolean> {
   uploadFehler.value = '';
   uploadErfolg.value = '';
+  uploadLaden.value = true;
 
-  const formData = new FormData();
-  formData.append('vorlage', datei);
+  try {
+    const formData = new FormData();
+    formData.append('vorlage', datei);
 
-  const res = await fetch('/api/vorlagen/RECHNUNG/upload', {
-    method: 'POST',
-    body: formData,
-  });
+    const res = await fetch('/api/vorlagen/RECHNUNG/upload', {
+      method: 'POST',
+      body: formData,
+    });
 
-  if (res.ok) {
-    uploadErfolg.value = 'Vorlage erfolgreich hochgeladen';
-    await ladeVorlage();
-    return true;
+    if (res.ok) {
+      uploadErfolg.value = 'Vorlage erfolgreich hochgeladen';
+      await ladeVorlage();
+      return true;
+    }
+
+    const err = await res.json();
+    uploadFehler.value = err.fehlendePflichtfelder
+      ? `Fehlende Pflichtfelder: ${err.fehlendePflichtfelder.join(', ')}`
+      : err.error || 'Unbekannter Fehler';
+    return false;
+  } finally {
+    uploadLaden.value = false;
   }
-
-  const err = await res.json();
-  uploadFehler.value = err.fehlendePflichtfelder
-    ? `Fehlende Pflichtfelder: ${err.fehlendePflichtfelder.join(', ')}`
-    : err.error || 'Unbekannter Fehler';
-  return false;
 }
 
 function schliesseVorschauModal() {
@@ -111,6 +117,7 @@ async function vorlagePreview(event: Event) {
   vorschauFehler.value = '';
   vorschauDataUrl.value = null;
   vorschauLaden.value = true;
+  uploadLaden.value = true;
 
   try {
     const formData = new FormData();
@@ -141,6 +148,7 @@ async function vorlagePreview(event: Event) {
     uploadFehler.value = message;
   } finally {
     vorschauLaden.value = false;
+    uploadLaden.value = false;
     input.value = '';
   }
 }
@@ -200,13 +208,26 @@ function formatDatum(iso: string) {
         <div v-if="uploadErfolg" class="text-green-600 text-xs mb-2">
           {{ uploadErfolg }}
         </div>
-        <label class="cursor-pointer">
+        <label
+          class="cursor-pointer"
+          :class="{ 'pointer-events-none opacity-50': uploadLaden }"
+        >
           <span
-            class="inline-block border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-50"
+            class="inline-flex items-center gap-1.5 border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-50"
           >
-            Neue Vorlage hochladen
+            <span
+              v-if="uploadLaden"
+              class="animate-spin rounded-full h-3 w-3 border-2 border-gray-400 border-b-transparent"
+            ></span>
+            {{ uploadLaden ? 'Wird hochgeladen…' : 'Neue Vorlage hochladen' }}
           </span>
-          <input type="file" class="hidden" accept=".docx" @change="vorlagePreview($event)" />
+          <input
+            type="file"
+            class="hidden"
+            accept=".docx"
+            :disabled="uploadLaden"
+            @change="vorlagePreview($event)"
+          />
         </label>
         <button
           type="button"

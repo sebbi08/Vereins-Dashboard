@@ -28,6 +28,7 @@ const pendingUploadDateien = ref<Partial<Record<VorlageTyp, File | null>>>({
   ANSCHREIBEN: null,
   QUITTUNG: null,
 });
+const uploadLaden = ref<Partial<Record<VorlageTyp, boolean>>>({});
 
 async function ladeEinstellungen() {
   const res = await fetch('/api/einstellungen');
@@ -68,26 +69,31 @@ async function einstellungenSpeichern() {
 async function vorlageHochladenDatei(typ: VorlageTyp, datei: File): Promise<boolean> {
   uploadFehler.value[typ] = '';
   uploadErfolg.value[typ] = '';
+  uploadLaden.value[typ] = true;
 
-  const formData = new FormData();
-  formData.append('vorlage', datei);
+  try {
+    const formData = new FormData();
+    formData.append('vorlage', datei);
 
-  const res = await fetch(`/api/vorlagen/${typ}/upload`, {
-    method: 'POST',
-    body: formData,
-  });
+    const res = await fetch(`/api/vorlagen/${typ}/upload`, {
+      method: 'POST',
+      body: formData,
+    });
 
-  if (res.ok) {
-    uploadErfolg.value[typ] = 'Vorlage erfolgreich hochgeladen';
-    await ladeVorlagen();
-    return true;
+    if (res.ok) {
+      uploadErfolg.value[typ] = 'Vorlage erfolgreich hochgeladen';
+      await ladeVorlagen();
+      return true;
+    }
+
+    const err = await res.json();
+    uploadFehler.value[typ] = err.fehlendePflichtfelder
+      ? `Fehlende Pflichtfelder: ${err.fehlendePflichtfelder.join(', ')}`
+      : err.error || 'Unbekannter Fehler';
+    return false;
+  } finally {
+    uploadLaden.value[typ] = false;
   }
-
-  const err = await res.json();
-  uploadFehler.value[typ] = err.fehlendePflichtfelder
-    ? `Fehlende Pflichtfelder: ${err.fehlendePflichtfelder.join(', ')}`
-    : err.error || 'Unbekannter Fehler';
-  return false;
 }
 
 function schliesseVorschauModal() {
@@ -163,6 +169,7 @@ async function vorlagePreview(typ: VorlageTyp, event: Event) {
   vorschauFehler.value = '';
   vorschauDataUrl.value = null;
   vorschauLaden.value = true;
+  uploadLaden.value[typ] = true;
   aktuelleVorschauTyp.value = typ;
 
   try {
@@ -194,6 +201,7 @@ async function vorlagePreview(typ: VorlageTyp, event: Event) {
     uploadFehler.value[typ] = message;
   } finally {
     vorschauLaden.value = false;
+    uploadLaden.value[typ] = false;
     input.value = '';
   }
 }
@@ -348,16 +356,24 @@ function formatDatum(iso: string) {
           <div v-if="uploadErfolg[typ]" class="text-green-600 text-xs mb-2">
             {{ uploadErfolg[typ] }}
           </div>
-          <label class="cursor-pointer">
+          <label
+            class="cursor-pointer"
+            :class="{ 'pointer-events-none opacity-50': uploadLaden[typ] }"
+          >
             <span
-              class="inline-block border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-50"
+              class="inline-flex items-center gap-1.5 border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-50"
             >
-              Neue Vorlage hochladen
+              <span
+                v-if="uploadLaden[typ]"
+                class="animate-spin rounded-full h-3 w-3 border-2 border-gray-400 border-b-transparent"
+              ></span>
+              {{ uploadLaden[typ] ? 'Wird hochgeladen…' : 'Neue Vorlage hochladen' }}
             </span>
             <input
               type="file"
               class="hidden"
               :accept="typ === 'ANSCHREIBEN' ? '.docx' : '.pdf'"
+              :disabled="uploadLaden[typ]"
               @change="vorlagePreview(typ, $event)"
             />
           </label>
