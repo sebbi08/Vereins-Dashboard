@@ -23,7 +23,17 @@
     "npx wdio": true,
     "npm run -w backend": true,
     "true": true,
-    "npm run -w frontend": true
+    "npm run -w frontend": true,
+    "/^cd /home/sebastian/code/mv-dashboard && bash /home/sebastian/\\.copilot/installed-plugins/superpowers-marketplace/superpowers/skills/subagent-driven-development/scripts/review-package f1e8c5f HEAD$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "printf": true,
+    "git rev-parse": true,
+    "/^cd /home/sebastian/code/mv-dashboard && bash /home/sebastian/\\.copilot/installed-plugins/superpowers-marketplace/superpowers/skills/subagent-driven-development/scripts/review-package b05f0c3 HEAD$/": {
+      "approve": true,
+      "matchCommandLine": true
+    }
   },
   "js/ts.tsdk.path": "node_modules/typescript/lib"
 }
