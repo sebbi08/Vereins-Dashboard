@@ -14,6 +14,9 @@ const cancelError = ref('');
 const retryPdfSuccess = ref<Record<number, string>>({});
 const retryPdfError = ref<Record<number, string>>({});
 const retryLoading = ref<Record<number, boolean>>({});
+const sendEmailLoading = ref<Record<number, boolean>>({});
+const sendEmailSuccess = ref<Record<number, string>>({});
+const sendEmailError = ref<Record<number, string>>({});
 
 async function loadData() {
   loading.value = true;
@@ -89,6 +92,28 @@ async function retryPdf(revisionId: number) {
     retryPdfError.value[revisionId] = 'Network error';
   } finally {
     retryLoading.value[revisionId] = false;
+  }
+}
+
+async function sendEmail(revisionId: number) {
+  sendEmailSuccess.value[revisionId] = '';
+  sendEmailError.value[revisionId] = '';
+  sendEmailLoading.value[revisionId] = true;
+
+  try {
+    const res = await fetch(`/api/invoice/revision/${revisionId}/send-email`, { method: 'POST' });
+    const result = await res.json();
+
+    if (res.ok) {
+      sendEmailSuccess.value[revisionId] = 'Email sent successfully';
+      await loadData();
+    } else {
+      sendEmailError.value[revisionId] = result.error || 'Error sending email';
+    }
+  } catch {
+    sendEmailError.value[revisionId] = 'Network error';
+  } finally {
+    sendEmailLoading.value[revisionId] = false;
   }
 }
 
@@ -270,6 +295,28 @@ function pdfStatusBadge(status: PdfStatus) {
                 </p>
                 <p v-if="retryPdfError[rev.id]" class="text-red-600 text-xs">
                   {{ retryPdfError[rev.id] }}
+                </p>
+                <button
+                  v-if="rev.pdfStatus === 'OK' && rev.emailStatus !== 'SENT'"
+                  class="text-green-600 hover:underline text-sm"
+                  :disabled="sendEmailLoading[rev.id]"
+                  @click="sendEmail(rev.id)"
+                >
+                  {{ sendEmailLoading[rev.id] ? 'Sending…' : 'Send via Email' }}
+                </button>
+                <span
+                  v-if="rev.emailStatus === 'SENT'"
+                  class="text-green-600 text-xs font-medium"
+                >Email Sent ✓</span>
+                <span
+                  v-if="rev.emailStatus === 'FAILED'"
+                  class="text-red-600 text-xs"
+                >Email failed{{ rev.emailError ? ': ' + rev.emailError : '' }}</span>
+                <p v-if="sendEmailSuccess[rev.id]" class="text-green-600 text-xs">
+                  {{ sendEmailSuccess[rev.id] }}
+                </p>
+                <p v-if="sendEmailError[rev.id]" class="text-red-600 text-xs">
+                  {{ sendEmailError[rev.id] }}
                 </p>
               </div>
             </div>
