@@ -108,7 +108,7 @@ async function sendEmail(revisionId: number) {
       sendEmailSuccess.value[revisionId] = 'Email sent successfully';
       await loadData();
     } else {
-      sendEmailError.value[revisionId] = result.error || 'Error sending email';
+      sendEmailError.value[revisionId] = result.emailError || 'Error sending email';
     }
   } catch {
     sendEmailError.value[revisionId] = 'Network error';
