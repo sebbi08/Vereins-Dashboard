@@ -5,6 +5,7 @@ import { initializeApp } from '../init.js';
 import { prisma } from '../prismaClient.js';
 import { donationReceiptRouter } from './donationReceipt.js';
 import { donorRouter } from './donor.js';
+import { emailSettingsRouter } from './emailSettings.js';
 import { invoiceRouter } from './invoice.js';
 import { invoiceRecipientRouter } from './invoiceRecipient.js';
 import { settingsRouter } from './settings.js';
@@ -17,6 +18,7 @@ router.use('/invoice', invoiceRouter);
 router.use('/invoice-recipient', invoiceRecipientRouter);
 router.use('/donor', donorRouter);
 router.use('/settings', settingsRouter);
+router.use('/email-settings', emailSettingsRouter);
 router.use('/templates', templatesRouter);
 
 router.get('/health', (_req, res) => {
