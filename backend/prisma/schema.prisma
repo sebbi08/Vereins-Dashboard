@@ -133,5 +133,7 @@ model InvoiceRevision {
   pdfError       String?
   pdfTechError   String?
   filePath       String?
+  emailStatus    String   @default("NOT_SENT")
+  emailError     String?
   createdAt      DateTime @default(now())
 }
