@@ -1,7 +1,6 @@
 import nodemailer from 'nodemailer';
 import type { PrismaClient } from '../../prisma/generated/client.js';
 import { toAbsolutePath } from '../config.js';
-import fs from 'fs';
 
 function getSetting(rows: { key: string; value: string }[], key: string): string {
   return rows.find((r) => r.key === key)?.value ?? '';
