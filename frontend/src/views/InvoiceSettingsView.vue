@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { InvoiceRecipientDto, TemplateDto } from 'shared';
+import type { EmailSettings, InvoiceRecipientDto, TemplateDto } from 'shared';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
@@ -17,6 +17,73 @@ const previewObjectUrl = ref<string | null>(null);
 const pendingUploadDatei = ref<File | null>(null);
 const uploadLoading = ref(false);
 
+// ── Email Settings ─────────────────────────────
+
+const emailSettings = ref<EmailSettings>({
+  smtpHost: '',
+  smtpPort: '587',
+  smtpUser: '',
+  smtpPassword: '',
+  smtpSecure: 'false',
+  emailSubject: '',
+  emailBody: '',
+  emailTestAddress: '',
+});
+const emailSaving = ref(false);
+const emailSaveSuccess = ref('');
+const emailSaveError = ref('');
+const emailTestLoading = ref(false);
+const emailTestResult = ref<{ success: boolean; message: string } | null>(null);
+
+async function loadEmailSettings() {
+  try {
+    const res = await fetch('/api/email-settings');
+    if (res.ok) {
+      const data = await res.json();
+      Object.assign(emailSettings.value, data);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function saveEmailSettings() {
+  emailSaving.value = true;
+  emailSaveSuccess.value = '';
+  emailSaveError.value = '';
+  try {
+    const res = await fetch('/api/email-settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(emailSettings.value),
+    });
+    if (!res.ok) throw new Error();
+    emailSaveSuccess.value = 'Email settings saved';
+  } catch {
+    emailSaveError.value = 'Error saving email settings';
+  } finally {
+    emailSaving.value = false;
+  }
+}
+
+async function sendTestEmail() {
+  emailTestLoading.value = true;
+  emailTestResult.value = null;
+  try {
+    const res = await fetch('/api/email-settings/test', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) {
+      emailTestResult.value = { success: true, message: data.message || 'Test email sent' };
+    } else {
+      emailTestResult.value = { success: false, message: data.error || 'Failed to send test email' };
+    }
+  } catch {
+    emailTestResult.value = { success: false, message: 'Network error' };
+  } finally {
+    emailTestLoading.value = false;
+  }
+}
+
 async function loadTemplate() {
   const res = await fetch('/api/templates');
   if (res.ok) {
@@ -28,6 +95,7 @@ async function loadTemplate() {
 onMounted(() => {
   loadTemplate();
   loadRecipients();
+  loadEmailSettings();
 });
 
 async function uploadTemplate(datei: File): Promise<boolean> {
@@ -328,6 +396,128 @@ async function saveEditRec() {
           Show Current Preview
         </button>
         <p v-if="!template" class="mt-2 text-xs text-orange-500">No active template available</p>
+      </div>
+    </div>
+
+    <!-- Email Settings -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
+      <h3 class="font-semibold text-gray-800 mb-4">Email Settings</h3>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Host</label>
+          <input
+            v-model="emailSettings.smtpHost"
+            type="text"
+            placeholder="smtp.example.com"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Port</label>
+          <input
+            v-model="emailSettings.smtpPort"
+            type="text"
+            placeholder="587"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">SMTP User</label>
+          <input
+            v-model="emailSettings.smtpUser"
+            type="text"
+            placeholder="user@example.com"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">SMTP Password</label>
+          <input
+            v-model="emailSettings.smtpPassword"
+            type="password"
+            placeholder="••••••••"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      </div>
+
+      <div class="mt-4">
+        <label class="inline-flex items-center gap-2 cursor-pointer">
+          <input
+            v-model="emailSettings.smtpSecure"
+            type="checkbox"
+            true-value="true"
+            false-value="false"
+            class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <span class="text-sm text-gray-700">Use TLS (Secure)</span>
+        </label>
+      </div>
+
+      <div class="mt-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">
+          Email Subject
+          <span class="text-xs text-gray-400">({number}, {salutation}, {name}, {email})</span>
+        </label>
+        <input
+          v-model="emailSettings.emailSubject"
+          type="text"
+          placeholder="Ihre Rechnung {number}"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div class="mt-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">
+          Email Body
+          <span class="text-xs text-gray-400">({salutation}, {name}, {number}, {email})</span>
+        </label>
+        <textarea
+          v-model="emailSettings.emailBody"
+          rows="5"
+          placeholder="{salutation}&#10;&#10;anbei erhalten Sie Ihre Rechnung {number}.&#10;&#10;Mit freundlichen Grüßen"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        ></textarea>
+      </div>
+
+      <div class="mt-4">
+        <label class="block text-sm font-medium text-gray-700 mb-1">
+          Test Email Address
+          <span class="text-xs text-gray-400">(dev: all invoices redirected here)</span>
+        </label>
+        <input
+          v-model="emailSettings.emailTestAddress"
+          type="email"
+          placeholder="test@example.com"
+          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
+      <div class="flex items-center gap-3 mt-4">
+        <button
+          type="button"
+          class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+          :disabled="emailSaving"
+          @click="saveEmailSettings"
+        >
+          {{ emailSaving ? 'Saving…' : 'Save Email Settings' }}
+        </button>
+        <button
+          type="button"
+          class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+          :disabled="emailTestLoading"
+          @click="sendTestEmail"
+        >
+          <span v-if="emailTestLoading" class="animate-spin rounded-full h-3 w-3 border-2 border-gray-400 border-b-transparent inline-block mr-1"></span>
+          {{ emailTestLoading ? 'Sending…' : 'Send Test Email' }}
+        </button>
+      </div>
+
+      <p v-if="emailSaveSuccess" class="text-green-600 text-xs mt-2">{{ emailSaveSuccess }}</p>
+      <p v-if="emailSaveError" class="text-red-600 text-xs mt-2">{{ emailSaveError }}</p>
+      <div v-if="emailTestResult" :class="['text-xs mt-2', emailTestResult.success ? 'text-green-600' : 'text-red-600']">
+        {{ emailTestResult.message }}
       </div>
     </div>
 
