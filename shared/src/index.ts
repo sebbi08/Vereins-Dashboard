@@ -63,6 +63,8 @@ export interface InvoiceRevisionDto {
   pdfStatus: PdfStatus;
   pdfError: string | null;
   pdfTechError: string | null;
+  emailStatus: 'NOT_SENT' | 'SENT' | 'FAILED';
+  emailError: string | null;
   inputs: InvoiceInputs;
   filePath: string | null;
   createdAt: string;
@@ -157,4 +159,15 @@ export interface SystemSettings {
 export interface TemplateValidationError {
   type: TemplateType;
   missingRequiredFields: string[];
+}
+
+export interface EmailSettings {
+  smtpHost: string;
+  smtpPort: string;
+  smtpUser: string;
+  smtpPassword: string;
+  smtpSecure: string;
+  emailSubject: string;
+  emailBody: string;
+  emailTestAddress: string;
 }
