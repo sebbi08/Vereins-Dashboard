@@ -4,6 +4,7 @@ import type { InvoiceInputs, InvoiceLineItem, InvoiceListItem, PdfStatus } from 
 import type { Prisma } from '../../prisma/generated/client.js';
 import { toAbsolutePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
+import { sendInvoiceEmail } from '../services/emailService.js';
 import { generateInvoiceNumber } from '../services/invoiceNumber.js';
 import { generateInvoicePdf } from '../services/pdfGeneration.js';
 
@@ -31,6 +32,8 @@ function revisionToDto(rev: {
   email: string;
   emailSalutation: string;
   filePath: string | null;
+  emailStatus: string;
+  emailError: string | null;
   createdAt: Date;
 }) {
   return {
@@ -54,6 +57,8 @@ function revisionToDto(rev: {
       emailSalutation: rev.emailSalutation,
     } satisfies InvoiceInputs,
     filePath: rev.filePath,
+    emailStatus: rev.emailStatus as 'NOT_SENT' | 'SENT' | 'FAILED',
+    emailError: rev.emailError,
     createdAt: rev.createdAt.toISOString(),
   };
 }
@@ -276,6 +281,23 @@ invoiceRouter.post('/revision/:revisionId/retry-pdf', async (req, res) => {
     });
   } finally {
     runningRetries.delete(id);
+  }
+});
+
+// POST /api/invoice/revision/:revisionId/send-email
+// NOTE: This route MUST come before /:id to avoid matching "send-email" as an id
+invoiceRouter.post('/revision/:revisionId/send-email', async (req, res) => {
+  const id = parseInt(req.params.revisionId);
+  if (isNaN(id)) {
+    res.status(400).json({ error: 'Invalid revision ID' });
+    return;
+  }
+
+  const result = await sendInvoiceEmail(prisma, id);
+  if (result.success) {
+    res.json({ emailStatus: 'SENT' as const, emailError: null });
+  } else {
+    res.status(400).json({ emailStatus: 'FAILED' as const, emailError: result.error });
   }
 });
 
