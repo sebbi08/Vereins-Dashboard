@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import fs from 'fs';
-import type { PdfStatus, InvoiceInputs, InvoiceLineItem, InvoiceListItem } from 'shared';
+import type { InvoiceInputs, InvoiceLineItem, InvoiceListItem, PdfStatus } from 'shared';
 import type { Prisma } from '../../prisma/generated/client.js';
 import { toAbsolutePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
-import { generateInvoicePdf } from '../services/pdfGeneration.js';
 import { generateInvoiceNumber } from '../services/invoiceNumber.js';
+import { generateInvoicePdf } from '../services/pdfGeneration.js';
 
 export const invoiceRouter = Router();
 
@@ -195,9 +195,7 @@ invoiceRouter.get('/', async (req, res) => {
     number: r.number,
     status: r.status as 'AKTIV' | 'STORNIERT',
     recipientName: r.recipient.name,
-    amountCents: r.revisions[0]
-      ? calculateGross(r.revisions[0].positions, r.revisions[0].vat)
-      : 0,
+    amountCents: r.revisions[0] ? calculateGross(r.revisions[0].positions, r.revisions[0].vat) : 0,
     invoiceDate: r.invoiceDate.toISOString(),
     createdAt: r.createdAt.toISOString(),
     activeRevisionNumber: r.revisions[0]?.revisionNumber ?? null,
@@ -345,9 +343,7 @@ invoiceRouter.post('/', async (req, res) => {
   }
 
   const { number, year, runningNumber } = await generateInvoiceNumber(prisma);
-  const invoiceDate = body.inputs.invoiceDate
-    ? new Date(body.inputs.invoiceDate)
-    : new Date();
+  const invoiceDate = body.inputs.invoiceDate ? new Date(body.inputs.invoiceDate) : new Date();
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     let recipientUpdated = false;
@@ -481,9 +477,7 @@ invoiceRouter.post('/:id/revision', async (req, res) => {
     orderBy: { revisionNumber: 'desc' },
   });
   const newRevisionNumber = (lastRevision?.revisionNumber ?? 0) + 1;
-  const invoiceDate = body.inputs.invoiceDate
-    ? new Date(body.inputs.invoiceDate)
-    : new Date();
+  const invoiceDate = body.inputs.invoiceDate ? new Date(body.inputs.invoiceDate) : new Date();
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     await tx.invoiceRevision.updateMany({

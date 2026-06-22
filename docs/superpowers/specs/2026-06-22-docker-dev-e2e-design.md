@@ -39,12 +39,13 @@ Provide a Docker Compose-based development environment with hot-reload, and make
 
 Two services:
 
-| Service | Port | Command | Key env vars |
-|---------|------|---------|-------------|
-| backend | 3000 | `npm run dev --workspace=backend` | `DATABASE_URL=file:/app/dev-data/db.sqlite`, `DATA_DIR=/app/dev-data` |
-| frontend | 5173 | `npm run dev --workspace=frontend` | `VITE_API_TARGET=http://backend:3000` |
+| Service  | Port | Command                            | Key env vars                                                          |
+| -------- | ---- | ---------------------------------- | --------------------------------------------------------------------- |
+| backend  | 3000 | `npm run dev --workspace=backend`  | `DATABASE_URL=file:/app/dev-data/db.sqlite`, `DATA_DIR=/app/dev-data` |
+| frontend | 5173 | `npm run dev --workspace=frontend` | `VITE_API_TARGET=http://backend:3000`                                 |
 
 Both:
+
 - `build: { context: ., dockerfile: Dockerfile.dev }`
 - `volumes: [.:/app]` — entire project, including node_modules
 - Healthchecks: `curl -f http://localhost:<port>/...`
