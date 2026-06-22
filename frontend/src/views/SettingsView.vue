@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { SystemSettings, TemplateDto, TemplateType } from 'shared';
-import { onMounted, ref } from 'vue';
+import type { SystemSettings, TemplateDto, TemplateType, DonorDto } from 'shared';
+import { computed, onMounted, ref, watch } from 'vue';
 
 const settings = ref<SystemSettings>({
   treasurer: '',
@@ -44,7 +44,7 @@ async function loadTemplates() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadSettings(), loadTemplates()]);
+  await Promise.all([loadSettings(), loadTemplates(), loadDonors()]);
 });
 
 async function saveSettings() {
@@ -234,6 +234,92 @@ function getTemplateByType(typ: string): TemplateDto | undefined {
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat('de-DE').format(new Date(iso));
 }
+
+// ── Donor Management ──────────────────────────────────
+
+const donors = ref<DonorDto[]>([]);
+const donorLoading = ref(false);
+const donorError = ref('');
+const donorSearch = ref('');
+
+const editingDonorId = ref<number | null>(null);
+const editForm = ref({ name: '', street: '', city: '', letterSalutation: '', addressSalutation: '' });
+const donorSaving = ref(false);
+
+async function loadDonors() {
+  donorLoading.value = true;
+  donorError.value = '';
+  try {
+    const res = await fetch('/api/donor?all=true');
+    donors.value = await res.json();
+  } catch {
+    donorError.value = 'Error loading donors';
+  } finally {
+    donorLoading.value = false;
+  }
+}
+
+const filteredDonors = ref<DonorDto[]>([]);
+
+function applyDonorFilter() {
+  const q = donorSearch.value.toLowerCase();
+  if (!q) {
+    filteredDonors.value = donors.value;
+    return;
+  }
+  filteredDonors.value = donors.value.filter(
+    (d) =>
+      d.name.toLowerCase().includes(q) ||
+      d.street.toLowerCase().includes(q) ||
+      d.city.toLowerCase().includes(q),
+  );
+}
+
+watch([donors, donorSearch], () => applyDonorFilter(), { immediate: true });
+
+const donorTotal = computed(() => donors.value.length);
+const donorFiltered = computed(() => filteredDonors.value.length);
+
+function startEditDonor(d: DonorDto) {
+  editingDonorId.value = d.id;
+  editForm.value = {
+    name: d.name,
+    street: d.street,
+    city: d.city,
+    letterSalutation: d.letterSalutation,
+    addressSalutation: d.addressSalutation ?? '',
+  };
+}
+
+function cancelEditDonor() {
+  editingDonorId.value = null;
+}
+
+async function saveEditDonor() {
+  if (!editingDonorId.value) return;
+  donorSaving.value = true;
+  try {
+    const res = await fetch(`/api/donor/${editingDonorId.value}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: editForm.value.name,
+        street: editForm.value.street,
+        city: editForm.value.city,
+        letterSalutation: editForm.value.letterSalutation,
+        addressSalutation: editForm.value.addressSalutation || null,
+      }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      const idx = donors.value.findIndex((d) => d.id === updated.id);
+      if (idx !== -1) donors.value[idx] = updated;
+      editingDonorId.value = null;
+    }
+  } finally {
+    donorSaving.value = false;
+  }
+}
 </script>
 
 <template>
@@ -390,6 +476,87 @@ function formatDate(iso: string) {
           </p>
         </div>
       </div>
+    </div>
+
+    <!-- Donor Management -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-semibold text-gray-800">Donors</h3>
+        <span class="text-xs text-gray-500">{{ donorTotal }} donors</span>
+      </div>
+
+      <div
+        v-if="donorError"
+        class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm"
+      >
+        {{ donorError }}
+      </div>
+
+      <input
+        v-model="donorSearch"
+        type="text"
+        placeholder="Search donors by name, street, or city…"
+        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <p v-if="donorSearch" class="text-xs text-gray-500 mb-3">
+        {{ donorFiltered }} of {{ donorTotal }} donors
+      </p>
+
+      <div v-if="donorLoading" class="py-6 text-center text-gray-400 text-sm">Loading…</div>
+      <div v-else-if="filteredDonors.length === 0" class="py-6 text-center text-gray-400 text-sm">
+        No donors found.
+      </div>
+      <table v-else class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-200 bg-gray-50">
+            <th class="text-left px-3 py-2 font-medium text-gray-600">Name</th>
+            <th class="text-left px-3 py-2 font-medium text-gray-600">Street</th>
+            <th class="text-left px-3 py-2 font-medium text-gray-600">City</th>
+            <th class="text-left px-3 py-2 font-medium text-gray-600">Letter Salutation</th>
+            <th class="text-left px-3 py-2 font-medium text-gray-600">Address Salutation</th>
+            <th class="px-3 py-2 w-20"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="d in filteredDonors"
+            :key="d.id"
+            class="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+          >
+            <template v-if="editingDonorId === d.id">
+              <td class="px-1 py-1">
+                <input v-model="editForm.name" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </td>
+              <td class="px-1 py-1">
+                <input v-model="editForm.street" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </td>
+              <td class="px-1 py-1">
+                <input v-model="editForm.city" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </td>
+              <td class="px-1 py-1">
+                <input v-model="editForm.letterSalutation" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </td>
+              <td class="px-1 py-1">
+                <input v-model="editForm.addressSalutation" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </td>
+              <td class="px-1 py-1 text-right whitespace-nowrap">
+                <button :disabled="donorSaving" class="text-green-600 hover:underline text-xs mr-2 disabled:opacity-40" @click="saveEditDonor">Save</button>
+                <button class="text-gray-400 hover:underline text-xs" @click="cancelEditDonor">Cancel</button>
+              </td>
+            </template>
+            <template v-else>
+              <td class="px-3 py-2 font-medium text-gray-800">{{ d.name }}</td>
+              <td class="px-3 py-2 text-gray-600">{{ d.street }}</td>
+              <td class="px-3 py-2 text-gray-600">{{ d.city }}</td>
+              <td class="px-3 py-2 text-gray-600">{{ d.letterSalutation }}</td>
+              <td class="px-3 py-2 text-gray-500">{{ d.addressSalutation ?? '–' }}</td>
+              <td class="px-3 py-2 text-right">
+                <button class="text-blue-600 hover:underline text-xs" @click="startEditDonor(d)">Edit</button>
+              </td>
+            </template>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <div

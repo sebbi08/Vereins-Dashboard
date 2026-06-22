@@ -30,6 +30,7 @@ frontend/src/**/*.js.map
 context
 dev-data
 dev-data-back
+dev-data-back-bevore-en
 AGENTS.md
 
 backend/prisma/generated

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import type { TemplateDto } from 'shared';
-import { onMounted, ref } from 'vue';
+import type { TemplateDto, InvoiceRecipientDto } from 'shared';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
@@ -25,7 +25,10 @@ async function loadTemplate() {
   }
 }
 
-onMounted(loadTemplate);
+onMounted(() => {
+  loadTemplate();
+  loadRecipients();
+});
 
 async function uploadTemplate(datei: File): Promise<boolean> {
   uploadError.value = '';
@@ -172,6 +175,93 @@ async function savePreview() {
 function formatDate(iso: string) {
   return new Intl.DateTimeFormat('de-DE').format(new Date(iso));
 }
+
+// ── Recipient Management ─────────────────────────────
+
+const recipients = ref<InvoiceRecipientDto[]>([]);
+const recLoading = ref(false);
+const recError = ref('');
+const recSearch = ref('');
+
+const editingRecId = ref<number | null>(null);
+const recEditForm = ref({ name: '', street: '', city: '', email: '', salutation: '' });
+const recSaving = ref(false);
+
+async function loadRecipients() {
+  recLoading.value = true;
+  recError.value = '';
+  try {
+    const res = await fetch('/api/invoice-recipient?all=true');
+    recipients.value = await res.json();
+  } catch {
+    recError.value = 'Error loading recipients';
+  } finally {
+    recLoading.value = false;
+  }
+}
+
+const filteredRecipients = ref<InvoiceRecipientDto[]>([]);
+
+function applyRecFilter() {
+  const q = recSearch.value.toLowerCase();
+  if (!q) {
+    filteredRecipients.value = recipients.value;
+    return;
+  }
+  filteredRecipients.value = recipients.value.filter(
+    (r) =>
+      r.name.toLowerCase().includes(q) ||
+      r.street.toLowerCase().includes(q) ||
+      r.city.toLowerCase().includes(q) ||
+      (r.email && r.email.toLowerCase().includes(q)),
+  );
+}
+
+watch([recipients, recSearch], () => applyRecFilter(), { immediate: true });
+
+const recTotal = computed(() => recipients.value.length);
+const recFiltered = computed(() => filteredRecipients.value.length);
+
+function startEditRec(r: InvoiceRecipientDto) {
+  editingRecId.value = r.id;
+  recEditForm.value = {
+    name: r.name,
+    street: r.street,
+    city: r.city,
+    email: r.email ?? '',
+    salutation: r.salutation ?? '',
+  };
+}
+
+function cancelEditRec() {
+  editingRecId.value = null;
+}
+
+async function saveEditRec() {
+  if (!editingRecId.value) return;
+  recSaving.value = true;
+  try {
+    const res = await fetch(`/api/invoice-recipient/${editingRecId.value}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: recEditForm.value.name,
+        street: recEditForm.value.street,
+        city: recEditForm.value.city,
+        email: recEditForm.value.email || null,
+        salutation: recEditForm.value.salutation || null,
+      }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      const idx = recipients.value.findIndex((r) => r.id === updated.id);
+      if (idx !== -1) recipients.value[idx] = updated;
+      editingRecId.value = null;
+    }
+  } finally {
+    recSaving.value = false;
+  }
+}
 </script>
 
 <template>
@@ -239,6 +329,87 @@ function formatDate(iso: string) {
         </button>
         <p v-if="!template" class="mt-2 text-xs text-orange-500">No active template available</p>
       </div>
+    </div>
+
+    <!-- Recipient Management -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-semibold text-gray-800">Recipients</h3>
+        <span class="text-xs text-gray-500">{{ recTotal }} recipients</span>
+      </div>
+
+      <div
+        v-if="recError"
+        class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm"
+      >
+        {{ recError }}
+      </div>
+
+      <input
+        v-model="recSearch"
+        type="text"
+        placeholder="Search recipients by name, street, or city…"
+        class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm mb-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <p v-if="recSearch" class="text-xs text-gray-500 mb-3">
+        {{ recFiltered }} of {{ recTotal }} recipients
+      </p>
+
+      <div v-if="recLoading" class="py-6 text-center text-gray-400 text-sm">Loading…</div>
+      <div v-else-if="filteredRecipients.length === 0" class="py-6 text-center text-gray-400 text-sm">
+        No recipients found.
+      </div>
+      <table v-else class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-200 bg-gray-50">
+            <th class="text-left px-3 py-2 font-medium text-gray-600">Name</th>
+            <th class="text-left px-3 py-2 font-medium text-gray-600">Street</th>
+            <th class="text-left px-3 py-2 font-medium text-gray-600">City</th>
+            <th class="text-left px-3 py-2 font-medium text-gray-600">Salutation</th>
+            <th class="text-left px-3 py-2 font-medium text-gray-600">E-Mail</th>
+            <th class="px-3 py-2 w-20"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="r in filteredRecipients"
+            :key="r.id"
+            class="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+          >
+            <template v-if="editingRecId === r.id">
+              <td class="px-1 py-1">
+                <input v-model="recEditForm.name" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </td>
+              <td class="px-1 py-1">
+                <input v-model="recEditForm.street" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </td>
+              <td class="px-1 py-1">
+                <input v-model="recEditForm.city" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </td>
+              <td class="px-1 py-1">
+                <input v-model="recEditForm.salutation" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </td>
+              <td class="px-1 py-1">
+                <input v-model="recEditForm.email" type="email" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              </td>
+              <td class="px-1 py-1 text-right whitespace-nowrap">
+                <button :disabled="recSaving" class="text-green-600 hover:underline text-xs mr-2 disabled:opacity-40" @click="saveEditRec">Save</button>
+                <button class="text-gray-400 hover:underline text-xs" @click="cancelEditRec">Cancel</button>
+              </td>
+            </template>
+            <template v-else>
+              <td class="px-3 py-2 font-medium text-gray-800">{{ r.name }}</td>
+              <td class="px-3 py-2 text-gray-600">{{ r.street }}</td>
+              <td class="px-3 py-2 text-gray-600">{{ r.city }}</td>
+              <td class="px-3 py-2 text-gray-600">{{ r.salutation ?? '–' }}</td>
+              <td class="px-3 py-2 text-gray-500">{{ r.email ?? '–' }}</td>
+              <td class="px-3 py-2 text-right">
+                <button class="text-blue-600 hover:underline text-xs" @click="startEditRec(r)">Edit</button>
+              </td>
+            </template>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <div

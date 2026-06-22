@@ -6,6 +6,7 @@ import { prisma } from '../prismaClient.js';
 import { donationReceiptRouter } from './donationReceipt.js';
 import { donorRouter } from './donor.js';
 import { invoiceRouter } from './invoice.js';
+import { invoiceRecipientRouter } from './invoiceRecipient.js';
 import { settingsRouter } from './settings.js';
 import { templatesRouter } from './templates.js';
 
@@ -13,6 +14,7 @@ export const router = Router();
 
 router.use('/donation-receipt', donationReceiptRouter);
 router.use('/invoice', invoiceRouter);
+router.use('/invoice-recipient', invoiceRecipientRouter);
 router.use('/donor', donorRouter);
 router.use('/settings', settingsRouter);
 router.use('/templates', templatesRouter);

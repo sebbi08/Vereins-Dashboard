@@ -5,10 +5,11 @@ export const donorRouter = Router();
 
 donorRouter.get('/', async (req, res) => {
   const q = String(req.query.q ?? '');
+  const all = req.query.all === 'true';
   const donors = await prisma.donor.findMany({
     where: q ? { name: { contains: q } } : undefined,
     orderBy: { name: 'asc' },
-    take: 20,
+    take: all ? undefined : 20,
   });
   res.json(donors);
 });

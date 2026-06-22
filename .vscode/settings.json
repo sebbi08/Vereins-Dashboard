@@ -20,7 +20,10 @@
       "matchCommandLine": true
     },
     "npx vitest": true,
-    "npx wdio": true
+    "npx wdio": true,
+    "npm run -w backend": true,
+    "true": true,
+    "npm run -w frontend": true
   },
   "js/ts.tsdk.path": "node_modules/typescript/lib"
 }

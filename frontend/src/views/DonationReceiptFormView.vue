@@ -290,7 +290,13 @@ async function submit() {
               v-model="inputs.name"
               type="text"
               required
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :disabled="!!donor && !newDonor"
+              :class="[
+                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
+                donor && !newDonor
+                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
+                  : 'border-gray-300 focus:ring-blue-500',
+              ]"
             />
           </div>
           <div>
@@ -299,7 +305,13 @@ async function submit() {
               v-model="inputs.street"
               type="text"
               required
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :disabled="!!donor && !newDonor"
+              :class="[
+                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
+                donor && !newDonor
+                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
+                  : 'border-gray-300 focus:ring-blue-500',
+              ]"
             />
           </div>
           <div>
@@ -308,7 +320,13 @@ async function submit() {
               v-model="inputs.city"
               type="text"
               required
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :disabled="!!donor && !newDonor"
+              :class="[
+                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
+                donor && !newDonor
+                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
+                  : 'border-gray-300 focus:ring-blue-500',
+              ]"
             />
           </div>
           <div>
@@ -316,11 +334,14 @@ async function submit() {
             <input
               v-model="inputs.letterSalutation"
               type="text"
+              :disabled="!!donor && !newDonor"
               :class="[
                 'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                showLetterSalutationError
-                  ? 'border-red-300 focus:ring-red-500'
-                  : 'border-gray-300 focus:ring-blue-500',
+                donor && !newDonor
+                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
+                  : showLetterSalutationError
+                    ? 'border-red-300 focus:ring-red-500'
+                    : 'border-gray-300 focus:ring-blue-500',
               ]"
             />
             <p v-if="showLetterSalutationError" class="mt-1 text-xs text-red-600">
@@ -334,7 +355,13 @@ async function submit() {
             <input
               v-model="inputs.addressSalutation"
               type="text"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :disabled="!!donor && !newDonor"
+              :class="[
+                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
+                donor && !newDonor
+                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
+                  : 'border-gray-300 focus:ring-blue-500',
+              ]"
             />
           </div>
         </div>

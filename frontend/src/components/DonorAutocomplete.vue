@@ -24,18 +24,18 @@ watch(
 );
 
 function onBlur() {
-  window.setTimeout(() => (open.value = false), 150);
+  window.setTimeout(() => (offen.value = false), 150);
 }
 
 async function search(q: string) {
   if (q.length < 2) {
     results.value = [];
-    open.value = false;
+    offen.value = false;
     return;
   }
   const res = await fetch(`/api/donor?q=${encodeURIComponent(q)}`);
   results.value = await res.json();
-  open.value = true;
+  offen.value = true;
 }
 
 function onInput() {
@@ -47,11 +47,11 @@ function onInput() {
 function select(spender: DonorDto) {
   emit('update:modelValue', spender);
   query.value = spender.name;
-  open.value = false;
+  offen.value = false;
 }
 
 function neu() {
-  open.value = false;
+  offen.value = false;
   emit('neu', { name: query.value, street: '', city: '' });
 }
 </script>
