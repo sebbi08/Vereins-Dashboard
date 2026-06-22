@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PdfStatus, InvoiceDto, InvoiceRevisionDto } from 'shared';
+import type { InvoiceDto, InvoiceRevisionDto, PdfStatus } from 'shared';
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -158,6 +158,12 @@ function pdfStatusBadge(status: PdfStatus) {
             @click="router.push(`/invoice/${id}/revision`)"
           >
             New Revision
+          </button>
+          <button
+            class="border border-blue-300 text-blue-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
+            @click="router.push(`/invoice/new?copyFrom=${id}`)"
+          >
+            Duplicate
           </button>
           <button
             v-if="invoice.status === 'AKTIV'"

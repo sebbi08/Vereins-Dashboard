@@ -180,10 +180,16 @@ const totalCount = computed(() => invoices.value.length);
             </td>
             <td class="px-4 py-3 text-right">
               <button
-                class="text-blue-600 hover:underline text-xs"
+                class="text-blue-600 hover:underline text-xs mr-3"
                 @click="router.push(`/invoice/${r.id}`)"
               >
                 Details
+              </button>
+              <button
+                class="text-gray-500 hover:text-blue-600 text-xs"
+                @click="router.push(`/invoice/new?copyFrom=${r.id}`)"
+              >
+                Copy
               </button>
             </td>
           </tr>

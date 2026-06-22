@@ -126,6 +126,12 @@ function formatDateTime(iso: string) {
               New Revision
             </button>
             <button
+              class="border border-blue-300 text-blue-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-50"
+              @click="router.push(`/donation-receipt/new?copyFrom=${id}`)"
+            >
+              Duplicate
+            </button>
+            <button
               v-if="receipt.status === 'AKTIV'"
               class="border border-red-300 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-50"
               @click="cancelConfirmation = true"

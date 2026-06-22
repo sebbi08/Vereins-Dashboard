@@ -9,7 +9,9 @@ const route = useRoute();
 const store = useAppStore();
 
 const invoiceId = route.params.id ? parseInt(String(route.params.id)) : null;
+const copyFromId = route.query.copyFrom ? parseInt(String(route.query.copyFrom)) : null;
 const isNewRevision = !!invoiceId;
+const isCopy = !!copyFromId;
 
 const sending = ref(false);
 const error = ref('');
@@ -119,6 +121,27 @@ async function ladeRevision() {
   }
 }
 
+async function copyFromInvoice() {
+  if (!copyFromId) return;
+  const res = await fetch(`/api/invoice/${copyFromId}`);
+  if (!res.ok) return;
+  const data = await res.json();
+
+  if (data.activeRevision) {
+    const e = data.activeRevision.inputs as InvoiceInputs;
+    inputs.value = {
+      ...e,
+      invoiceDate: new Date().toISOString().split('T')[0], // use today, not the old date
+    };
+  }
+
+  if (data.recipient) {
+    recipient.value = data.recipient;
+    recipientSearch.value = data.recipient.name;
+    newRecipient.value = false;
+  }
+}
+
 onMounted(async () => {
   if (store.invoiceTemplateAvailable === false) {
     router.replace('/invoice');
@@ -134,6 +157,8 @@ onMounted(async () => {
 
   if (isNewRevision) {
     await ladeRevision();
+  } else if (isCopy) {
+    await copyFromInvoice();
   }
   updateGross();
 });
@@ -216,7 +241,7 @@ async function submit() {
     <div class="flex items-center gap-3 mb-6">
       <button class="text-gray-400 hover:text-gray-700" @click="router.back()">← Back</button>
       <h2 class="text-2xl font-bold text-gray-800">
-        {{ isNewRevision ? 'Create New Revision' : 'New Invoice' }}
+        {{ isNewRevision ? 'Create New Revision' : isCopy ? 'Duplicate Invoice' : 'New Invoice' }}
       </h2>
     </div>
 

@@ -10,7 +10,9 @@ const route = useRoute();
 const store = useAppStore();
 
 const receiptId = route.params.id ? parseInt(String(route.params.id)) : null;
+const copyFromId = route.query.copyFrom ? parseInt(String(route.query.copyFrom)) : null;
 const isNewRevision = !!receiptId;
+const isCopy = !!copyFromId;
 
 const sending = ref(false);
 const error = ref('');
@@ -112,6 +114,32 @@ async function loadRevisionAndDefaults() {
   }
 }
 
+async function copyFromReceipt() {
+  if (!copyFromId) return;
+  const res = await fetch(`/api/donation-receipt/${copyFromId}`);
+  if (!res.ok) return;
+  const data = await res.json();
+
+  if (data.activeRevision) {
+    const e = data.activeRevision.inputs as ReceiptInputs;
+    inputs.value = {
+      ...e,
+      donationDate: new Date().toISOString().split('T')[0], // use today
+    };
+    amountEuro.value = amountToEuro(e.donationAmountCents);
+  }
+
+  if (data.donor) {
+    donor.value = data.donor;
+    newDonor.value = false;
+    inputs.value.name = data.donor.name;
+    inputs.value.street = data.donor.street;
+    inputs.value.city = data.donor.city;
+    inputs.value.letterSalutation = data.donor.letterSalutation;
+    inputs.value.addressSalutation = data.donor.addressSalutation ?? '';
+  }
+}
+
 onMounted(async () => {
   if (store.receiptTemplateAvailable === false) {
     router.replace('/donation-receipt');
@@ -128,6 +156,8 @@ onMounted(async () => {
   await ladeSettings();
   if (isNewRevision) {
     await loadRevisionAndDefaults();
+  } else if (isCopy) {
+    await copyFromReceipt();
   }
 });
 
@@ -232,7 +262,7 @@ async function submit() {
     <div class="flex items-center gap-3 mb-6">
       <button class="text-gray-400 hover:text-gray-700" @click="router.back()">← Back</button>
       <h2 class="text-2xl font-bold text-gray-800">
-        {{ isNewRevision ? 'Create New Revision' : 'New Donation Receipt' }}
+        {{ isNewRevision ? 'Create New Revision' : isCopy ? 'Duplicate Receipt' : 'New Donation Receipt' }}
       </h2>
     </div>
 
