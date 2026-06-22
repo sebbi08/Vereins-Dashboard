@@ -40,4 +40,9 @@ describe('Email Settings API', () => {
     expect(res.status).toBe(400);
     expect(res.body.error).toBeDefined();
   });
+
+  it('POST /api/invoice/revision/:id/send-email returns error without SMTP config', async () => {
+    const res = await request.post('/api/invoice/revision/9999/send-email');
+    expect(res.status).toBeGreaterThanOrEqual(400);
+  });
 });
