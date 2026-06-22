@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SystemSettings, TemplateDto, TemplateType, DonorDto } from 'shared';
+import type { DonorDto, SystemSettings, TemplateDto, TemplateType } from 'shared';
 import { computed, onMounted, ref, watch } from 'vue';
 
 const settings = ref<SystemSettings>({

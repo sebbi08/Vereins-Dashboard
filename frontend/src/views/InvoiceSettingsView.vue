@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TemplateDto, InvoiceRecipientDto } from 'shared';
+import type { InvoiceRecipientDto, TemplateDto } from 'shared';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 

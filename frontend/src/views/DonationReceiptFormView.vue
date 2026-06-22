@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ReceiptInputs, DonorDto, SystemSettings } from 'shared';
+import type { DonorDto, ReceiptInputs, SystemSettings } from 'shared';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import DonorAutocomplete from '../components/DonorAutocomplete.vue';
