@@ -6,8 +6,8 @@ import path from 'path';
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const BROWSER_CACHE_DIR = path.join(PROJECT_ROOT, '.browser-cache');
 
-const BACKEND_URL = 'http://localhost:3000';
-const FRONTEND_URL = 'http://localhost:5173';
+const BACKEND_URL = process.env.E2E_BACKEND_URL ?? 'http://localhost:3000';
+const FRONTEND_URL = process.env.E2E_FRONTEND_URL ?? 'http://localhost:5173';
 
 const IS_HEADLESS = process.env.WDIO_HEADLESS !== 'false'; // true by default
 

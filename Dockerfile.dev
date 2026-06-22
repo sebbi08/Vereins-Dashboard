@@ -1,0 +1,13 @@
+# Dev image — provides OS-level dependencies only.
+# Project code and node_modules are bind-mounted at runtime.
+FROM node:22-slim
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libreoffice \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+CMD ["sleep", "infinity"]

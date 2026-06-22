@@ -9,3 +9,5 @@ shared/dist
 data/
 *.sqlite
 .env
+dev-data
+e2e/.browser-cache

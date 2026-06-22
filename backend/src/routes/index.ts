@@ -38,8 +38,6 @@ router.post('/e2e/reset', async (_req, res) => {
       try {
         const files = await fs.promises.readdir(dir);
         await Promise.all(
-          ,
-        
           files.map((f) => fs.promises.rm(`${dir}/${f}`, { recursive: true, force: true })),
         );
       } catch {
