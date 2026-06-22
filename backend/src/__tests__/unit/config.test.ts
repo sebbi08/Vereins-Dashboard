@@ -4,9 +4,9 @@ import { ABSOLUTE_DATA_DIR, toAbsolutePath, toRelativePath } from '../../config'
 
 describe('toRelativePath', () => {
   it('strips the DATA_DIR prefix from an absolute path', () => {
-    const absolutePath = path.join(ABSOLUTE_DATA_DIR, 'quittungen', 'test.pdf');
+    const absolutePath = path.join(ABSOLUTE_DATA_DIR, 'receipts', 'test.pdf');
     const result = toRelativePath(absolutePath);
-    expect(result).toBe(path.join('quittungen', 'test.pdf'));
+    expect(result).toBe(path.join('receipts', 'test.pdf'));
   });
 
   it('returns the path unchanged when it is outside DATA_DIR', () => {
@@ -15,9 +15,9 @@ describe('toRelativePath', () => {
   });
 
   it('handles nested paths', () => {
-    const absolutePath = path.join(ABSOLUTE_DATA_DIR, 'vorlagen', 'v1', 'template.docx');
+    const absolutePath = path.join(ABSOLUTE_DATA_DIR, 'templates', 'v1', 'template.docx');
     const result = toRelativePath(absolutePath);
-    expect(result).toBe(path.join('vorlagen', 'v1', 'template.docx'));
+    expect(result).toBe(path.join('templates', 'v1', 'template.docx'));
   });
 });
 
@@ -28,7 +28,7 @@ describe('toAbsolutePath', () => {
   });
 
   it('resolves a relative path against ABSOLUTE_DATA_DIR', () => {
-    const result = toAbsolutePath('quittungen/test.pdf');
-    expect(result).toBe(path.join(ABSOLUTE_DATA_DIR, 'quittungen', 'test.pdf'));
+    const result = toAbsolutePath('receipts/test.pdf');
+    expect(result).toBe(path.join(ABSOLUTE_DATA_DIR, 'receipts', 'test.pdf'));
   });
 });

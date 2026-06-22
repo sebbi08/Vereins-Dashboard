@@ -1,564 +1,558 @@
 import { Router } from 'express';
 import fs from 'fs';
-import type { PdfStatus, RechnungEingaben, Rechnungsposition, RechnungListItem } from 'shared';
+import type { InvoiceInputs, InvoiceLineItem, InvoiceListItem, PdfStatus } from 'shared';
 import type { Prisma } from '../../prisma/generated/client.js';
 import { toAbsolutePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
-import { generiereRechnungPdf } from '../services/pdfGenerierung.js';
-import { generiereRechnungsNummer } from '../services/rechnungsNummer.js';
+import { generateInvoiceNumber } from '../services/invoiceNumber.js';
+import { generateInvoicePdf } from '../services/pdfGeneration.js';
 
-export const rechnungRouter = Router();
+export const invoiceRouter = Router();
 
-const PDF_FEHLER_MELDUNG = 'PDF konnte nicht erzeugt werden. Bitte Retry versuchen.';
-const laufendeRetries = new Set<number>();
+const PDF_ERROR_MESSAGE = 'PDF could not be generated. Please try retry.';
+const runningRetries = new Set<number>();
 
-function revisionZuDto(rev: {
+function revisionToDto(rev: {
   id: number;
-  revisionNummer: number;
+  revisionNumber: number;
   status: string;
   pdfStatus: string;
-  pdfFehler: string | null;
-  pdfTechFehler: string | null;
-  anrede: string;
+  pdfError: string | null;
+  pdfTechError: string | null;
+  salutation: string;
   name: string;
-  strasse: string;
-  ort: string;
-  rechnungsdatum: Date;
+  street: string;
+  city: string;
+  invoiceDate: Date;
   title: string;
-  positionen: string;
-  ust: number;
-  einzug: boolean;
+  positions: string;
+  vat: number;
+  directDebit: boolean;
   email: string;
-  mailAnrede: string;
-  dateiPfad: string | null;
-  erstelltAm: Date;
+  emailSalutation: string;
+  filePath: string | null;
+  createdAt: Date;
 }) {
   return {
     id: rev.id,
-    revisionNummer: rev.revisionNummer,
+    revisionNumber: rev.revisionNumber,
     status: rev.status as 'AKTIV' | 'ERSETZT',
     pdfStatus: rev.pdfStatus as PdfStatus,
-    pdfFehler: rev.pdfFehler,
-    pdfTechFehler: rev.pdfTechFehler,
-    eingaben: {
-      anrede: rev.anrede,
+    pdfError: rev.pdfError,
+    pdfTechError: rev.pdfTechError,
+    inputs: {
+      salutation: rev.salutation,
       name: rev.name,
-      strasse: rev.strasse,
-      ort: rev.ort,
-      rechnungsdatum: rev.rechnungsdatum.toISOString(),
+      street: rev.street,
+      city: rev.city,
+      invoiceDate: rev.invoiceDate.toISOString(),
       title: rev.title,
-      positionen: JSON.parse(rev.positionen) as Rechnungsposition[],
-      ust: rev.ust,
-      einzug: rev.einzug,
+      lineItems: JSON.parse(rev.positions) as InvoiceLineItem[],
+      vat: rev.vat,
+      directDebit: rev.directDebit,
       email: rev.email,
-      mailAnrede: rev.mailAnrede,
-    } satisfies RechnungEingaben,
-    dateiPfad: rev.dateiPfad,
-    erstelltAm: rev.erstelltAm.toISOString(),
+      emailSalutation: rev.emailSalutation,
+    } satisfies InvoiceInputs,
+    filePath: rev.filePath,
+    createdAt: rev.createdAt.toISOString(),
   };
 }
 
-function validierePflichtfelder(eingaben: RechnungEingaben): string | null {
-  if (!eingaben.name.trim()) return 'Name ist erforderlich';
-  if (!eingaben.strasse.trim()) return 'Straße ist erforderlich';
-  if (!eingaben.ort.trim()) return 'Ort ist erforderlich';
-  if (!eingaben.title.trim()) return 'Titel ist erforderlich';
-  if (!eingaben.positionen || eingaben.positionen.length === 0) {
-    return 'Mindestens eine Position ist erforderlich';
+function validateRequiredFields(inputs: InvoiceInputs): string | null {
+  if (!inputs.name.trim()) return 'Name is required';
+  if (!inputs.street.trim()) return 'Street is required';
+  if (!inputs.city.trim()) return 'City is required';
+  if (!inputs.title.trim()) return 'Title is required';
+  if (!inputs.lineItems || inputs.lineItems.length === 0) {
+    return 'At least one line item is required';
   }
-  for (let i = 0; i < eingaben.positionen.length; i++) {
-    if (!eingaben.positionen[i].text.trim()) {
-      return `Position ${i + 1}: Text ist erforderlich`;
+  for (let i = 0; i < inputs.lineItems.length; i++) {
+    if (!inputs.lineItems[i].text.trim()) {
+      return `Line item ${i + 1}: Text is required`;
     }
-    if (eingaben.positionen[i].priceInCents <= 0) {
-      return `Position ${i + 1}: Preis muss größer als 0 sein`;
+    if (inputs.lineItems[i].priceInCents <= 0) {
+      return `Line item ${i + 1}: Price must be greater than 0`;
     }
   }
-  if (eingaben.ust !== 7 && eingaben.ust !== 19) {
-    return 'USt muss 7% oder 19% sein';
+  if (inputs.vat !== 7 && inputs.vat !== 19) {
+    return 'VAT must be 7% or 19%';
   }
   return null;
 }
 
-function berechneBrutto(positionenJson: string, ust: number): number {
-  const positionen: Rechnungsposition[] = JSON.parse(positionenJson);
-  const netto = positionen.reduce((sum, p) => sum + p.priceInCents, 0);
-  const steuer = Math.round(netto * (ust / 100));
-  return netto + steuer;
+function calculateGross(positionsJson: string, vat: number): number {
+  const lineItems: InvoiceLineItem[] = JSON.parse(positionsJson);
+  const net = lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
+  const tax = Math.round(net * (vat / 100));
+  return net + tax;
 }
 
 async function updateRevisionPdfStatus(
   revisionId: number,
   update: {
     pdfStatus: PdfStatus;
-    dateiPfad?: string | null;
-    pdfFehler?: string | null;
-    pdfTechFehler?: string | null;
+    filePath?: string | null;
+    pdfError?: string | null;
+    pdfTechError?: string | null;
   },
 ) {
-  await prisma.rechnungRevision.update({
+  await prisma.invoiceRevision.update({
     where: { id: revisionId },
     data: {
       pdfStatus: update.pdfStatus,
-      ...(update.dateiPfad !== undefined && { dateiPfad: update.dateiPfad }),
-      ...(update.pdfFehler !== undefined && { pdfFehler: update.pdfFehler }),
-      ...(update.pdfTechFehler !== undefined && { pdfTechFehler: update.pdfTechFehler }),
+      ...(update.filePath !== undefined && { filePath: update.filePath }),
+      ...(update.pdfError !== undefined && { pdfError: update.pdfError }),
+      ...(update.pdfTechError !== undefined && { pdfTechError: update.pdfTechError }),
     },
   });
 }
 
-function serialisiereTechnischenFehler(error: unknown): string {
+function serializeTechnicalError(error: unknown): string {
   if (error instanceof Error) {
     return error.stack || `${error.name}: ${error.message}`;
   }
   return String(error);
 }
 
-async function versuchePdfErzeugung(revisionId: number) {
+async function attemptPdfGeneration(revisionId: number) {
   try {
-    const dateiPfad = await generiereRechnungPdf(prisma, revisionId);
+    const filePath = await generateInvoicePdf(prisma, revisionId);
     await updateRevisionPdfStatus(revisionId, {
       pdfStatus: 'OK',
-      dateiPfad,
-      pdfFehler: null,
-      pdfTechFehler: null,
+      filePath,
+      pdfError: null,
+      pdfTechError: null,
     });
     return {
       pdfStatus: 'OK' as const,
-      pdfFehler: null,
-      pdfTechFehler: null,
-      dateiPfad,
+      pdfError: null,
+      pdfTechError: null,
+      filePath,
     };
   } catch (error) {
     await updateRevisionPdfStatus(revisionId, {
       pdfStatus: 'FAILED',
-      dateiPfad: null,
-      pdfFehler: PDF_FEHLER_MELDUNG,
-      pdfTechFehler: serialisiereTechnischenFehler(error),
+      filePath: null,
+      pdfError: PDF_ERROR_MESSAGE,
+      pdfTechError: serializeTechnicalError(error),
     });
 
-    const failed = await prisma.rechnungRevision.findUniqueOrThrow({
+    const failed = await prisma.invoiceRevision.findUniqueOrThrow({
       where: { id: revisionId },
-      select: { pdfFehler: true, pdfTechFehler: true },
+      select: { pdfError: true, pdfTechError: true },
     });
 
     return {
       pdfStatus: 'FAILED' as const,
-      pdfFehler: failed.pdfFehler,
-      pdfTechFehler: failed.pdfTechFehler,
-      dateiPfad: null,
+      pdfError: failed.pdfError,
+      pdfTechError: failed.pdfTechError,
+      filePath: null,
     };
   }
 }
 
-// GET /api/rechnung/empfaenger
-rechnungRouter.get('/empfaenger', async (req, res) => {
+// GET /api/invoice/recipient
+invoiceRouter.get('/recipient', async (req, res) => {
   const search = String(req.query.search ?? '');
-  const empfaenger = await prisma.rechnungsempfaenger.findMany({
+  const recipients = await prisma.invoiceRecipient.findMany({
     where: search ? { name: { contains: search } } : {},
     orderBy: { name: 'asc' },
     take: 20,
   });
-  res.json(empfaenger);
+  res.json(recipients);
 });
 
-// GET /api/rechnung
-rechnungRouter.get('/', async (req, res) => {
+// GET /api/invoice
+invoiceRouter.get('/', async (req, res) => {
   const search = String(req.query.search ?? '');
-  const vonDatum = req.query.vonDatum ? new Date(String(req.query.vonDatum)) : undefined;
-  const bisDatum = req.query.bisDatum ? new Date(String(req.query.bisDatum)) : undefined;
-  const mitStorniert = req.query.mitStorniert === 'true';
+  const fromDate = req.query.fromDate ? new Date(String(req.query.fromDate)) : undefined;
+  const toDate = req.query.toDate ? new Date(String(req.query.toDate)) : undefined;
+  const withCancelled = req.query.withCancelled === 'true';
 
-  const rechnungen = await prisma.rechnung.findMany({
+  const invoices = await prisma.invoice.findMany({
     where: {
-      ...(mitStorniert ? {} : { status: 'AKTIV' }),
-      ...(vonDatum || bisDatum ? { rechnungsdatum: { gte: vonDatum, lte: bisDatum } } : {}),
+      ...(withCancelled ? {} : { status: 'AKTIV' }),
+      ...(fromDate || toDate ? { invoiceDate: { gte: fromDate, lte: toDate } } : {}),
       ...(search
         ? {
-            OR: [{ nummer: { contains: search } }, { empfaenger: { name: { contains: search } } }],
+            OR: [{ number: { contains: search } }, { recipient: { name: { contains: search } } }],
           }
         : {}),
     },
     include: {
-      empfaenger: true,
-      revisionen: {
+      recipient: true,
+      revisions: {
         where: { status: 'AKTIV' },
-        orderBy: { revisionNummer: 'desc' },
+        orderBy: { revisionNumber: 'desc' },
         take: 1,
       },
     },
-    orderBy: { rechnungsdatum: 'desc' },
+    orderBy: { invoiceDate: 'desc' },
   });
 
-  const list: RechnungListItem[] = rechnungen.map((r) => ({
+  const list: InvoiceListItem[] = invoices.map((r) => ({
     id: r.id,
-    nummer: r.nummer,
+    number: r.number,
     status: r.status as 'AKTIV' | 'STORNIERT',
-    empfaengerName: r.empfaenger.name,
-    betragCents: r.revisionen[0]
-      ? berechneBrutto(r.revisionen[0].positionen, r.revisionen[0].ust)
-      : 0,
-    rechnungsdatum: r.rechnungsdatum.toISOString(),
+    recipientName: r.recipient.name,
+    amountCents: r.revisions[0] ? calculateGross(r.revisions[0].positions, r.revisions[0].vat) : 0,
+    invoiceDate: r.invoiceDate.toISOString(),
     createdAt: r.createdAt.toISOString(),
-    aktiveRevisionNummer: r.revisionen[0]?.revisionNummer ?? null,
+    activeRevisionNumber: r.revisions[0]?.revisionNumber ?? null,
   }));
 
   res.json(list);
 });
 
-// GET /api/rechnung/revision/:revisionId/download
+// GET /api/invoice/revision/:revisionId/download
 // NOTE: This route MUST come before /:id to avoid matching "download" as an id
-rechnungRouter.get('/revision/:revisionId/download', async (req, res) => {
+invoiceRouter.get('/revision/:revisionId/download', async (req, res) => {
   const id = parseInt(req.params.revisionId);
   if (isNaN(id)) {
-    res.status(400).json({ error: 'Ungültige Revisions-ID' });
+    res.status(400).json({ error: 'Invalid revision ID' });
     return;
   }
 
-  const revision = await prisma.rechnungRevision.findUnique({
+  const revision = await prisma.invoiceRevision.findUnique({
     where: { id },
-    include: { rechnung: true },
+    include: { invoice: true },
   });
 
   if (!revision) {
-    res.status(404).json({ error: 'Revision nicht gefunden' });
+    res.status(404).json({ error: 'Revision not found' });
     return;
   }
 
-  if (!revision.dateiPfad || revision.pdfStatus !== 'OK') {
-    res.status(404).json({ error: 'Datei nicht vorhanden' });
+  if (!revision.filePath || revision.pdfStatus !== 'OK') {
+    res.status(404).json({ error: 'File not available' });
     return;
   }
 
-  const safeNum = revision.rechnung.nummer.replace(/\s*\/\s*/g, '-');
-  const dateiName = `${safeNum}-R${revision.revisionNummer}.pdf`;
+  const safeNum = revision.invoice.number.replace(/\s*\/\s*/g, '-');
+  const fileName = `${safeNum}-R${revision.revisionNumber}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${dateiName}"`);
-  fs.createReadStream(toAbsolutePath(revision.dateiPfad)).pipe(res);
+  res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+  fs.createReadStream(toAbsolutePath(revision.filePath)).pipe(res);
 });
 
-// POST /api/rechnung/revision/:revisionId/retry-pdf
-rechnungRouter.post('/revision/:revisionId/retry-pdf', async (req, res) => {
+// POST /api/invoice/revision/:revisionId/retry-pdf
+invoiceRouter.post('/revision/:revisionId/retry-pdf', async (req, res) => {
   const id = parseInt(req.params.revisionId);
   if (isNaN(id)) {
-    res.status(400).json({ error: 'Ungültige Revisions-ID' });
+    res.status(400).json({ error: 'Invalid revision ID' });
     return;
   }
 
-  const revision = await prisma.rechnungRevision.findUnique({ where: { id } });
+  const revision = await prisma.invoiceRevision.findUnique({ where: { id } });
   if (!revision) {
-    res.status(404).json({ error: 'Revision nicht gefunden' });
+    res.status(404).json({ error: 'Revision not found' });
     return;
   }
 
   if (revision.status !== 'AKTIV') {
-    res.status(400).json({ error: 'Retry ist nur für aktive Revisionen erlaubt' });
+    res.status(400).json({ error: 'Retry is only allowed for active revisions' });
     return;
   }
 
   if (revision.pdfStatus !== 'FAILED') {
-    res.status(400).json({ error: 'Retry ist nur bei fehlgeschlagenem PDF möglich' });
+    res.status(400).json({ error: 'Retry is only possible for failed PDFs' });
     return;
   }
 
-  if (laufendeRetries.has(id)) {
-    res.status(409).json({ error: 'Für diese Revision läuft bereits ein Retry' });
+  if (runningRetries.has(id)) {
+    res.status(409).json({ error: 'A retry is already running for this revision' });
     return;
   }
 
-  laufendeRetries.add(id);
+  runningRetries.add(id);
   try {
-    const pdf = await versuchePdfErzeugung(id);
+    const pdf = await attemptPdfGeneration(id);
     res.json({
       revisionId: id,
       pdfStatus: pdf.pdfStatus,
-      pdfFehler: pdf.pdfFehler,
-      pdfTechFehler: pdf.pdfTechFehler,
-      dateiPfad: pdf.dateiPfad,
+      pdfError: pdf.pdfError,
+      pdfTechError: pdf.pdfTechError,
+      filePath: pdf.filePath,
     });
   } finally {
-    laufendeRetries.delete(id);
+    runningRetries.delete(id);
   }
 });
 
-// GET /api/rechnung/:id
-rechnungRouter.get('/:id', async (req, res) => {
+// GET /api/invoice/:id
+invoiceRouter.get('/:id', async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
-    res.status(400).json({ error: 'Ungültige ID' });
+    res.status(400).json({ error: 'Invalid ID' });
     return;
   }
 
-  const rechnung = await prisma.rechnung.findUnique({
+  const invoice = await prisma.invoice.findUnique({
     where: { id },
     include: {
-      empfaenger: true,
-      revisionen: { orderBy: { revisionNummer: 'desc' } },
+      recipient: true,
+      revisions: { orderBy: { revisionNumber: 'desc' } },
     },
   });
 
-  if (!rechnung) {
-    res.status(404).json({ error: 'Rechnung nicht gefunden' });
+  if (!invoice) {
+    res.status(404).json({ error: 'Invoice not found' });
     return;
   }
 
-  const aktiveRevision = rechnung.revisionen.find((r) => r.status === 'AKTIV');
+  const activeRevision = invoice.revisions.find((r) => r.status === 'AKTIV');
 
   res.json({
-    id: rechnung.id,
-    nummer: rechnung.nummer,
-    status: rechnung.status,
-    empfaenger: rechnung.empfaenger,
-    rechnungsdatum: rechnung.rechnungsdatum.toISOString(),
-    createdAt: rechnung.createdAt.toISOString(),
-    aktiveRevision: aktiveRevision ? revisionZuDto(aktiveRevision) : null,
-    revisionen: rechnung.revisionen.map(revisionZuDto),
+    id: invoice.id,
+    number: invoice.number,
+    status: invoice.status,
+    recipient: invoice.recipient,
+    invoiceDate: invoice.invoiceDate.toISOString(),
+    createdAt: invoice.createdAt.toISOString(),
+    activeRevision: activeRevision ? revisionToDto(activeRevision) : null,
+    revisions: invoice.revisions.map(revisionToDto),
   });
 });
 
-// POST /api/rechnung
-rechnungRouter.post('/', async (req, res) => {
+// POST /api/invoice
+invoiceRouter.post('/', async (req, res) => {
   const body = req.body as {
-    empfaengerId?: number;
-    empfaengerDaten?: {
+    recipientId?: number;
+    recipientData?: {
       name: string;
-      strasse: string;
-      ort: string;
+      street: string;
+      city: string;
       email?: string;
-      anrede?: string;
+      salutation?: string;
     };
-    eingaben: RechnungEingaben;
+    inputs: InvoiceInputs;
   };
 
-  const validierungsfehler = validierePflichtfelder(body.eingaben);
-  if (validierungsfehler) {
-    res.status(400).json({ error: validierungsfehler });
+  const validationError = validateRequiredFields(body.inputs);
+  if (validationError) {
+    res.status(400).json({ error: validationError });
     return;
   }
 
-  const rechnungsVorlage = await prisma.vorlage.findFirst({
-    where: { typ: 'RECHNUNG', aktiv: true },
+  const invoiceTemplate = await prisma.template.findFirst({
+    where: { type: 'RECHNUNG', active: true },
   });
-  if (!rechnungsVorlage) {
-    res.status(400).json({ error: 'Keine aktive Rechnungsvorlage vorhanden' });
+  if (!invoiceTemplate) {
+    res.status(400).json({ error: 'No active invoice template found' });
     return;
   }
 
-  const { nummer, jahr, laufendeNummer } = await generiereRechnungsNummer(prisma);
-  const rechnungsdatum = body.eingaben.rechnungsdatum
-    ? new Date(body.eingaben.rechnungsdatum)
-    : new Date();
+  const { number, year, runningNumber } = await generateInvoiceNumber(prisma);
+  const invoiceDate = body.inputs.invoiceDate ? new Date(body.inputs.invoiceDate) : new Date();
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    let empfaengerUpdated = false;
-    let empfaengerId = body.empfaengerId;
+    let recipientUpdated = false;
+    let recipientId = body.recipientId;
 
-    if (empfaengerId) {
-      const bestehender = await tx.rechnungsempfaenger.findUnique({ where: { id: empfaengerId } });
-      if (!bestehender) {
-        throw new Error('Empfänger nicht gefunden');
+    if (recipientId) {
+      const existing = await tx.invoiceRecipient.findUnique({ where: { id: recipientId } });
+      if (!existing) {
+        throw new Error('Recipient not found');
       }
 
-      await tx.rechnungsempfaenger.update({
-        where: { id: empfaengerId },
+      await tx.invoiceRecipient.update({
+        where: { id: recipientId },
         data: {
-          name: body.eingaben.name,
-          strasse: body.eingaben.strasse,
-          ort: body.eingaben.ort,
-          email: body.eingaben.email || null,
-          anrede: body.eingaben.anrede || null,
+          name: body.inputs.name,
+          street: body.inputs.street,
+          city: body.inputs.city,
+          email: body.inputs.email || null,
+          salutation: body.inputs.salutation || null,
         },
       });
-      empfaengerUpdated = true;
+      recipientUpdated = true;
     } else {
-      if (!body.empfaengerDaten) {
-        throw new Error('Kein Empfänger angegeben');
+      if (!body.recipientData) {
+        throw new Error('No recipient specified');
       }
 
-      const neuer = await tx.rechnungsempfaenger.create({
+      const newRecipient = await tx.invoiceRecipient.create({
         data: {
-          name: body.empfaengerDaten.name,
-          strasse: body.empfaengerDaten.strasse,
-          ort: body.empfaengerDaten.ort,
-          email: body.empfaengerDaten.email || null,
-          anrede: body.empfaengerDaten.anrede || null,
+          name: body.recipientData.name,
+          street: body.recipientData.street,
+          city: body.recipientData.city,
+          email: body.recipientData.email || null,
+          salutation: body.recipientData.salutation || null,
         },
       });
-      empfaengerId = neuer.id;
-      empfaengerUpdated = true;
+      recipientId = newRecipient.id;
+      recipientUpdated = true;
     }
 
-    const rechnung = await tx.rechnung.create({
+    const invoice = await tx.invoice.create({
       data: {
-        nummer,
-        jahr,
-        laufendeNummer,
-        empfaengerId: empfaengerId!,
-        rechnungsdatum,
+        number,
+        year,
+        runningNumber,
+        recipientId: recipientId!,
+        invoiceDate,
       },
     });
 
-    const revision = await tx.rechnungRevision.create({
+    const revision = await tx.invoiceRevision.create({
       data: {
-        rechnungId: rechnung.id,
-        revisionNummer: 1,
-        anrede: body.eingaben.anrede,
-        name: body.eingaben.name,
-        strasse: body.eingaben.strasse,
-        ort: body.eingaben.ort,
-        rechnungsdatum,
-        title: body.eingaben.title,
-        positionen: JSON.stringify(body.eingaben.positionen),
-        ust: body.eingaben.ust,
-        einzug: body.eingaben.einzug,
-        email: body.eingaben.email,
-        mailAnrede: body.eingaben.mailAnrede,
-        vorlageId: rechnungsVorlage.id,
+        invoiceId: invoice.id,
+        revisionNumber: 1,
+        salutation: body.inputs.salutation,
+        name: body.inputs.name,
+        street: body.inputs.street,
+        city: body.inputs.city,
+        invoiceDate,
+        title: body.inputs.title,
+        positions: JSON.stringify(body.inputs.lineItems),
+        vat: body.inputs.vat,
+        directDebit: body.inputs.directDebit,
+        email: body.inputs.email,
+        emailSalutation: body.inputs.emailSalutation,
+        templateId: invoiceTemplate.id,
         pdfStatus: 'PENDING',
       },
     });
 
-    const empfaenger = await tx.rechnungsempfaenger.findUniqueOrThrow({
-      where: { id: empfaengerId! },
+    const recipient = await tx.invoiceRecipient.findUniqueOrThrow({
+      where: { id: recipientId! },
     });
 
-    return { rechnung, revision, empfaenger, empfaengerUpdated };
+    return { invoice, revision, recipient, recipientUpdated };
   });
 
-  const pdf = await versuchePdfErzeugung(result.revision.id);
+  const pdf = await attemptPdfGeneration(result.revision.id);
 
   res.status(201).json({
-    rechnungId: result.rechnung.id,
+    invoiceId: result.invoice.id,
     revisionId: result.revision.id,
-    empfaenger: result.empfaenger,
-    empfaengerUpdated: result.empfaengerUpdated,
+    recipient: result.recipient,
+    recipientUpdated: result.recipientUpdated,
     pdfStatus: pdf.pdfStatus,
-    pdfFehler: pdf.pdfFehler,
-    pdfTechFehler: pdf.pdfTechFehler,
-    dateiPfad: pdf.dateiPfad,
+    pdfError: pdf.pdfError,
+    pdfTechError: pdf.pdfTechError,
+    filePath: pdf.filePath,
   });
 });
 
-// POST /api/rechnung/:id/revision
-rechnungRouter.post('/:id/revision', async (req, res) => {
+// POST /api/invoice/:id/revision
+invoiceRouter.post('/:id/revision', async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
-    res.status(400).json({ error: 'Ungültige ID' });
+    res.status(400).json({ error: 'Invalid ID' });
     return;
   }
 
-  const rechnung = await prisma.rechnung.findUnique({ where: { id } });
-  if (!rechnung) {
-    res.status(404).json({ error: 'Rechnung nicht gefunden' });
+  const invoice = await prisma.invoice.findUnique({ where: { id } });
+  if (!invoice) {
+    res.status(404).json({ error: 'Invoice not found' });
     return;
   }
-  if (rechnung.status === 'STORNIERT') {
-    res.status(400).json({ error: 'Stornierte Rechnungen können nicht revidiert werden' });
-    return;
-  }
-
-  const body = req.body as { eingaben: RechnungEingaben };
-
-  const validierungsfehler = validierePflichtfelder(body.eingaben);
-  if (validierungsfehler) {
-    res.status(400).json({ error: validierungsfehler });
+  if (invoice.status === 'STORNIERT') {
+    res.status(400).json({ error: 'Cancelled invoices cannot be revised' });
     return;
   }
 
-  const rechnungsVorlage = await prisma.vorlage.findFirst({
-    where: { typ: 'RECHNUNG', aktiv: true },
+  const body = req.body as { inputs: InvoiceInputs };
+
+  const validationError = validateRequiredFields(body.inputs);
+  if (validationError) {
+    res.status(400).json({ error: validationError });
+    return;
+  }
+
+  const invoiceTemplate = await prisma.template.findFirst({
+    where: { type: 'RECHNUNG', active: true },
   });
-  if (!rechnungsVorlage) {
-    res.status(400).json({ error: 'Keine aktive Rechnungsvorlage vorhanden' });
+  if (!invoiceTemplate) {
+    res.status(400).json({ error: 'No active invoice template found' });
     return;
   }
 
-  const letzteRevision = await prisma.rechnungRevision.findFirst({
-    where: { rechnungId: id },
-    orderBy: { revisionNummer: 'desc' },
+  const lastRevision = await prisma.invoiceRevision.findFirst({
+    where: { invoiceId: id },
+    orderBy: { revisionNumber: 'desc' },
   });
-  const neueRevisionNummer = (letzteRevision?.revisionNummer ?? 0) + 1;
-  const rechnungsdatum = body.eingaben.rechnungsdatum
-    ? new Date(body.eingaben.rechnungsdatum)
-    : new Date();
+  const newRevisionNumber = (lastRevision?.revisionNumber ?? 0) + 1;
+  const invoiceDate = body.inputs.invoiceDate ? new Date(body.inputs.invoiceDate) : new Date();
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    await tx.rechnungRevision.updateMany({
-      where: { rechnungId: id, status: 'AKTIV' },
+    await tx.invoiceRevision.updateMany({
+      where: { invoiceId: id, status: 'AKTIV' },
       data: { status: 'ERSETZT' },
     });
-    await tx.rechnung.update({ where: { id }, data: { rechnungsdatum } });
+    await tx.invoice.update({ where: { id }, data: { invoiceDate } });
 
-    await tx.rechnungsempfaenger.update({
-      where: { id: rechnung.empfaengerId },
+    await tx.invoiceRecipient.update({
+      where: { id: invoice.recipientId },
       data: {
-        name: body.eingaben.name,
-        strasse: body.eingaben.strasse,
-        ort: body.eingaben.ort,
-        email: body.eingaben.email || null,
-        anrede: body.eingaben.anrede || null,
+        name: body.inputs.name,
+        street: body.inputs.street,
+        city: body.inputs.city,
+        email: body.inputs.email || null,
+        salutation: body.inputs.salutation || null,
       },
     });
 
-    const neueRevision = await tx.rechnungRevision.create({
+    const newRevision = await tx.invoiceRevision.create({
       data: {
-        rechnungId: id,
-        revisionNummer: neueRevisionNummer,
-        anrede: body.eingaben.anrede,
-        name: body.eingaben.name,
-        strasse: body.eingaben.strasse,
-        ort: body.eingaben.ort,
-        rechnungsdatum,
-        title: body.eingaben.title,
-        positionen: JSON.stringify(body.eingaben.positionen),
-        ust: body.eingaben.ust,
-        einzug: body.eingaben.einzug,
-        email: body.eingaben.email,
-        mailAnrede: body.eingaben.mailAnrede,
-        vorlageId: rechnungsVorlage.id,
+        invoiceId: id,
+        revisionNumber: newRevisionNumber,
+        salutation: body.inputs.salutation,
+        name: body.inputs.name,
+        street: body.inputs.street,
+        city: body.inputs.city,
+        invoiceDate,
+        title: body.inputs.title,
+        positions: JSON.stringify(body.inputs.lineItems),
+        vat: body.inputs.vat,
+        directDebit: body.inputs.directDebit,
+        email: body.inputs.email,
+        emailSalutation: body.inputs.emailSalutation,
+        templateId: invoiceTemplate.id,
         pdfStatus: 'PENDING',
       },
     });
 
-    const empfaenger = await tx.rechnungsempfaenger.findUniqueOrThrow({
-      where: { id: rechnung.empfaengerId },
+    const recipient = await tx.invoiceRecipient.findUniqueOrThrow({
+      where: { id: invoice.recipientId },
     });
 
-    return { neueRevision, empfaenger, empfaengerUpdated: true };
+    return { newRevision, recipient, recipientUpdated: true };
   });
 
-  const pdf = await versuchePdfErzeugung(result.neueRevision.id);
+  const pdf = await attemptPdfGeneration(result.newRevision.id);
 
   res.status(201).json({
-    rechnungId: id,
-    revisionId: result.neueRevision.id,
-    empfaenger: result.empfaenger,
-    empfaengerUpdated: result.empfaengerUpdated,
+    invoiceId: id,
+    revisionId: result.newRevision.id,
+    recipient: result.recipient,
+    recipientUpdated: result.recipientUpdated,
     pdfStatus: pdf.pdfStatus,
-    pdfFehler: pdf.pdfFehler,
-    pdfTechFehler: pdf.pdfTechFehler,
-    dateiPfad: pdf.dateiPfad,
+    pdfError: pdf.pdfError,
+    pdfTechError: pdf.pdfTechError,
+    filePath: pdf.filePath,
   });
 });
 
-// PATCH /api/rechnung/:id/stornieren
-rechnungRouter.patch('/:id/stornieren', async (req, res) => {
+// PATCH /api/invoice/:id/cancel
+invoiceRouter.patch('/:id/cancel', async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
-    res.status(400).json({ error: 'Ungültige ID' });
+    res.status(400).json({ error: 'Invalid ID' });
     return;
   }
 
-  const rechnung = await prisma.rechnung.findUnique({ where: { id } });
-  if (!rechnung) {
-    res.status(404).json({ error: 'Rechnung nicht gefunden' });
+  const invoice = await prisma.invoice.findUnique({ where: { id } });
+  if (!invoice) {
+    res.status(404).json({ error: 'Invoice not found' });
     return;
   }
 
-  await prisma.rechnung.update({
+  await prisma.invoice.update({
     where: { id },
     data: { status: 'STORNIERT' },
   });
 
-  res.json({ message: 'Rechnung storniert' });
+  res.json({ message: 'Invoice cancelled' });
 });

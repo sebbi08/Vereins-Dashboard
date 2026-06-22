@@ -1,34 +1,34 @@
 import { Router } from 'express';
-import type { SystemEinstellungen } from 'shared';
+import type { SystemSettings } from 'shared';
 import { prisma } from '../prismaClient.js';
 
-export const einstellungenRouter = Router();
+export const settingsRouter = Router();
 
-const EINSTELLUNGS_KEYS: (keyof SystemEinstellungen)[] = [
-  'kassenwart',
-  'gemeinnuetzigerZweck',
-  'finanzamtName',
-  'steuernummer',
-  'freistellungsdatum',
-  'veranlagungszeitraum',
+const SETTINGS_KEYS: (keyof SystemSettings)[] = [
+  'treasurer',
+  'charitablePurpose',
+  'taxOfficeName',
+  'taxNumber',
+  'exemptionDate',
+  'assessmentPeriod',
 ];
 
-einstellungenRouter.get('/', async (_req, res) => {
-  const rows = await prisma.systemEinstellung.findMany();
-  const result: Partial<SystemEinstellungen> = {};
+settingsRouter.get('/', async (_req, res) => {
+  const rows = await prisma.systemSetting.findMany();
+  const result: Partial<SystemSettings> = {};
   for (const row of rows) {
-    if (EINSTELLUNGS_KEYS.includes(row.key as keyof SystemEinstellungen)) {
+    if (SETTINGS_KEYS.includes(row.key as keyof SystemSettings)) {
       (result as Record<string, string>)[row.key] = row.value;
     }
   }
   res.json(result);
 });
 
-einstellungenRouter.put('/', async (req, res) => {
-  const body = req.body as Partial<SystemEinstellungen>;
+settingsRouter.put('/', async (req, res) => {
+  const body = req.body as Partial<SystemSettings>;
 
-  const updates = EINSTELLUNGS_KEYS.filter((k) => body[k] !== undefined).map((key) =>
-    prisma.systemEinstellung.upsert({
+  const updates = SETTINGS_KEYS.filter((k) => body[k] !== undefined).map((key) =>
+    prisma.systemSetting.upsert({
       where: { key },
       update: { value: body[key] as string },
       create: { key, value: body[key] as string },
@@ -36,5 +36,5 @@ einstellungenRouter.put('/', async (req, res) => {
   );
 
   await Promise.all(updates);
-  res.json({ message: 'Einstellungen gespeichert' });
+  res.json({ message: 'Settings saved' });
 });

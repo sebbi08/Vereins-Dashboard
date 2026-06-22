@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SpendenQuittungDto } from 'shared';
+import type { DonationReceiptDto } from 'shared';
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -7,36 +7,36 @@ const route = useRoute();
 const router = useRouter();
 const id = parseInt(String(route.params.id));
 
-const quittung = ref<SpendenQuittungDto | null>(null);
-const laden = ref(false);
-const fehler = ref('');
-const stornierBestaetigung = ref(false);
-const retryLaufend = ref(false);
+const receipt = ref<DonationReceiptDto | null>(null);
+const loading = ref(false);
+const error = ref('');
+const cancelConfirmation = ref(false);
+const retryRunning = ref(false);
 const detailsOffen = ref<Record<number, boolean>>({});
 
-async function ladeQuittung() {
-  laden.value = true;
+async function loadReceipt() {
+  loading.value = true;
   try {
-    const res = await fetch(`/api/spenden-quittung/${id}`);
+    const res = await fetch(`/api/donation-receipt/${id}`);
     if (!res.ok) throw new Error();
-    quittung.value = await res.json();
+    receipt.value = await res.json();
   } catch {
-    fehler.value = 'Quittung konnte nicht geladen werden';
+    error.value = 'Receipt could not be loaded';
   } finally {
-    laden.value = false;
+    loading.value = false;
   }
 }
 
-async function stornieren() {
-  const res = await fetch(`/api/spenden-quittung/${id}/stornieren`, { method: 'PATCH' });
+async function cancel() {
+  const res = await fetch(`/api/donation-receipt/${id}/cancel`, { method: 'PATCH' });
   if (res.ok) {
-    stornierBestaetigung.value = false;
-    await ladeQuittung();
+    cancelConfirmation.value = false;
+    await loadReceipt();
   }
 }
 
 function istAktiveRevision(revId: number): boolean {
-  return quittung.value?.aktiveRevision?.id === revId;
+  return receipt.value?.activeRevision?.id === revId;
 }
 
 function kannRetry(rev: { id: number; pdfStatus: string }): boolean {
@@ -44,27 +44,27 @@ function kannRetry(rev: { id: number; pdfStatus: string }): boolean {
 }
 
 async function retryPdf(revisionId: number) {
-  retryLaufend.value = true;
+  retryRunning.value = true;
   try {
-    const res = await fetch(`/api/spenden-quittung/revision/${revisionId}/retry-pdf`, {
+    const res = await fetch(`/api/donation-receipt/revision/${revisionId}/retry-pdf`, {
       method: 'POST',
     });
     if (!res.ok) {
       const body = await res.json().catch(() => null);
-      fehler.value = body?.error || 'PDF konnte nicht erneut erzeugt werden';
+      error.value = body?.error || 'PDF konnte nicht erneut erzeugt werden';
       return;
     }
-    await ladeQuittung();
+    await loadReceipt();
   } catch {
-    fehler.value = 'PDF konnte nicht erneut erzeugt werden';
+    error.value = 'PDF konnte nicht erneut erzeugt werden';
   } finally {
-    retryLaufend.value = false;
+    retryRunning.value = false;
   }
 }
 
-onMounted(ladeQuittung);
+onMounted(loadReceipt);
 
-function formatBetrag(cents: number) {
+function formatAmount(cents: number) {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cents / 100);
 }
 
@@ -82,90 +82,90 @@ function formatDateTime(iso: string) {
 <template>
   <div>
     <div class="flex items-center gap-3 mb-6">
-      <button class="text-gray-400 hover:text-gray-700" @click="router.push('/spenden-quittung')">
-        ← Zurück
+      <button class="text-gray-400 hover:text-gray-700" @click="router.push('/donation-receipt')">
+        ← Back
       </button>
-      <h2 class="text-2xl font-bold text-gray-800">Quittung Details</h2>
+      <h2 class="text-2xl font-bold text-gray-800">Receipt Details</h2>
     </div>
 
     <div
-      v-if="fehler"
+      v-if="error"
       class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm"
     >
-      {{ fehler }}
+      {{ error }}
     </div>
-    <div v-if="laden" class="text-gray-400 text-sm">Lädt…</div>
+    <div v-if="loading" class="text-gray-400 text-sm">Loading…</div>
 
-    <template v-if="quittung">
+    <template v-if="receipt">
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-4">
         <div class="flex items-start justify-between">
           <div>
             <div class="flex items-center gap-3 mb-1">
-              <span class="font-mono text-lg font-bold text-gray-800">{{ quittung.nummer }}</span>
+              <span class="font-mono text-lg font-bold text-gray-800">{{ receipt.number }}</span>
               <span
                 :class="[
                   'text-xs font-medium px-2 py-0.5 rounded-full',
-                  quittung.status === 'AKTIV'
+                  receipt.status === 'AKTIV'
                     ? 'bg-green-100 text-green-700'
                     : 'bg-gray-100 text-gray-500',
                 ]"
-                >{{ quittung.status }}</span
+                >{{ receipt.status }}</span
               >
             </div>
-            <p class="text-gray-600 text-sm">{{ quittung.spender.name }}</p>
+            <p class="text-gray-600 text-sm">{{ receipt.donor.name }}</p>
             <p class="text-gray-500 text-xs">
-              {{ quittung.spender.strasse }}, {{ quittung.spender.ort }}
+              {{ receipt.donor.street }}, {{ receipt.donor.city }}
             </p>
           </div>
           <div class="flex gap-2">
             <button
-              v-if="quittung.status === 'AKTIV'"
+              v-if="receipt.status === 'AKTIV'"
               class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700"
-              @click="router.push(`/spenden-quittung/${id}/revision`)"
+              @click="router.push(`/donation-receipt/${id}/revision`)"
             >
-              Neue Revision
+              New Revision
             </button>
             <button
-              v-if="quittung.status === 'AKTIV'"
+              v-if="receipt.status === 'AKTIV'"
               class="border border-red-300 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-50"
-              @click="stornierBestaetigung = true"
+              @click="cancelConfirmation = true"
             >
-              Stornieren
+              Cancel
             </button>
           </div>
         </div>
       </div>
 
-      <div v-if="stornierBestaetigung" class="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+      <div v-if="cancelConfirmation" class="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
         <p class="text-sm text-red-700 mb-3">
-          Quittung <strong>{{ quittung.nummer }}</strong> wirklich stornieren? Diese Aktion kann
+          Receipt <strong>{{ receipt.number }}</strong> really cancel? This action cannot
           nicht rückgängig gemacht werden.
         </p>
         <div class="flex gap-2">
-          <button class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm" @click="stornieren">
-            Ja, stornieren
+          <button class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm" @click="cancel">
+            Yes, cancel
           </button>
           <button
             class="border border-gray-300 px-4 py-2 rounded-lg text-sm"
-            @click="stornierBestaetigung = false"
+            @click="cancelConfirmation = false"
           >
-            Abbrechen
+            Cancel
           </button>
         </div>
       </div>
 
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         <div class="px-6 py-4 border-b border-gray-100">
-          <h3 class="font-semibold text-gray-800">Revisionen</h3>
+          <h3 class="font-semibold text-gray-800">Revisions</h3>
         </div>
         <div
-          v-for="rev in quittung.revisionen"
+          v-for="rev in receipt.revisions"
           :key="rev.id"
           class="border-b border-gray-100 last:border-0 p-6"
         >
           <div class="flex items-start justify-between mb-3">
             <div class="flex items-center gap-2 flex-wrap">
-              <span class="font-medium text-gray-800">R{{ rev.revisionNummer }}</span>
+              <span class="font-medium text-gray-800">R{{ rev.revisionNumber }}</span>
               <span
                 :class="[
                   'text-xs font-medium px-2 py-0.5 rounded-full',
@@ -186,24 +186,24 @@ function formatDateTime(iso: string) {
                 ]"
                 >PDF {{ rev.pdfStatus }}</span
               >
-              <span class="text-xs text-gray-400">{{ formatDateTime(rev.erstelltAm) }}</span>
+              <span class="text-xs text-gray-400">{{ formatDateTime(rev.createdAt) }}</span>
             </div>
             <div class="flex items-center gap-3">
               <button
                 v-if="kannRetry(rev)"
-                :disabled="retryLaufend"
+                :disabled="retryRunning"
                 class="text-amber-700 hover:text-amber-900 text-sm disabled:opacity-50"
                 @click="retryPdf(rev.id)"
               >
-                {{ retryLaufend ? 'Wird erneut generiert…' : 'PDF erneut erzeugen' }}
+                {{ retryRunning ? 'Regenerating…' : 'Retry PDF' }}
               </button>
               <a
-                v-if="rev.dateiPfad && rev.pdfStatus === 'OK'"
-                :href="`/api/spenden-quittung/revision/${rev.id}/download`"
+                v-if="rev.filePath && rev.pdfStatus === 'OK'"
+                :href="`/api/donation-receipt/revision/${rev.id}/download`"
                 target="_blank"
                 class="text-blue-600 hover:underline text-sm"
               >
-                PDF herunterladen
+                Download PDF
               </a>
             </div>
           </div>
@@ -212,51 +212,51 @@ function formatDateTime(iso: string) {
             v-if="rev.pdfStatus === 'FAILED'"
             class="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
           >
-            <p>{{ rev.pdfFehler || 'PDF konnte nicht erzeugt werden. Bitte Retry ausführen.' }}</p>
+            <p>{{ rev.pdfError || 'PDF konnte nicht erzeugt werden. Please try again.' }}</p>
             <button
-              v-if="rev.pdfTechFehler"
+              v-if="rev.pdfTechError"
               class="mt-2 text-xs underline"
               @click="detailsOffen[rev.id] = !detailsOffen[rev.id]"
             >
               {{ detailsOffen[rev.id] ? 'Details ausblenden' : 'Details anzeigen' }}
             </button>
             <pre
-              v-if="rev.pdfTechFehler && detailsOffen[rev.id]"
+              v-if="rev.pdfTechError && detailsOffen[rev.id]"
               class="mt-2 whitespace-pre-wrap rounded border border-amber-300 bg-white p-2 text-xs text-amber-900"
-              >{{ rev.pdfTechFehler }}</pre
+              >{{ rev.pdfTechError }}</pre
             >
           </div>
 
           <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
             <div>
-              <span class="text-gray-500 text-xs">Betrag</span>
+              <span class="text-gray-500 text-xs">Amount</span>
               <p class="font-medium text-gray-800">
-                {{ formatBetrag(rev.eingaben.spendenbetragCents) }}
+                {{ formatAmount(rev.inputs.donationAmountCents) }}
               </p>
             </div>
             <div>
-              <span class="text-gray-500 text-xs">Spendendatum</span>
-              <p class="text-gray-700">{{ formatDatum(rev.eingaben.spendendatum) }}</p>
+              <span class="text-gray-500 text-xs">Donation Date</span>
+              <p class="text-gray-700">{{ formatDatum(rev.inputs.donationDate) }}</p>
             </div>
             <div>
-              <span class="text-gray-500 text-xs">Mit Anschreiben</span>
-              <p class="text-gray-700">{{ rev.eingaben.mitAnschreiben ? 'Ja' : 'Nein' }}</p>
+              <span class="text-gray-500 text-xs">With Cover Letter</span>
+              <p class="text-gray-700">{{ rev.inputs.withCoverLetter ? 'Ja' : 'Nein' }}</p>
             </div>
             <div>
-              <span class="text-gray-500 text-xs">Kassenwart</span>
-              <p class="text-gray-700">{{ rev.eingaben.kassenwart }}</p>
+              <span class="text-gray-500 text-xs">Treasurer</span>
+              <p class="text-gray-700">{{ rev.inputs.treasurer }}</p>
             </div>
             <div>
-              <span class="text-gray-500 text-xs">Finanzamt</span>
-              <p class="text-gray-700">{{ rev.eingaben.finanzamtName }}</p>
+              <span class="text-gray-500 text-xs">Tax Office</span>
+              <p class="text-gray-700">{{ rev.inputs.taxOfficeName }}</p>
             </div>
             <div>
-              <span class="text-gray-500 text-xs">Steuernummer</span>
-              <p class="text-gray-700">{{ rev.eingaben.steuernummer }}</p>
+              <span class="text-gray-500 text-xs">Tax Number</span>
+              <p class="text-gray-700">{{ rev.inputs.taxNumber }}</p>
             </div>
             <div>
-              <span class="text-gray-500 text-xs">Veranlagungszeitraum</span>
-              <p class="text-gray-700">{{ rev.eingaben.veranlagungszeitraum }}</p>
+              <span class="text-gray-500 text-xs">Assessment Period</span>
+              <p class="text-gray-700">{{ rev.inputs.assessmentPeriod }}</p>
             </div>
           </div>
         </div>

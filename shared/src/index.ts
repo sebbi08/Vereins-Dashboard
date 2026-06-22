@@ -8,153 +8,153 @@ export interface ApiError {
   statusCode: number;
 }
 
-export interface SpenderDto {
+export interface DonorDto {
   id: number;
   name: string;
-  strasse: string;
-  ort: string;
-  briefAnrede: string;
-  adressAnrede?: string | null;
+  street: string;
+  city: string;
+  letterSalutation: string;
+  addressSalutation?: string | null;
 }
 
-export interface Rechnungsposition {
+export interface InvoiceLineItem {
   text: string;
   priceInCents: number;
 }
 
-export interface RechnungEingaben {
-  anrede: string;
+export interface InvoiceInputs {
+  salutation: string;
   name: string;
-  strasse: string;
-  ort: string;
-  rechnungsdatum: string;
+  street: string;
+  city: string;
+  invoiceDate: string;
   title: string;
-  positionen: Rechnungsposition[];
-  ust: number;
-  einzug: boolean;
+  lineItems: InvoiceLineItem[];
+  vat: number;
+  directDebit: boolean;
   email: string;
-  mailAnrede: string;
+  emailSalutation: string;
 }
 
-export interface RechnungsempfaengerDto {
+export interface InvoiceRecipientDto {
   id: number;
   name: string;
-  strasse: string;
-  ort: string;
+  street: string;
+  city: string;
   email: string | null;
-  anrede: string | null;
+  salutation: string | null;
 }
 
-export interface RechnungListItem {
+export interface InvoiceListItem {
   id: number;
-  nummer: string;
+  number: string;
   status: 'AKTIV' | 'STORNIERT';
-  empfaengerName: string;
-  betragCents: number;
-  rechnungsdatum: string;
+  recipientName: string;
+  amountCents: number;
+  invoiceDate: string;
   createdAt: string;
-  aktiveRevisionNummer: number | null;
+  activeRevisionNumber: number | null;
 }
 
-export interface RechnungRevisionDto {
+export interface InvoiceRevisionDto {
   id: number;
-  revisionNummer: number;
+  revisionNumber: number;
   status: 'AKTIV' | 'ERSETZT';
   pdfStatus: PdfStatus;
-  pdfFehler: string | null;
-  pdfTechFehler: string | null;
-  eingaben: RechnungEingaben;
-  dateiPfad: string | null;
-  erstelltAm: string;
-}
-
-export interface RechnungDto {
-  id: number;
-  nummer: string;
-  status: 'AKTIV' | 'STORNIERT';
-  empfaenger: RechnungsempfaengerDto;
-  rechnungsdatum: string;
+  pdfError: string | null;
+  pdfTechError: string | null;
+  inputs: InvoiceInputs;
+  filePath: string | null;
   createdAt: string;
-  aktiveRevision: RechnungRevisionDto | null;
-  revisionen: RechnungRevisionDto[];
 }
 
-export type VorlageTyp = 'ANSCHREIBEN' | 'QUITTUNG' | 'RECHNUNG';
-
-export interface VorlageDto {
+export interface InvoiceDto {
   id: number;
-  typ: VorlageTyp;
-  version: number;
-  dateiName: string;
-  aktiv: boolean;
-  hochgeladenAm: string;
+  number: string;
+  status: 'AKTIV' | 'STORNIERT';
+  recipient: InvoiceRecipientDto;
+  invoiceDate: string;
+  createdAt: string;
+  activeRevision: InvoiceRevisionDto | null;
+  revisions: InvoiceRevisionDto[];
 }
 
-export interface QuittungEingaben {
+export type TemplateType = 'ANSCHREIBEN' | 'QUITTUNG' | 'RECHNUNG';
+
+export interface TemplateDto {
+  id: number;
+  type: TemplateType;
+  version: number;
+  fileName: string;
+  active: boolean;
+  uploadedAt: string;
+}
+
+export interface ReceiptInputs {
   name: string;
-  strasse: string;
-  ort: string;
-  briefAnrede: string;
-  adressAnrede?: string | null;
-  spendenbetragCents: number;
-  spendendatum: string;
-  mitAnschreiben: boolean;
-  kassenwart: string;
-  gemeinnuetzigerZweck: string;
-  finanzamtName: string;
-  steuernummer: string;
-  freistellungsdatum: string;
-  veranlagungszeitraum: string;
+  street: string;
+  city: string;
+  letterSalutation: string;
+  addressSalutation?: string | null;
+  donationAmountCents: number;
+  donationDate: string;
+  withCoverLetter: boolean;
+  treasurer: string;
+  charitablePurpose: string;
+  taxOfficeName: string;
+  taxNumber: string;
+  exemptionDate: string;
+  assessmentPeriod: string;
 }
 
 export type RevisionStatus = 'AKTIV' | 'ERSETZT';
-export type QuittungStatus = 'AKTIV' | 'STORNIERT';
+export type ReceiptStatus = 'AKTIV' | 'STORNIERT';
 export type PdfStatus = 'PENDING' | 'OK' | 'FAILED';
 
-export interface SpendenQuittungRevisionDto {
+export interface DonationReceiptRevisionDto {
   id: number;
-  revisionNummer: number;
+  revisionNumber: number;
   status: RevisionStatus;
   pdfStatus: PdfStatus;
-  pdfFehler: string | null;
-  pdfTechFehler: string | null;
-  eingaben: QuittungEingaben;
-  dateiPfad: string | null;
-  erstelltAm: string;
-}
-
-export interface SpendenQuittungDto {
-  id: number;
-  nummer: string;
-  status: QuittungStatus;
-  spender: SpenderDto;
-  spendendatum: string;
+  pdfError: string | null;
+  pdfTechError: string | null;
+  inputs: ReceiptInputs;
+  filePath: string | null;
   createdAt: string;
-  aktiveRevision: SpendenQuittungRevisionDto | null;
-  revisionen?: SpendenQuittungRevisionDto[];
 }
 
-export interface SpendenQuittungListItem {
+export interface DonationReceiptDto {
   id: number;
-  nummer: string;
-  status: QuittungStatus;
-  spenderName: string;
-  spendenbetragCents: number;
-  spendendatum: string;
+  number: string;
+  status: ReceiptStatus;
+  donor: DonorDto;
+  donationDate: string;
   createdAt: string;
-  aktiveRevisionNummer: number | null;
+  activeRevision: DonationReceiptRevisionDto | null;
+  revisions?: DonationReceiptRevisionDto[];
 }
 
-export interface SystemEinstellungen {
-  kassenwart: string;
-  gemeinnuetzigerZweck: string;
-  finanzamtName: string;
-  steuernummer: string;
-  freistellungsdatum: string;
-  veranlagungszeitraum: string;
+export interface DonationReceiptListItem {
+  id: number;
+  number: string;
+  status: ReceiptStatus;
+  donorName: string;
+  donationAmountCents: number;
+  donationDate: string;
+  createdAt: string;
+  activeRevisionNumber: number | null;
 }
 
-export interface VorlagenValidierungsfehler {
-  typ: VorlageTyp;
-  fehlendePflichtfelder: string[];
+export interface SystemSettings {
+  treasurer: string;
+  charitablePurpose: string;
+  taxOfficeName: string;
+  taxNumber: string;
+  exemptionDate: string;
+  assessmentPeriod: string;
+}
+
+export interface TemplateValidationError {
+  type: TemplateType;
+  missingRequiredFields: string[];
 }

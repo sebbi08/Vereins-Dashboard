@@ -1,10 +1,10 @@
 import PizZip from 'pizzip';
 import { describe, expect, it } from 'vitest';
 import {
-  validiereAnschreibenVorlage,
-  validiereRechnungsVorlage,
-  validiereVorlage,
-} from '../../services/vorlagenValidierung';
+  validateCoverLetterTemplate,
+  validateInvoiceTemplate,
+  validateTemplate,
+} from '../../services/templateValidation';
 
 /** Creates a minimal DOCX buffer with the given XML body content. */
 function buildDocxBuffer(documentXml: string): Buffer {
@@ -42,65 +42,65 @@ const ALLE_PFLICHTFELDER_RECHNUNG_XML = `
   </w:body>
 `;
 
-describe('validiereAnschreibenVorlage', () => {
+describe('validateCoverLetterTemplate', () => {
   it('returns null when all required fields are present', () => {
     const buffer = buildDocxBuffer(ALLE_PFLICHTFELDER_XML);
-    const result = validiereAnschreibenVorlage(buffer);
+    const result = validateCoverLetterTemplate(buffer);
     expect(result).toBeNull();
   });
 
   it('returns errors when required fields are missing', () => {
     const buffer = buildDocxBuffer('<w:body><w:p><w:t>Name</w:t></w:p></w:body>');
-    const result = validiereAnschreibenVorlage(buffer);
+    const result = validateCoverLetterTemplate(buffer);
     expect(result).not.toBeNull();
-    expect(result!.typ).toBe('ANSCHREIBEN');
-    expect(result!.fehlendePflichtfelder.length).toBeGreaterThan(0);
+    expect(result!.type).toBe('ANSCHREIBEN');
+    expect(result!.missingRequiredFields.length).toBeGreaterThan(0);
   });
 
   it('accepts BriefAnrede as alternative to briefAnrede', () => {
     const xml = ALLE_PFLICHTFELDER_XML.replace('briefAnrede', 'BriefAnrede');
     const buffer = buildDocxBuffer(xml);
-    const result = validiereAnschreibenVorlage(buffer);
+    const result = validateCoverLetterTemplate(buffer);
     expect(result).toBeNull();
   });
 
   it('returns specific missing fields', () => {
     const xmlWithoutBetrag = ALLE_PFLICHTFELDER_XML.replace('<w:p><w:t>Betrag</w:t></w:p>', '');
     const buffer = buildDocxBuffer(xmlWithoutBetrag);
-    const result = validiereAnschreibenVorlage(buffer);
+    const result = validateCoverLetterTemplate(buffer);
     expect(result).not.toBeNull();
-    expect(result!.fehlendePflichtfelder).toContain('Betrag');
+    expect(result!.missingRequiredFields).toContain('Betrag');
   });
 });
 
 describe('validiereVonlage (dispatcher)', () => {
   it('delegates to ANSCHREIBEN validator for ANSCHREIBEN type', async () => {
     const buffer = buildDocxBuffer(ALLE_PFLICHTFELDER_XML);
-    const result = await validiereVorlage('ANSCHREIBEN', buffer);
+    const result = await validateTemplate('ANSCHREIBEN', buffer);
     expect(result).toBeNull();
   });
 
   it('delegates to RECHNUNG validator for RECHNUNG type', async () => {
     const buffer = buildDocxBuffer(ALLE_PFLICHTFELDER_RECHNUNG_XML);
-    const result = await validiereVorlage('RECHNUNG', buffer);
+    const result = await validateTemplate('RECHNUNG', buffer);
     expect(result).toBeNull();
   });
 });
 
-describe('validiereRechnungsVorlage', () => {
+describe('validateInvoiceTemplate', () => {
   it('returns null when all Pflichtfelder are present', () => {
     const buffer = buildDocxBuffer(ALLE_PFLICHTFELDER_RECHNUNG_XML);
-    const result = validiereRechnungsVorlage(buffer);
+    const result = validateInvoiceTemplate(buffer);
     expect(result).toBeNull();
   });
 
   it('returns missing fields when some are missing', () => {
     const buffer = buildDocxBuffer('<w:body><w:p><w:t>Name</w:t></w:p></w:body>');
-    const result = validiereRechnungsVorlage(buffer);
+    const result = validateInvoiceTemplate(buffer);
     expect(result).not.toBeNull();
-    expect(result!.typ).toBe('RECHNUNG');
-    expect(result!.fehlendePflichtfelder).toContain('Ort');
-    expect(result!.fehlendePflichtfelder).toContain('Title');
+    expect(result!.type).toBe('RECHNUNG');
+    expect(result!.missingRequiredFields).toContain('Ort');
+    expect(result!.missingRequiredFields).toContain('Title');
   });
 
   it('returns specific missing fields', () => {
@@ -109,9 +109,9 @@ describe('validiereRechnungsVorlage', () => {
       '',
     );
     const buffer = buildDocxBuffer(xmlWithoutTitle);
-    const result = validiereRechnungsVorlage(buffer);
+    const result = validateInvoiceTemplate(buffer);
     expect(result).not.toBeNull();
-    expect(result!.fehlendePflichtfelder).toContain('Title');
-    expect(result!.fehlendePflichtfelder).not.toContain('Name');
+    expect(result!.missingRequiredFields).toContain('Title');
+    expect(result!.missingRequiredFields).not.toContain('Name');
   });
 });

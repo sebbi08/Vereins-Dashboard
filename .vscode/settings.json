@@ -19,7 +19,8 @@
       "approve": true,
       "matchCommandLine": true
     },
-    "npx vitest": true
+    "npx vitest": true,
+    "npx wdio": true
   },
   "js/ts.tsdk.path": "node_modules/typescript/lib"
 }

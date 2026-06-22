@@ -2,46 +2,46 @@ import { Router } from 'express';
 import fs from 'fs';
 import multer from 'multer';
 import path from 'path';
-import type { VorlageTyp } from 'shared';
-import { VORLAGEN_DIR, toAbsolutePath, toRelativePath } from '../config.js';
+import type { TemplateType } from 'shared';
+import { TEMPLATES_DIR, toAbsolutePath, toRelativePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
 import {
-  generierePreviewVorlage,
-  getDummyDaten,
-  type VorschauEinstellungen,
-} from '../services/pdfGenerierung.js';
-import { validiereVorlage } from '../services/vorlagenValidierung.js';
+    generatePreviewTemplate,
+    getDummyData,
+    type PreviewSettings,
+} from '../services/pdfGeneration.js';
+import { validateTemplate } from '../services/templateValidation.js';
 
-export const vorlagenRouter = Router();
+export const templatesRouter = Router();
 
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 15 * 1024 * 1024 },
 });
 
-const ERLAUBTE_ENDUNGEN: Record<VorlageTyp, string> = {
+const ALLOWED_EXTENSIONS: Record<TemplateType, string> = {
   ANSCHREIBEN: '.docx',
   QUITTUNG: '.pdf',
   RECHNUNG: '.docx',
 };
 
-const GUELTIGE_TYPEN: VorlageTyp[] = ['ANSCHREIBEN', 'QUITTUNG', 'RECHNUNG'];
+const VALID_TYPES: TemplateType[] = ['ANSCHREIBEN', 'QUITTUNG', 'RECHNUNG'];
 
-function istGueltigerTyp(typ: string): typ is VorlageTyp {
-  return GUELTIGE_TYPEN.includes(typ as VorlageTyp);
+function isValidType(type: string): type is TemplateType {
+  return VALID_TYPES.includes(type as TemplateType);
 }
 
-async function ladeVorschauEinstellungen(): Promise<VorschauEinstellungen> {
-  const rows = await prisma.systemEinstellung.findMany({
+async function loadPreviewSettings(): Promise<PreviewSettings> {
+  const rows = await prisma.systemSetting.findMany({
     where: {
       key: {
         in: [
-          'kassenwart',
-          'gemeinnuetzigerZweck',
-          'finanzamtName',
-          'steuernummer',
-          'freistellungsdatum',
-          'veranlagungszeitraum',
+          'treasurer',
+          'charitablePurpose',
+          'taxOfficeName',
+          'taxNumber',
+          'exemptionDate',
+          'assessmentPeriod',
         ],
       },
     },
@@ -50,186 +50,186 @@ async function ladeVorschauEinstellungen(): Promise<VorschauEinstellungen> {
   const values = new Map(rows.map((row) => [row.key, row.value]));
 
   return {
-    kassenwart: values.get('kassenwart') ?? '',
-    gemeinnuetzigerZweck: values.get('gemeinnuetzigerZweck') ?? '',
-    finanzamtName: values.get('finanzamtName') ?? '',
-    steuernummer: values.get('steuernummer') ?? '',
-    freistellungsdatum: values.get('freistellungsdatum') ?? '',
-    veranlagungszeitraum: values.get('veranlagungszeitraum') ?? '',
+    treasurer: values.get('treasurer') ?? '',
+    charitablePurpose: values.get('charitablePurpose') ?? '',
+    taxOfficeName: values.get('taxOfficeName') ?? '',
+    taxNumber: values.get('taxNumber') ?? '',
+    exemptionDate: values.get('exemptionDate') ?? '',
+    assessmentPeriod: values.get('assessmentPeriod') ?? '',
   };
 }
 
-vorlagenRouter.get('/', async (_req, res) => {
-  const vorlagen = await prisma.vorlage.findMany({
-    where: { aktiv: true },
+templatesRouter.get('/', async (_req, res) => {
+  const templates = await prisma.template.findMany({
+    where: { active: true },
     select: {
       id: true,
-      typ: true,
+      type: true,
       version: true,
-      dateiName: true,
-      aktiv: true,
-      hochgeladenAm: true,
+      fileName: true,
+      active: true,
+      uploadedAt: true,
     },
-    orderBy: { typ: 'asc' },
+    orderBy: { type: 'asc' },
   });
-  res.json(vorlagen);
+  res.json(templates);
 });
 
-vorlagenRouter.get('/:typ/download', async (req, res) => {
-  const typ = String(req.params.typ).toUpperCase() as VorlageTyp;
-  if (!istGueltigerTyp(typ)) {
-    res.status(400).json({ error: 'Ungültiger Vorlagentyp' });
+templatesRouter.get('/:type/download', async (req, res) => {
+  const type = String(req.params.type).toUpperCase() as TemplateType;
+  if (!isValidType(type)) {
+    res.status(400).json({ error: 'Invalid template type' });
     return;
   }
 
-  const vorlage = await prisma.vorlage.findFirst({
-    where: { typ, aktiv: true },
+  const template = await prisma.template.findFirst({
+    where: { type, active: true },
   });
-  if (!vorlage) {
-    res.status(404).json({ error: 'Keine aktive Vorlage gefunden' });
+  if (!template) {
+    res.status(404).json({ error: 'No active template found' });
     return;
   }
 
-  res.download(toAbsolutePath(vorlage.dateiPfad), vorlage.dateiName);
+  res.download(toAbsolutePath(template.filePath), template.fileName);
 });
 
-vorlagenRouter.get('/preview/:typ', async (req, res) => {
-  const typ = String(req.params.typ).toUpperCase() as VorlageTyp;
-  if (!istGueltigerTyp(typ)) {
-    res.status(400).json({ error: 'Ungültiger Vorlagentyp' });
+templatesRouter.get('/preview/:type', async (req, res) => {
+  const type = String(req.params.type).toUpperCase() as TemplateType;
+  if (!isValidType(type)) {
+    res.status(400).json({ error: 'Invalid template type' });
     return;
   }
 
-  const vorlage = await prisma.vorlage.findFirst({
-    where: { typ, aktiv: true },
+  const template = await prisma.template.findFirst({
+    where: { type, active: true },
   });
-  if (!vorlage) {
-    res.status(404).json({ error: 'Keine aktive Vorlage vorhanden' });
+  if (!template) {
+    res.status(404).json({ error: 'No active template available' });
     return;
   }
 
   try {
-    const einstellungen = await ladeVorschauEinstellungen();
-    const daten = getDummyDaten(typ, einstellungen);
-    const vorlageBuffer = await fs.promises.readFile(toAbsolutePath(vorlage.dateiPfad));
-    const previewBuffer = await generierePreviewVorlage(typ, vorlageBuffer, daten);
+    const settings = await loadPreviewSettings();
+    const data = getDummyData(type, settings);
+    const templateBuffer = await fs.promises.readFile(toAbsolutePath(template.filePath));
+    const previewBuffer = await generatePreviewTemplate(type, templateBuffer, data);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${typ.toLowerCase()}_preview.pdf"`);
+    res.setHeader('Content-Disposition', `inline; filename="${type.toLowerCase()}_preview.pdf"`);
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).send(previewBuffer);
   } catch (error) {
-    console.error(`[vorlagen] Live preview generation failed for typ=${typ}`, error);
-    res.status(500).json({ error: 'Vorschau konnte nicht generiert werden' });
+    console.error(`[templates] Live preview generation failed for type=${type}`, error);
+    res.status(500).json({ error: 'Preview could not be generated' });
   }
 });
 
-vorlagenRouter.post('/:typ/preview', upload.single('vorlage'), async (req, res) => {
-  const typ = String(req.params.typ).toUpperCase() as VorlageTyp;
-  if (!istGueltigerTyp(typ)) {
-    res.status(400).json({ error: 'Ungültiger Vorlagentyp' });
+templatesRouter.post('/:type/preview', upload.single('template'), async (req, res) => {
+  const type = String(req.params.type).toUpperCase() as TemplateType;
+  if (!isValidType(type)) {
+    res.status(400).json({ error: 'Invalid template type' });
     return;
   }
 
   if (!req.file) {
-    res.status(400).json({ error: 'Keine Datei hochgeladen' });
+    res.status(400).json({ error: 'No file uploaded' });
     return;
   }
 
-  const erlaubteEndung = ERLAUBTE_ENDUNGEN[typ];
-  if (!req.file.originalname.toLowerCase().endsWith(erlaubteEndung)) {
+  const allowedExtension = ALLOWED_EXTENSIONS[type];
+  if (!req.file.originalname.toLowerCase().endsWith(allowedExtension)) {
     res.status(400).json({
-      error: `Nur ${erlaubteEndung}-Dateien erlaubt für Vorlage vom Typ ${typ}`,
+      error: `Only ${allowedExtension} files allowed for template type ${type}`,
     });
     return;
   }
 
-  const fehler = await validiereVorlage(typ, req.file.buffer);
-  if (fehler) {
+  const error = await validateTemplate(type, req.file.buffer);
+  if (error) {
     res.status(422).json({
-      error: 'Ungültige Vorlage',
-      fehlendePflichtfelder: fehler.fehlendePflichtfelder,
+      error: 'Invalid template',
+      missingRequiredFields: error.missingRequiredFields,
     });
     return;
   }
 
-  const einstellungen = await ladeVorschauEinstellungen();
-  const daten = getDummyDaten(typ, einstellungen);
+  const settings = await loadPreviewSettings();
+  const data = getDummyData(type, settings);
 
   try {
-    const previewBuffer = await generierePreviewVorlage(typ, req.file.buffer, daten);
+    const previewBuffer = await generatePreviewTemplate(type, req.file.buffer, data);
 
     res.setHeader('Cache-Control', 'no-store');
     res.json({
       success: true,
       data: previewBuffer.toString('base64'),
-      typ,
+      type,
     });
   } catch (error) {
-    console.error(`[vorlagen] Upload preview generation failed for typ=${typ}`, error);
-    res.status(500).json({ error: 'Vorschau konnte nicht generiert werden' });
+    console.error(`[templates] Upload preview generation failed for type=${type}`, error);
+    res.status(500).json({ error: 'Preview could not be generated' });
   }
 });
 
-vorlagenRouter.post('/:typ/upload', upload.single('vorlage'), async (req, res) => {
-  const typ = String(req.params.typ).toUpperCase() as VorlageTyp;
-  if (!istGueltigerTyp(typ)) {
-    res.status(400).json({ error: 'Ungültiger Vorlagentyp' });
+templatesRouter.post('/:type/upload', upload.single('template'), async (req, res) => {
+  const type = String(req.params.type).toUpperCase() as TemplateType;
+  if (!isValidType(type)) {
+    res.status(400).json({ error: 'Invalid template type' });
     return;
   }
 
   if (!req.file) {
-    res.status(400).json({ error: 'Keine Datei hochgeladen' });
+    res.status(400).json({ error: 'No file uploaded' });
     return;
   }
 
-  const erlaubteEndung = ERLAUBTE_ENDUNGEN[typ];
-  if (!req.file.originalname.toLowerCase().endsWith(erlaubteEndung)) {
+  const allowedExtension = ALLOWED_EXTENSIONS[type];
+  if (!req.file.originalname.toLowerCase().endsWith(allowedExtension)) {
     res.status(400).json({
-      error: `Nur ${erlaubteEndung}-Dateien erlaubt für Vorlage vom Typ ${typ}`,
+      error: `Only ${allowedExtension} files allowed for template type ${type}`,
     });
     return;
   }
 
-  const fehler = await validiereVorlage(typ, req.file.buffer);
-  if (fehler) {
+  const error = await validateTemplate(type, req.file.buffer);
+  if (error) {
     res.status(422).json({
-      error: `Vorlage ungültig: Pflichtfelder fehlen`,
-      fehlendePflichtfelder: fehler.fehlendePflichtfelder,
+      error: `Template invalid: required fields missing`,
+      missingRequiredFields: error.missingRequiredFields,
     });
     return;
   }
 
-  const aktuelleVorlage = await prisma.vorlage.findFirst({
-    where: { typ, aktiv: true },
+  const currentTemplate = await prisma.template.findFirst({
+    where: { type, active: true },
   });
-  const neueVersion = aktuelleVorlage ? aktuelleVorlage.version + 1 : 1;
+  const newVersion = currentTemplate ? currentTemplate.version + 1 : 1;
 
-  const dateiName = req.file.originalname;
-  const dateiPfad = path.join(VORLAGEN_DIR, `${typ.toLowerCase()}_v${neueVersion}_${dateiName}`);
+  const fileName = req.file.originalname;
+  const filePath = path.join(TEMPLATES_DIR, `${type.toLowerCase()}_v${newVersion}_${fileName}`);
 
-  await fs.promises.mkdir(VORLAGEN_DIR, { recursive: true });
-  await fs.promises.writeFile(dateiPfad, req.file.buffer);
+  await fs.promises.mkdir(TEMPLATES_DIR, { recursive: true });
+  await fs.promises.writeFile(filePath, req.file.buffer);
 
   await prisma.$transaction([
-    prisma.vorlage.updateMany({
-      where: { typ, aktiv: true },
-      data: { aktiv: false },
+    prisma.template.updateMany({
+      where: { type, active: true },
+      data: { active: false },
     }),
-    prisma.vorlage.create({
+    prisma.template.create({
       data: {
-        typ,
-        version: neueVersion,
-        dateiName,
-        dateiPfad: toRelativePath(dateiPfad),
-        aktiv: true,
+        type,
+        version: newVersion,
+        fileName,
+        filePath: toRelativePath(filePath),
+        active: true,
       },
     }),
   ]);
 
-  const neueVorlage = await prisma.vorlage.findFirst({
-    where: { typ, aktiv: true },
+  const newTemplate = await prisma.template.findFirst({
+    where: { type, active: true },
   });
 
-  res.status(201).json(neueVorlage);
+  res.status(201).json(newTemplate);
 });

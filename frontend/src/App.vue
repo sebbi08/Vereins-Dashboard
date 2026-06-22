@@ -4,7 +4,7 @@ import { useAppStore } from '@/stores/app';
 import { onMounted } from 'vue';
 
 const store = useAppStore();
-onMounted(() => store.pruefeVorlagen());
+onMounted(() => store.checkTemplates());
 </script>
 
 <template>

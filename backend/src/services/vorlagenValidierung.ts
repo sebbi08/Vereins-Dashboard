@@ -1,8 +1,8 @@
 import { PDFDocument } from 'pdf-lib';
 import PizZip from 'pizzip';
-import type { VorlageTyp, VorlagenValidierungsfehler } from 'shared';
+import type { TemplateType, TemplateValidationError } from 'shared';
 
-const PFLICHTFELDER_ANSCHREIBEN: Array<string | string[]> = [
+const REQUIRED_FIELDS_COVER_LETTER: Array<string | string[]> = [
   ['BriefAnrede', 'briefAnrede'],
   'Name',
   'Strasse',
@@ -13,7 +13,7 @@ const PFLICHTFELDER_ANSCHREIBEN: Array<string | string[]> = [
   'Kassenwart',
 ];
 
-const PFLICHTFELDER_QUITTUNG = [
+const REQUIRED_FIELDS_RECEIPT = [
   'Name',
   'Betrag',
   'BetragInBuchstaben',
@@ -24,7 +24,7 @@ const PFLICHTFELDER_QUITTUNG = [
   'VeranlagungsZeitraum',
 ];
 
-const PFLICHTFELDER_RECHNUNG = [
+const REQUIRED_FIELDS_INVOICE = [
   'Name',
   'Strasse',
   'Ort',
@@ -38,59 +38,59 @@ const PFLICHTFELDER_RECHNUNG = [
   'PaymentDetails',
 ];
 
-export function validiereAnschreibenVorlage(buffer: Buffer): VorlagenValidierungsfehler | null {
+export function validateCoverLetterTemplate(buffer: Buffer): TemplateValidationError | null {
   const zip = new PizZip(buffer);
   const docXml = zip.files['word/document.xml']?.asText() ?? '';
 
-  const fehlend = PFLICHTFELDER_ANSCHREIBEN.filter((pflichtfeld) => {
-    if (Array.isArray(pflichtfeld)) {
-      return !pflichtfeld.some((variante) => docXml.includes(variante));
+  const missing = REQUIRED_FIELDS_COVER_LETTER.filter((requiredField) => {
+    if (Array.isArray(requiredField)) {
+      return !requiredField.some((variant) => docXml.includes(variant));
     }
-    return !docXml.includes(pflichtfeld);
-  }).map((pflichtfeld) => (Array.isArray(pflichtfeld) ? pflichtfeld[0] : pflichtfeld));
+    return !docXml.includes(requiredField);
+  }).map((requiredField) => (Array.isArray(requiredField) ? requiredField[0] : requiredField));
 
-  if (fehlend.length > 0) {
-    return { typ: 'ANSCHREIBEN', fehlendePflichtfelder: fehlend };
+  if (missing.length > 0) {
+    return { type: 'ANSCHREIBEN', missingRequiredFields: missing };
   }
   return null;
 }
 
-export async function validiereQuittungsVorlage(
+export async function validateReceiptTemplate(
   buffer: Buffer,
-): Promise<VorlagenValidierungsfehler | null> {
+): Promise<TemplateValidationError | null> {
   const pdfDoc = await PDFDocument.load(buffer);
   const form = pdfDoc.getForm();
-  const vorhandeneFelder = form.getFields().map((f) => f.getName());
+  const presentFields = form.getFields().map((f) => f.getName());
 
-  const fehlend = PFLICHTFELDER_QUITTUNG.filter((p) => !vorhandeneFelder.includes(p));
+  const missing = REQUIRED_FIELDS_RECEIPT.filter((p) => !presentFields.includes(p));
 
-  if (fehlend.length > 0) {
-    return { typ: 'QUITTUNG', fehlendePflichtfelder: fehlend };
+  if (missing.length > 0) {
+    return { type: 'QUITTUNG', missingRequiredFields: missing };
   }
   return null;
 }
 
-export function validiereRechnungsVorlage(buffer: Buffer): VorlagenValidierungsfehler | null {
+export function validateInvoiceTemplate(buffer: Buffer): TemplateValidationError | null {
   const zip = new PizZip(buffer);
   const docXml = zip.files['word/document.xml']?.asText() ?? '';
 
-  const fehlend = PFLICHTFELDER_RECHNUNG.filter((p) => !docXml.includes(p));
+  const missing = REQUIRED_FIELDS_INVOICE.filter((p) => !docXml.includes(p));
 
-  if (fehlend.length > 0) {
-    return { typ: 'RECHNUNG', fehlendePflichtfelder: fehlend };
+  if (missing.length > 0) {
+    return { type: 'RECHNUNG', missingRequiredFields: missing };
   }
   return null;
 }
 
-export async function validiereVorlage(
-  typ: VorlageTyp,
+export async function validateTemplate(
+  type: TemplateType,
   buffer: Buffer,
-): Promise<VorlagenValidierungsfehler | null> {
-  if (typ === 'ANSCHREIBEN') {
-    return validiereAnschreibenVorlage(buffer);
+): Promise<TemplateValidationError | null> {
+  if (type === 'ANSCHREIBEN') {
+    return validateCoverLetterTemplate(buffer);
   }
-  if (typ === 'RECHNUNG') {
-    return validiereRechnungsVorlage(buffer);
+  if (type === 'RECHNUNG') {
+    return validateInvoiceTemplate(buffer);
   }
-  return validiereQuittungsVorlage(buffer);
+  return validateReceiptTemplate(buffer);
 }

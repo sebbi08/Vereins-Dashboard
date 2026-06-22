@@ -29,6 +29,6 @@ initializeApp()
     });
   })
   .catch((err) => {
-    console.error('Initialisierung fehlgeschlagen:', err);
+    console.error('Initialization failed:', err);
     process.exit(1);
   });

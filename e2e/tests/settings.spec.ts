@@ -1,25 +1,25 @@
-describe('Einstellungen (Settings)', () => {
+describe('Settings', () => {
   beforeEach(async () => {
-    await browser.url('/spenden-quittung/einstellungen');
+    await browser.url('/donation-receipt/settings');
   });
 
   it('shows the page heading', async () => {
-    const heading = await $('h2=Spenden Quittung Einstellungen');
+    const heading = await $('h2=Donation Receipt Settings');
     await expect(heading).toBeDisplayed();
   });
 
-  it('shows the Vereinsdaten form section', async () => {
-    const sectionHeading = await $('h3=Vereinsdaten (Vorausfüllung)');
+  it('shows the Association Data form section', async () => {
+    const sectionHeading = await $('h3=Association Data (Pre-fill)');
     await expect(sectionHeading).toBeDisplayed();
   });
 
   it('shows all association data input fields', async () => {
     const labels = [
-      'Kassenwart',
-      'Gemeinnütziger Zweck',
-      'Finanzamt',
-      'Steuernummer',
-      'Veranlagungszeitraum',
+      'Treasurer',
+      'Charitable Purpose',
+      'Tax Office',
+      'Tax Number',
+      'Assessment Period',
     ];
 
     for (const label of labels) {
@@ -28,39 +28,39 @@ describe('Einstellungen (Settings)', () => {
     }
   });
 
-  it('shows the Speichern button', async () => {
-    const btn = await $('button=Speichern');
+  it('shows the Save button', async () => {
+    const btn = await $('button=Save');
     await expect(btn).toBeDisplayed();
     await expect(btn).toBeClickable();
   });
 
-  it('shows the Vorlagen section', async () => {
-    const sectionHeading = await $('h3=Vorlagen');
+  it('shows the Templates section', async () => {
+    const sectionHeading = await $('h3=Templates');
     await expect(sectionHeading).toBeDisplayed();
   });
 
   it('shows ANSCHREIBEN and QUITTUNG template sections', async () => {
-    const anschreiben = await $('p=Anschreiben (.docx)');
-    const quittung = await $('p=Spendenquittung (.pdf)');
-    await expect(anschreiben).toBeDisplayed();
-    await expect(quittung).toBeDisplayed();
+    const coverLetter = await $('p=Cover Letter (.docx)');
+    const receipt = await $('p=Donation Receipt (.pdf)');
+    await expect(coverLetter).toBeDisplayed();
+    await expect(receipt).toBeDisplayed();
   });
 
-  it('shows "Keine Vorlage hinterlegt" for each template type initially', async () => {
-    const noTemplateMessages = await $$('p=Keine Vorlage hinterlegt');
+  it('shows "No template uploaded" for each template type initially', async () => {
+    const noTemplateMessages = await $$('p=No template uploaded');
     expect(noTemplateMessages.length).toBe(2);
   });
 
   it('saves settings and shows success message', async () => {
-    // Find the Kassenwart input by its label
-    const kassenwartLabel = await $('label*=Kassenwart');
-    const forAttr = await kassenwartLabel.getAttribute('for');
+    // Find the Treasurer input by its label
+    const treasurerLabel = await $('label*=Treasurer');
+    const forAttr = await treasurerLabel.getAttribute('for');
     const input = forAttr ? await $(`#${forAttr}`) : await $('input[type="text"]');
 
     await input.clearValue();
     await input.setValue('Max Mustermann');
 
-    const saveBtn = await $('button=Speichern');
+    const saveBtn = await $('button=Save');
     await saveBtn.click();
 
     // Wait for success message by looking for the green success div

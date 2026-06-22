@@ -1,18 +1,57 @@
 import { Router } from 'express';
-import { einstellungenRouter } from './einstellungen.js';
-import { rechnungRouter } from './rechnung.js';
-import { spendenQuittungRouter } from './spendenQuittung.js';
-import { spenderRouter } from './spender.js';
-import { vorlagenRouter } from './vorlagen.js';
+import fs from 'fs';
+import { donationReceiptRouter } from './donationReceipt.js';
+import { donorRouter } from './donor.js';
+import { invoiceRouter } from './invoice.js';
+import { settingsRouter } from './settings.js';
+import { templatesRouter } from './templates.js';
+import { prisma } from '../prismaClient.js';
+import { INVOICES_DIR, RECEIPTS_DIR, TEMPLATES_DIR } from '../config.js';
+import { initializeApp } from '../init.js';
 
 export const router = Router();
 
-router.use('/spenden-quittung', spendenQuittungRouter);
-router.use('/rechnung', rechnungRouter);
-router.use('/spender', spenderRouter);
-router.use('/einstellungen', einstellungenRouter);
-router.use('/vorlagen', vorlagenRouter);
+router.use('/donation-receipt', donationReceiptRouter);
+router.use('/invoice', invoiceRouter);
+router.use('/donor', donorRouter);
+router.use('/settings', settingsRouter);
+router.use('/templates', templatesRouter);
 
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
+});
+
+// E2E-only: reset all data to a clean state
+router.post('/e2e/reset', async (_req, res) => {
+  try {
+    await prisma.donationReceiptRevision.deleteMany();
+    await prisma.donationReceipt.deleteMany();
+    await prisma.invoiceRevision.deleteMany();
+    await prisma.invoice.deleteMany();
+    await prisma.invoiceRecipient.deleteMany();
+    await prisma.donor.deleteMany();
+    await prisma.template.deleteMany();
+    await prisma.systemSetting.deleteMany();
+
+    // Clear generated files
+    for (const dir of [TEMPLATES_DIR, RECEIPTS_DIR, INVOICES_DIR]) {
+      try {
+        const files = await fs.promises.readdir(dir);
+        await Promise.all(
+          ,
+        
+          files.map((f) => fs.promises.rm(`${dir}/${f}`, { recursive: true, force: true })),
+        );
+      } catch {
+        // dir may not exist yet
+      }
+    }
+
+    // Re-initialize default settings
+    await initializeApp();
+
+    res.json({ status: 'ok', message: 'E2E data reset complete' });
+  } catch (err) {
+    res.status(500).json({ error: 'Reset failed', details: String(err) });
+  }
 });

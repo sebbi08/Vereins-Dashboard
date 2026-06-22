@@ -3,8 +3,8 @@ import { RouterLink } from 'vue-router';
 
 const navItems = [
   { name: 'Dashboard', to: '/' },
-  { name: 'Spenden Quittung', to: '/spenden-quittung' },
-  { name: 'Rechnung', to: '/rechnung' },
+  { name: 'Donation Receipt', to: '/donation-receipt' },
+  { name: 'Invoice', to: '/invoice' },
 ];
 </script>
 

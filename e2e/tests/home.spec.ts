@@ -6,34 +6,34 @@ describe('Home / Dashboard', () => {
     await expect(heading).toBeDisplayed();
   });
 
-  it('shows the Spenden Quittung navigation card', async () => {
+  it('shows the Donation Receipt navigation card', async () => {
     await browser.url('/');
 
-    const card = await $('a[href="/spenden-quittung"]');
+    const card = await $('a[href="/donation-receipt"]');
     await expect(card).toBeDisplayed();
-    await expect(card).toHaveText(expect.stringContaining('Spenden Quittung'));
+    await expect(card).toHaveText(expect.stringContaining('Donation Receipt'));
   });
 
-  it('shows the Rechnung navigation card', async () => {
+  it('shows the Invoice navigation card', async () => {
     await browser.url('/');
 
-    const card = await $('a[href="/rechnung"]');
+    const card = await $('a[href="/invoice"]');
     await expect(card).toBeDisplayed();
-    await expect(card).toHaveText(expect.stringContaining('Rechnung'));
+    await expect(card).toHaveText(expect.stringContaining('Invoice'));
   });
 
-  it('navigates to Spenden Quittung list on card click', async () => {
+  it('navigates to Donation Receipt list on card click', async () => {
     await browser.url('/');
 
-    const card = await $('a[href="/spenden-quittung"]');
+    const card = await $('a[href="/donation-receipt"]');
     await card.click();
 
-    await browser.waitUntil(async () => (await browser.getUrl()).includes('/spenden-quittung'), {
+    await browser.waitUntil(async () => (await browser.getUrl()).includes('/donation-receipt'), {
       timeout: 5000,
-      timeoutMsg: 'URL did not change to /spenden-quittung',
+      timeoutMsg: 'URL did not change to /donation-receipt',
     });
 
-    const heading = await $('h2=Spenden Quittungen');
+    const heading = await $('h2=Donation Receipts');
     await expect(heading).toBeDisplayed();
   });
 });

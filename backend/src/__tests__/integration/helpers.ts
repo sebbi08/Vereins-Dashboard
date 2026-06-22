@@ -6,14 +6,14 @@ import { prisma } from '../../prismaClient';
  * system settings that are seeded by initializeApp().
  */
 export async function cleanDatabase() {
-  await prisma.rechnungRevision.deleteMany();
-  await prisma.rechnung.deleteMany();
-  await prisma.rechnungsempfaenger.deleteMany();
-  await prisma.spendenQuittungRevision.deleteMany();
-  await prisma.spendenQuittung.deleteMany();
-  await prisma.vorlage.deleteMany();
-  await prisma.spender.deleteMany();
-  await prisma.systemEinstellung.deleteMany();
+  await prisma.invoiceRevision.deleteMany();
+  await prisma.invoice.deleteMany();
+  await prisma.invoiceRecipient.deleteMany();
+  await prisma.donationReceiptRevision.deleteMany();
+  await prisma.donationReceipt.deleteMany();
+  await prisma.template.deleteMany();
+  await prisma.donor.deleteMany();
+  await prisma.systemSetting.deleteMany();
 }
 
 export function useCleanDatabase() {

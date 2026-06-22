@@ -16,8 +16,9 @@ export async function setup() {
   }
 
   // Create required data directories
-  fs.mkdirSync(path.join(DATA_DIR, 'vorlagen'), { recursive: true });
-  fs.mkdirSync(path.join(DATA_DIR, 'quittungen'), { recursive: true });
+  fs.mkdirSync(path.join(DATA_DIR, 'templates'), { recursive: true });
+  fs.mkdirSync(path.join(DATA_DIR, 'receipts'), { recursive: true });
+  fs.mkdirSync(path.join(DATA_DIR, 'invoices'), { recursive: true });
 
   // Generate the Prisma client (needed if not yet built)
   execSync('npx prisma generate', {

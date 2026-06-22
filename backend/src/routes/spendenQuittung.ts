@@ -1,598 +1,600 @@
 import { Router } from 'express';
 import fs from 'fs';
-import type { PdfStatus, QuittungEingaben, SpendenQuittungListItem } from 'shared';
+import type { DonationReceiptListItem, PdfStatus, ReceiptInputs } from 'shared';
 import type { Prisma } from '../../prisma/generated/client.js';
 import { toAbsolutePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
-import { generiereQuittungPdf } from '../services/pdfGenerierung.js';
-import { generiereQuittungsNummer } from '../services/quittungsNummer.js';
+import { generateReceiptPdf } from '../services/pdfGeneration.js';
+import { generateReceiptNumber } from '../services/receiptNumber.js';
 
-export const spendenQuittungRouter = Router();
+export const donationReceiptRouter = Router();
 
-const DEFAULT_BRIEF_ANREDE = 'Sehr geehrte Damen und Herren';
-const PDF_FEHLER_MELDUNG = 'PDF konnte nicht erzeugt werden. Bitte Retry versuchen.';
-const laufendeRetries = new Set<number>();
+const DEFAULT_LETTER_SALUTATION = 'Sehr geehrte Damen und Herren';
+const PDF_ERROR_MESSAGE = 'PDF could not be generated. Please try retry.';
+const runningRetries = new Set<number>();
 
-function revisionZuDto(rev: {
+function revisionToDto(rev: {
   id: number;
-  revisionNummer: number;
+  revisionNumber: number;
   status: string;
   pdfStatus: string;
-  pdfFehler: string | null;
-  pdfTechFehler: string | null;
+  pdfError: string | null;
+  pdfTechError: string | null;
   name: string;
-  strasse: string;
-  ort: string;
-  briefAnrede: string;
-  adressAnrede: string | null;
-  spendenbetragCents: number;
-  spendendatum: Date;
-  mitAnschreiben: boolean;
-  kassenwart: string;
-  gemeinnuetzigerZweck: string;
-  finanzamtName: string;
-  steuernummer: string;
-  freistellungsdatum: string;
-  veranlagungszeitraum: string;
-  dateiPfad: string | null;
-  erstelltAm: Date;
+  street: string;
+  city: string;
+  letterSalutation: string;
+  addressSalutation: string | null;
+  donationAmountCents: number;
+  donationDate: Date;
+  withCoverLetter: boolean;
+  treasurer: string;
+  charitablePurpose: string;
+  taxOfficeName: string;
+  taxNumber: string;
+  exemptionDate: string;
+  assessmentPeriod: string;
+  filePath: string | null;
+  createdAt: Date;
 }) {
   return {
     id: rev.id,
-    revisionNummer: rev.revisionNummer,
+    revisionNumber: rev.revisionNumber,
     status: rev.status,
     pdfStatus: rev.pdfStatus as PdfStatus,
-    pdfFehler: rev.pdfFehler,
-    pdfTechFehler: rev.pdfTechFehler,
-    eingaben: {
+    pdfError: rev.pdfError,
+    pdfTechError: rev.pdfTechError,
+    inputs: {
       name: rev.name,
-      strasse: rev.strasse,
-      ort: rev.ort,
-      briefAnrede: rev.briefAnrede,
-      adressAnrede: rev.adressAnrede ?? '',
-      spendenbetragCents: rev.spendenbetragCents,
-      spendendatum: rev.spendendatum.toISOString(),
-      mitAnschreiben: rev.mitAnschreiben,
-      kassenwart: rev.kassenwart,
-      gemeinnuetzigerZweck: rev.gemeinnuetzigerZweck,
-      finanzamtName: rev.finanzamtName,
-      steuernummer: rev.steuernummer,
-      freistellungsdatum: rev.freistellungsdatum,
-      veranlagungszeitraum: rev.veranlagungszeitraum,
+      street: rev.street,
+      city: rev.city,
+      letterSalutation: rev.letterSalutation,
+      addressSalutation: rev.addressSalutation ?? '',
+      donationAmountCents: rev.donationAmountCents,
+      donationDate: rev.donationDate.toISOString(),
+      withCoverLetter: rev.withCoverLetter,
+      treasurer: rev.treasurer,
+      charitablePurpose: rev.charitablePurpose,
+      taxOfficeName: rev.taxOfficeName,
+      taxNumber: rev.taxNumber,
+      exemptionDate: rev.exemptionDate,
+      assessmentPeriod: rev.assessmentPeriod,
     },
-    dateiPfad: rev.dateiPfad,
-    erstelltAm: rev.erstelltAm.toISOString(),
+    filePath: rev.filePath,
+    createdAt: rev.createdAt.toISOString(),
   };
 }
 
-function validierePflichtfelder(eingaben: QuittungEingaben): string | null {
-  if (!eingaben.name.trim()) return 'Name ist erforderlich';
-  if (!eingaben.strasse.trim()) return 'Straße ist erforderlich';
-  if (!eingaben.ort.trim()) return 'Ort ist erforderlich';
-  if (eingaben.mitAnschreiben && !eingaben.briefAnrede.trim()) {
-    return 'BriefAnrede ist erforderlich, wenn ein Anschreiben erstellt wird';
+function validateRequiredFields(inputs: ReceiptInputs): string | null {
+  if (!inputs.name.trim()) return 'Name is required';
+  if (!inputs.street.trim()) return 'Street is required';
+  if (!inputs.city.trim()) return 'City is required';
+  if (inputs.withCoverLetter && !inputs.letterSalutation.trim()) {
+    return 'Letter salutation is required when generating a cover letter';
   }
   return null;
 }
 
-function normalizeAdressAnrede(value: string | null | undefined): string | null {
+function normalizeAddressSalutation(value: string | null | undefined): string | null {
   const normalized = value?.trim() ?? '';
   return normalized ? normalized : null;
 }
 
-function normalizeBriefAnrede(eingaben: QuittungEingaben): string {
-  if (eingaben.mitAnschreiben) {
-    return eingaben.briefAnrede.trim();
+function normalizeLetterSalutation(inputs: ReceiptInputs): string {
+  if (inputs.withCoverLetter) {
+    return inputs.letterSalutation.trim();
   }
-  return DEFAULT_BRIEF_ANREDE;
+  return DEFAULT_LETTER_SALUTATION;
 }
 
 async function updateRevisionPdfStatus(
   revisionId: number,
   update: {
     pdfStatus: PdfStatus;
-    dateiPfad?: string | null;
-    pdfFehler?: string | null;
-    pdfTechFehler?: string | null;
+    filePath?: string | null;
+    pdfError?: string | null;
+    pdfTechError?: string | null;
   },
 ) {
-  await prisma.spendenQuittungRevision.update({
+  await prisma.donationReceiptRevision.update({
     where: { id: revisionId },
     data: {
       pdfStatus: update.pdfStatus,
-      ...(update.dateiPfad !== undefined && { dateiPfad: update.dateiPfad }),
-      ...(update.pdfFehler !== undefined && { pdfFehler: update.pdfFehler }),
-      ...(update.pdfTechFehler !== undefined && { pdfTechFehler: update.pdfTechFehler }),
+      ...(update.filePath !== undefined && { filePath: update.filePath }),
+      ...(update.pdfError !== undefined && { pdfError: update.pdfError }),
+      ...(update.pdfTechError !== undefined && { pdfTechError: update.pdfTechError }),
     },
   });
 }
 
-function serialisiereTechnischenFehler(error: unknown): string {
+function serializeTechnicalError(error: unknown): string {
   if (error instanceof Error) {
     return error.stack || `${error.name}: ${error.message}`;
   }
   return String(error);
 }
 
-async function versuchePdfErzeugung(revisionId: number) {
+async function attemptPdfGeneration(revisionId: number) {
   try {
-    const dateiPfad = await generiereQuittungPdf(prisma, revisionId);
+    const filePath = await generateReceiptPdf(prisma, revisionId);
     await updateRevisionPdfStatus(revisionId, {
       pdfStatus: 'OK',
-      dateiPfad,
-      pdfFehler: null,
-      pdfTechFehler: null,
+      filePath,
+      pdfError: null,
+      pdfTechError: null,
     });
     return {
       pdfStatus: 'OK' as const,
-      pdfFehler: null,
-      pdfTechFehler: null,
-      dateiPfad,
+      pdfError: null,
+      pdfTechError: null,
+      filePath,
     };
   } catch (error) {
     await updateRevisionPdfStatus(revisionId, {
       pdfStatus: 'FAILED',
-      dateiPfad: null,
-      pdfFehler: PDF_FEHLER_MELDUNG,
-      pdfTechFehler: serialisiereTechnischenFehler(error),
+      filePath: null,
+      pdfError: PDF_ERROR_MESSAGE,
+      pdfTechError: serializeTechnicalError(error),
     });
 
-    const failed = await prisma.spendenQuittungRevision.findUniqueOrThrow({
+    const failed = await prisma.donationReceiptRevision.findUniqueOrThrow({
       where: { id: revisionId },
-      select: { pdfFehler: true, pdfTechFehler: true },
+      select: { pdfError: true, pdfTechError: true },
     });
 
     return {
       pdfStatus: 'FAILED' as const,
-      pdfFehler: failed.pdfFehler,
-      pdfTechFehler: failed.pdfTechFehler,
-      dateiPfad: null,
+      pdfError: failed.pdfError,
+      pdfTechError: failed.pdfTechError,
+      filePath: null,
     };
   }
 }
 
-// GET /api/spenden-quittung
-spendenQuittungRouter.get('/', async (req, res) => {
+// GET /api/donation-receipt
+donationReceiptRouter.get('/', async (req, res) => {
   const search = String(req.query.search ?? '');
-  const vonDatum = req.query.vonDatum ? new Date(String(req.query.vonDatum)) : undefined;
-  const bisDatum = req.query.bisDatum ? new Date(String(req.query.bisDatum)) : undefined;
-  const mitStorniert = req.query.mitStorniert === 'true';
+  const fromDate = req.query.fromDate ? new Date(String(req.query.fromDate)) : undefined;
+  const toDate = req.query.toDate ? new Date(String(req.query.toDate)) : undefined;
+  const withCancelled = req.query.withCancelled === 'true';
 
-  const quittungen = await prisma.spendenQuittung.findMany({
+  const receipts = await prisma.donationReceipt.findMany({
     where: {
-      ...(mitStorniert ? {} : { status: 'AKTIV' }),
-      ...(vonDatum || bisDatum ? { spendendatum: { gte: vonDatum, lte: bisDatum } } : {}),
+      ...(withCancelled ? {} : { status: 'AKTIV' }),
+      ...(fromDate || toDate ? { donationDate: { gte: fromDate, lte: toDate } } : {}),
       ...(search
         ? {
-            OR: [{ nummer: { contains: search } }, { spender: { name: { contains: search } } }],
+            OR: [{ number: { contains: search } }, { donor: { name: { contains: search } } }],
           }
         : {}),
     },
     include: {
-      spender: true,
-      revisionen: {
+      donor: true,
+      revisions: {
         where: { status: 'AKTIV' },
-        orderBy: { revisionNummer: 'desc' },
+        orderBy: { revisionNumber: 'desc' },
         take: 1,
       },
     },
-    orderBy: { spendendatum: 'desc' },
+    orderBy: { donationDate: 'desc' },
   });
 
-  const list: SpendenQuittungListItem[] = quittungen.map((q) => ({
+  const list: DonationReceiptListItem[] = receipts.map((q) => ({
     id: q.id,
-    nummer: q.nummer,
+    number: q.number,
     status: q.status as 'AKTIV' | 'STORNIERT',
-    spenderName: q.spender.name,
-    spendenbetragCents: q.revisionen[0]?.spendenbetragCents ?? 0,
-    spendendatum: q.spendendatum.toISOString(),
+    donorName: q.donor.name,
+    donationAmountCents: q.revisions[0]?.donationAmountCents ?? 0,
+    donationDate: q.donationDate.toISOString(),
     createdAt: q.createdAt.toISOString(),
-    aktiveRevisionNummer: q.revisionen[0]?.revisionNummer ?? null,
+    activeRevisionNumber: q.revisions[0]?.revisionNumber ?? null,
   }));
 
   res.json(list);
 });
 
-// GET /api/spenden-quittung/revision/:revisionId/download
-spendenQuittungRouter.get('/revision/:revisionId/download', async (req, res) => {
+// GET /api/donation-receipt/revision/:revisionId/download
+donationReceiptRouter.get('/revision/:revisionId/download', async (req, res) => {
   const id = parseInt(req.params.revisionId);
   if (isNaN(id)) {
-    res.status(400).json({ error: 'Ungültige Revisions-ID' });
+    res.status(400).json({ error: 'Invalid revision ID' });
     return;
   }
 
-  const revision = await prisma.spendenQuittungRevision.findUnique({
+  const revision = await prisma.donationReceiptRevision.findUnique({
     where: { id },
-    include: { quittung: true },
+    include: { donationReceipt: true },
   });
 
   if (!revision) {
-    res.status(404).json({ error: 'Revision nicht gefunden' });
+    res.status(404).json({ error: 'Revision not found' });
     return;
   }
 
-  if (!revision.dateiPfad || revision.pdfStatus !== 'OK') {
-    res.status(404).json({ error: 'Datei nicht vorhanden' });
+  if (!revision.filePath || revision.pdfStatus !== 'OK') {
+    res.status(404).json({ error: 'File not available' });
     return;
   }
 
-  const dateiName = `${revision.quittung.nummer}-R${revision.revisionNummer}.pdf`;
+  const fileName = `${revision.donationReceipt.number}-R${revision.revisionNumber}.pdf`;
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${dateiName}"`);
-  fs.createReadStream(toAbsolutePath(revision.dateiPfad)).pipe(res);
+  res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
+  fs.createReadStream(toAbsolutePath(revision.filePath)).pipe(res);
 });
 
-// POST /api/spenden-quittung/revision/:revisionId/retry-pdf
-spendenQuittungRouter.post('/revision/:revisionId/retry-pdf', async (req, res) => {
+// POST /api/donation-receipt/revision/:revisionId/retry-pdf
+donationReceiptRouter.post('/revision/:revisionId/retry-pdf', async (req, res) => {
   const id = parseInt(req.params.revisionId);
   if (isNaN(id)) {
-    res.status(400).json({ error: 'Ungültige Revisions-ID' });
+    res.status(400).json({ error: 'Invalid revision ID' });
     return;
   }
 
-  const revision = await prisma.spendenQuittungRevision.findUnique({ where: { id } });
+  const revision = await prisma.donationReceiptRevision.findUnique({ where: { id } });
   if (!revision) {
-    res.status(404).json({ error: 'Revision nicht gefunden' });
+    res.status(404).json({ error: 'Revision not found' });
     return;
   }
 
   if (revision.status !== 'AKTIV') {
-    res.status(400).json({ error: 'Retry ist nur für aktive Revisionen erlaubt' });
+    res.status(400).json({ error: 'Retry is only allowed for active revisions' });
     return;
   }
 
   if (revision.pdfStatus !== 'FAILED') {
-    res.status(400).json({ error: 'Retry ist nur bei fehlgeschlagenem PDF möglich' });
+    res.status(400).json({ error: 'Retry is only possible for failed PDFs' });
     return;
   }
 
-  if (laufendeRetries.has(id)) {
-    res.status(409).json({ error: 'Für diese Revision läuft bereits ein Retry' });
+  if (runningRetries.has(id)) {
+    res.status(409).json({ error: 'A retry is already running for this revision' });
     return;
   }
 
-  laufendeRetries.add(id);
+  runningRetries.add(id);
   try {
-    const pdf = await versuchePdfErzeugung(id);
+    const pdf = await attemptPdfGeneration(id);
     res.json({
       revisionId: id,
       pdfStatus: pdf.pdfStatus,
-      pdfFehler: pdf.pdfFehler,
-      pdfTechFehler: pdf.pdfTechFehler,
-      dateiPfad: pdf.dateiPfad,
+      pdfError: pdf.pdfError,
+      pdfTechError: pdf.pdfTechError,
+      filePath: pdf.filePath,
     });
   } finally {
-    laufendeRetries.delete(id);
+    runningRetries.delete(id);
   }
 });
 
-// GET /api/spenden-quittung/:id
-spendenQuittungRouter.get('/:id', async (req, res) => {
+// GET /api/donation-receipt/:id
+donationReceiptRouter.get('/:id', async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
-    res.status(400).json({ error: 'Ungültige ID' });
+    res.status(400).json({ error: 'Invalid ID' });
     return;
   }
 
-  const quittung = await prisma.spendenQuittung.findUnique({
+  const receipt = await prisma.donationReceipt.findUnique({
     where: { id },
     include: {
-      spender: true,
-      revisionen: { orderBy: { revisionNummer: 'desc' } },
+      donor: true,
+      revisions: { orderBy: { revisionNumber: 'desc' } },
     },
   });
 
-  if (!quittung) {
-    res.status(404).json({ error: 'Quittung nicht gefunden' });
+  if (!receipt) {
+    res.status(404).json({ error: 'Receipt not found' });
     return;
   }
 
-  const aktiveRevision = quittung.revisionen.find((r: { status: string }) => r.status === 'AKTIV');
+  const activeRevision = receipt.revisions.find((r: { status: string }) => r.status === 'AKTIV');
 
   res.json({
-    id: quittung.id,
-    nummer: quittung.nummer,
-    status: quittung.status,
-    spender: quittung.spender,
-    spendendatum: quittung.spendendatum.toISOString(),
-    createdAt: quittung.createdAt.toISOString(),
-    aktiveRevision: aktiveRevision ? revisionZuDto(aktiveRevision) : null,
-    revisionen: quittung.revisionen.map(revisionZuDto),
+    id: receipt.id,
+    number: receipt.number,
+    status: receipt.status,
+    donor: receipt.donor,
+    donationDate: receipt.donationDate.toISOString(),
+    createdAt: receipt.createdAt.toISOString(),
+    activeRevision: activeRevision ? revisionToDto(activeRevision) : null,
+    revisions: receipt.revisions.map(revisionToDto),
   });
 });
 
-// POST /api/spenden-quittung
-spendenQuittungRouter.post('/', async (req, res) => {
+// POST /api/donation-receipt
+donationReceiptRouter.post('/', async (req, res) => {
   const body = req.body as {
-    spenderId?: number;
-    spenderDaten?: {
+    donorId?: number;
+    donorData?: {
       name: string;
-      strasse: string;
-      ort: string;
-      briefAnrede?: string;
-      adressAnrede?: string;
+      street: string;
+      city: string;
+      letterSalutation?: string;
+      addressSalutation?: string;
     };
-    eingaben: QuittungEingaben;
+    inputs: ReceiptInputs;
   };
 
-  const validierungsfehler = validierePflichtfelder(body.eingaben);
-  if (validierungsfehler) {
-    res.status(400).json({ error: validierungsfehler });
+  const validationError = validateRequiredFields(body.inputs);
+  if (validationError) {
+    res.status(400).json({ error: validationError });
     return;
   }
 
-  const quittungsVorlage = await prisma.vorlage.findFirst({
-    where: { typ: 'QUITTUNG', aktiv: true },
+  const receiptTemplate = await prisma.template.findFirst({
+    where: { type: 'QUITTUNG', active: true },
   });
-  if (!quittungsVorlage) {
-    res.status(400).json({ error: 'Keine aktive Quittungsvorlage vorhanden' });
+  if (!receiptTemplate) {
+    res.status(400).json({ error: 'No active receipt template found' });
     return;
   }
 
-  const anschreibenVorlage = body.eingaben.mitAnschreiben
-    ? await prisma.vorlage.findFirst({
-        where: { typ: 'ANSCHREIBEN', aktiv: true },
+  const coverLetterTemplate = body.inputs.withCoverLetter
+    ? await prisma.template.findFirst({
+        where: { type: 'ANSCHREIBEN', active: true },
       })
     : null;
 
-  if (body.eingaben.mitAnschreiben && !anschreibenVorlage) {
-    res.status(400).json({ error: 'Keine aktive Anschreibenvorlage vorhanden' });
+  if (body.inputs.withCoverLetter && !coverLetterTemplate) {
+    res.status(400).json({ error: 'No active cover letter template found' });
     return;
   }
 
-  const { nummer, jahr, laufendeNummer } = await generiereQuittungsNummer(prisma);
-  const spendendatum = new Date(body.eingaben.spendendatum);
+  const { number, year, runningNumber } = await generateReceiptNumber(prisma);
+  const donationDate = new Date(body.inputs.donationDate);
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    let spenderUpdated = false;
-    let spenderId = body.spenderId;
+    let donorUpdated = false;
+    let donorId = body.donorId;
 
-    if (spenderId) {
-      const bestehenderSpender = await tx.spender.findUnique({ where: { id: spenderId } });
-      if (!bestehenderSpender) {
-        throw new Error('Spender nicht gefunden');
+    if (donorId) {
+      const existingDonor = await tx.donor.findUnique({ where: { id: donorId } });
+      if (!existingDonor) {
+        throw new Error('Donor not found');
       }
 
-      const spenderUpdateData: {
+      const donorUpdateData: {
         name: string;
-        strasse: string;
-        ort: string;
-        briefAnrede?: string;
-        adressAnrede?: string | null;
+        street: string;
+        city: string;
+        letterSalutation?: string;
+        addressSalutation?: string | null;
       } = {
-        name: body.eingaben.name,
-        strasse: body.eingaben.strasse,
-        ort: body.eingaben.ort,
+        name: body.inputs.name,
+        street: body.inputs.street,
+        city: body.inputs.city,
       };
 
-      if (body.eingaben.mitAnschreiben) {
-        spenderUpdateData.briefAnrede = body.eingaben.briefAnrede.trim();
-        spenderUpdateData.adressAnrede = normalizeAdressAnrede(body.eingaben.adressAnrede);
+      if (body.inputs.withCoverLetter) {
+        donorUpdateData.letterSalutation = body.inputs.letterSalutation.trim();
+        donorUpdateData.addressSalutation = normalizeAddressSalutation(
+          body.inputs.addressSalutation,
+        );
       }
 
-      await tx.spender.update({ where: { id: spenderId }, data: spenderUpdateData });
-      spenderUpdated = true;
+      await tx.donor.update({ where: { id: donorId }, data: donorUpdateData });
+      donorUpdated = true;
     } else {
-      if (!body.spenderDaten) {
-        throw new Error('Kein Spender angegeben');
+      if (!body.donorData) {
+        throw new Error('No donor specified');
       }
 
-      const neuerSpender = await tx.spender.create({
+      const newDonor = await tx.donor.create({
         data: {
-          name: body.spenderDaten.name,
-          strasse: body.spenderDaten.strasse,
-          ort: body.spenderDaten.ort,
-          briefAnrede: body.eingaben.mitAnschreiben
-            ? body.eingaben.briefAnrede.trim()
-            : DEFAULT_BRIEF_ANREDE,
-          adressAnrede: body.eingaben.mitAnschreiben
-            ? normalizeAdressAnrede(body.eingaben.adressAnrede)
+          name: body.donorData.name,
+          street: body.donorData.street,
+          city: body.donorData.city,
+          letterSalutation: body.inputs.withCoverLetter
+            ? body.inputs.letterSalutation.trim()
+            : DEFAULT_LETTER_SALUTATION,
+          addressSalutation: body.inputs.withCoverLetter
+            ? normalizeAddressSalutation(body.inputs.addressSalutation)
             : null,
         },
       });
-      spenderId = neuerSpender.id;
-      spenderUpdated = true;
+      donorId = newDonor.id;
+      donorUpdated = true;
     }
 
-    const quittung = await tx.spendenQuittung.create({
+    const receipt = await tx.donationReceipt.create({
       data: {
-        nummer,
-        jahr,
-        laufendeNummer,
-        spenderId: spenderId!,
-        spendendatum,
+        number,
+        year,
+        runningNumber,
+        donorId: donorId!,
+        donationDate,
       },
     });
 
-    const revision = await tx.spendenQuittungRevision.create({
+    const revision = await tx.donationReceiptRevision.create({
       data: {
-        quittungId: quittung.id,
-        revisionNummer: 1,
-        name: body.eingaben.name,
-        strasse: body.eingaben.strasse,
-        ort: body.eingaben.ort,
-        briefAnrede: normalizeBriefAnrede(body.eingaben),
-        adressAnrede: body.eingaben.mitAnschreiben
-          ? normalizeAdressAnrede(body.eingaben.adressAnrede)
+        donationReceiptId: receipt.id,
+        revisionNumber: 1,
+        name: body.inputs.name,
+        street: body.inputs.street,
+        city: body.inputs.city,
+        letterSalutation: normalizeLetterSalutation(body.inputs),
+        addressSalutation: body.inputs.withCoverLetter
+          ? normalizeAddressSalutation(body.inputs.addressSalutation)
           : null,
-        spendenbetragCents: body.eingaben.spendenbetragCents,
-        spendendatum,
-        mitAnschreiben: body.eingaben.mitAnschreiben,
-        kassenwart: body.eingaben.kassenwart,
-        gemeinnuetzigerZweck: body.eingaben.gemeinnuetzigerZweck,
-        finanzamtName: body.eingaben.finanzamtName,
-        steuernummer: body.eingaben.steuernummer,
-        freistellungsdatum: body.eingaben.freistellungsdatum,
-        veranlagungszeitraum: body.eingaben.veranlagungszeitraum,
-        anschreibenVorlageId: anschreibenVorlage?.id ?? null,
-        quittungsVorlageId: quittungsVorlage.id,
+        donationAmountCents: body.inputs.donationAmountCents,
+        donationDate,
+        withCoverLetter: body.inputs.withCoverLetter,
+        treasurer: body.inputs.treasurer,
+        charitablePurpose: body.inputs.charitablePurpose,
+        taxOfficeName: body.inputs.taxOfficeName,
+        taxNumber: body.inputs.taxNumber,
+        exemptionDate: body.inputs.exemptionDate,
+        assessmentPeriod: body.inputs.assessmentPeriod,
+        coverLetterTemplateId: coverLetterTemplate?.id ?? null,
+        receiptTemplateId: receiptTemplate.id,
         pdfStatus: 'PENDING',
       },
     });
 
-    const spender = await tx.spender.findUniqueOrThrow({ where: { id: spenderId! } });
+    const donor = await tx.donor.findUniqueOrThrow({ where: { id: donorId! } });
 
-    return { quittung, revision, spender, spenderUpdated };
+    return { receipt, revision, donor, donorUpdated };
   });
 
-  const pdf = await versuchePdfErzeugung(result.revision.id);
+  const pdf = await attemptPdfGeneration(result.revision.id);
 
   res.status(201).json({
-    quittungId: result.quittung.id,
+    receiptId: result.receipt.id,
     revisionId: result.revision.id,
-    spender: result.spender,
-    spenderUpdated: result.spenderUpdated,
+    donor: result.donor,
+    donorUpdated: result.donorUpdated,
     pdfStatus: pdf.pdfStatus,
-    pdfFehler: pdf.pdfFehler,
-    pdfTechFehler: pdf.pdfTechFehler,
-    dateiPfad: pdf.dateiPfad,
+    pdfError: pdf.pdfError,
+    pdfTechError: pdf.pdfTechError,
+    filePath: pdf.filePath,
   });
 });
 
-// POST /api/spenden-quittung/:id/revision
-spendenQuittungRouter.post('/:id/revision', async (req, res) => {
+// POST /api/donation-receipt/:id/revision
+donationReceiptRouter.post('/:id/revision', async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
-    res.status(400).json({ error: 'Ungültige ID' });
+    res.status(400).json({ error: 'Invalid ID' });
     return;
   }
 
-  const quittung = await prisma.spendenQuittung.findUnique({ where: { id } });
-  if (!quittung) {
-    res.status(404).json({ error: 'Quittung nicht gefunden' });
+  const receipt = await prisma.donationReceipt.findUnique({ where: { id } });
+  if (!receipt) {
+    res.status(404).json({ error: 'Receipt not found' });
     return;
   }
-  if (quittung.status === 'STORNIERT') {
-    res.status(400).json({ error: 'Stornierte Quittungen können nicht revidiert werden' });
-    return;
-  }
-
-  const body = req.body as { eingaben: QuittungEingaben };
-
-  const validierungsfehler = validierePflichtfelder(body.eingaben);
-  if (validierungsfehler) {
-    res.status(400).json({ error: validierungsfehler });
+  if (receipt.status === 'STORNIERT') {
+    res.status(400).json({ error: 'Cancelled receipts cannot be revised' });
     return;
   }
 
-  const quittungsVorlage = await prisma.vorlage.findFirst({
-    where: { typ: 'QUITTUNG', aktiv: true },
+  const body = req.body as { inputs: ReceiptInputs };
+
+  const validationError = validateRequiredFields(body.inputs);
+  if (validationError) {
+    res.status(400).json({ error: validationError });
+    return;
+  }
+
+  const receiptTemplate = await prisma.template.findFirst({
+    where: { type: 'QUITTUNG', active: true },
   });
-  if (!quittungsVorlage) {
-    res.status(400).json({ error: 'Keine aktive Quittungsvorlage vorhanden' });
+  if (!receiptTemplate) {
+    res.status(400).json({ error: 'No active receipt template found' });
     return;
   }
 
-  const anschreibenVorlage = body.eingaben.mitAnschreiben
-    ? await prisma.vorlage.findFirst({
-        where: { typ: 'ANSCHREIBEN', aktiv: true },
+  const coverLetterTemplate = body.inputs.withCoverLetter
+    ? await prisma.template.findFirst({
+        where: { type: 'ANSCHREIBEN', active: true },
       })
     : null;
 
-  if (body.eingaben.mitAnschreiben && !anschreibenVorlage) {
-    res.status(400).json({ error: 'Keine aktive Anschreibenvorlage vorhanden' });
+  if (body.inputs.withCoverLetter && !coverLetterTemplate) {
+    res.status(400).json({ error: 'No active cover letter template found' });
     return;
   }
 
-  const letzteRevision = await prisma.spendenQuittungRevision.findFirst({
-    where: { quittungId: id },
-    orderBy: { revisionNummer: 'desc' },
+  const lastRevision = await prisma.donationReceiptRevision.findFirst({
+    where: { donationReceiptId: id },
+    orderBy: { revisionNumber: 'desc' },
   });
-  const neueRevisionNummer = (letzteRevision?.revisionNummer ?? 0) + 1;
-  const spendendatum = new Date(body.eingaben.spendendatum);
+  const newRevisionNumber = (lastRevision?.revisionNumber ?? 0) + 1;
+  const donationDate = new Date(body.inputs.donationDate);
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    await tx.spendenQuittungRevision.updateMany({
-      where: { quittungId: id, status: 'AKTIV' },
+    await tx.donationReceiptRevision.updateMany({
+      where: { donationReceiptId: id, status: 'AKTIV' },
       data: { status: 'ERSETZT' },
     });
-    await tx.spendenQuittung.update({ where: { id }, data: { spendendatum } });
+    await tx.donationReceipt.update({ where: { id }, data: { donationDate } });
 
-    const spenderUpdateData: {
+    const donorUpdateData: {
       name: string;
-      strasse: string;
-      ort: string;
-      briefAnrede?: string;
-      adressAnrede?: string | null;
+      street: string;
+      city: string;
+      letterSalutation?: string;
+      addressSalutation?: string | null;
     } = {
-      name: body.eingaben.name,
-      strasse: body.eingaben.strasse,
-      ort: body.eingaben.ort,
+      name: body.inputs.name,
+      street: body.inputs.street,
+      city: body.inputs.city,
     };
 
-    if (body.eingaben.mitAnschreiben) {
-      spenderUpdateData.briefAnrede = body.eingaben.briefAnrede.trim();
-      spenderUpdateData.adressAnrede = normalizeAdressAnrede(body.eingaben.adressAnrede);
+    if (body.inputs.withCoverLetter) {
+      donorUpdateData.letterSalutation = body.inputs.letterSalutation.trim();
+      donorUpdateData.addressSalutation = normalizeAddressSalutation(body.inputs.addressSalutation);
     }
 
-    await tx.spender.update({
-      where: { id: quittung.spenderId },
-      data: spenderUpdateData,
+    await tx.donor.update({
+      where: { id: receipt.donorId },
+      data: donorUpdateData,
     });
 
-    const neueRevision = await tx.spendenQuittungRevision.create({
+    const newRevision = await tx.donationReceiptRevision.create({
       data: {
-        quittungId: id,
-        revisionNummer: neueRevisionNummer,
-        name: body.eingaben.name,
-        strasse: body.eingaben.strasse,
-        ort: body.eingaben.ort,
-        briefAnrede: normalizeBriefAnrede(body.eingaben),
-        adressAnrede: body.eingaben.mitAnschreiben
-          ? normalizeAdressAnrede(body.eingaben.adressAnrede)
+        donationReceiptId: id,
+        revisionNumber: newRevisionNumber,
+        name: body.inputs.name,
+        street: body.inputs.street,
+        city: body.inputs.city,
+        letterSalutation: normalizeLetterSalutation(body.inputs),
+        addressSalutation: body.inputs.withCoverLetter
+          ? normalizeAddressSalutation(body.inputs.addressSalutation)
           : null,
-        spendenbetragCents: body.eingaben.spendenbetragCents,
-        spendendatum,
-        mitAnschreiben: body.eingaben.mitAnschreiben,
-        kassenwart: body.eingaben.kassenwart,
-        gemeinnuetzigerZweck: body.eingaben.gemeinnuetzigerZweck,
-        finanzamtName: body.eingaben.finanzamtName,
-        steuernummer: body.eingaben.steuernummer,
-        freistellungsdatum: body.eingaben.freistellungsdatum,
-        veranlagungszeitraum: body.eingaben.veranlagungszeitraum,
-        anschreibenVorlageId: anschreibenVorlage?.id ?? null,
-        quittungsVorlageId: quittungsVorlage.id,
+        donationAmountCents: body.inputs.donationAmountCents,
+        donationDate,
+        withCoverLetter: body.inputs.withCoverLetter,
+        treasurer: body.inputs.treasurer,
+        charitablePurpose: body.inputs.charitablePurpose,
+        taxOfficeName: body.inputs.taxOfficeName,
+        taxNumber: body.inputs.taxNumber,
+        exemptionDate: body.inputs.exemptionDate,
+        assessmentPeriod: body.inputs.assessmentPeriod,
+        coverLetterTemplateId: coverLetterTemplate?.id ?? null,
+        receiptTemplateId: receiptTemplate.id,
         pdfStatus: 'PENDING',
       },
     });
 
-    const spender = await tx.spender.findUniqueOrThrow({ where: { id: quittung.spenderId } });
+    const donor = await tx.donor.findUniqueOrThrow({ where: { id: receipt.donorId } });
 
-    return { neueRevision, spender, spenderUpdated: true };
+    return { newRevision, donor, donorUpdated: true };
   });
 
-  const pdf = await versuchePdfErzeugung(result.neueRevision.id);
+  const pdf = await attemptPdfGeneration(result.newRevision.id);
 
   res.status(201).json({
-    quittungId: id,
-    revisionId: result.neueRevision.id,
-    spender: result.spender,
-    spenderUpdated: result.spenderUpdated,
+    receiptId: id,
+    revisionId: result.newRevision.id,
+    donor: result.donor,
+    donorUpdated: result.donorUpdated,
     pdfStatus: pdf.pdfStatus,
-    pdfFehler: pdf.pdfFehler,
-    pdfTechFehler: pdf.pdfTechFehler,
-    dateiPfad: pdf.dateiPfad,
+    pdfError: pdf.pdfError,
+    pdfTechError: pdf.pdfTechError,
+    filePath: pdf.filePath,
   });
 });
 
-// PATCH /api/spenden-quittung/:id/stornieren
-spendenQuittungRouter.patch('/:id/stornieren', async (req, res) => {
+// PATCH /api/donation-receipt/:id/cancel
+donationReceiptRouter.patch('/:id/cancel', async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) {
-    res.status(400).json({ error: 'Ungültige ID' });
+    res.status(400).json({ error: 'Invalid ID' });
     return;
   }
 
-  const quittung = await prisma.spendenQuittung.findUnique({ where: { id } });
-  if (!quittung) {
-    res.status(404).json({ error: 'Quittung nicht gefunden' });
+  const receipt = await prisma.donationReceipt.findUnique({ where: { id } });
+  if (!receipt) {
+    res.status(404).json({ error: 'Receipt not found' });
     return;
   }
 
-  await prisma.spendenQuittung.update({
+  await prisma.donationReceipt.update({
     where: { id },
     data: { status: 'STORNIERT' },
   });
 
-  res.json({ message: 'Quittung storniert' });
+  res.json({ message: 'Receipt cancelled' });
 });

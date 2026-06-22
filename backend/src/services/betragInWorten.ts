@@ -4,7 +4,7 @@ const converter = new ToWords({
   localeCode: 'de-DE',
 });
 
-export function betragInWorten(cents: number): string {
+export function amountInWords(cents: number): string {
   const euro = Math.floor(cents / 100);
   const cent = cents % 100;
 
@@ -16,14 +16,14 @@ export function betragInWorten(cents: number): string {
   return result.charAt(0).toUpperCase() + result.slice(1);
 }
 
-export function formatBetrag(cents: number): string {
+export function formatAmount(cents: number): string {
   return new Intl.NumberFormat('de-DE', {
     style: 'currency',
     currency: 'EUR',
   }).format(cents / 100);
 }
 
-export function formatDatum(date: Date): string {
+export function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('de-DE', {
     day: '2-digit',
     month: '2-digit',

@@ -1,17 +1,17 @@
-import { PrismaClient } from '../../prisma/generated/client.js';
+import type { PrismaClient } from '../../prisma/generated/client.js';
 
-export async function generiereQuittungsNummer(
+export async function generateReceiptNumber(
   prisma: PrismaClient,
-): Promise<{ nummer: string; jahr: number; laufendeNummer: number }> {
-  const jahr = new Date().getFullYear();
+): Promise<{ number: string; year: number; runningNumber: number }> {
+  const year = new Date().getFullYear();
 
-  const letzteQuittung = await prisma.spendenQuittung.findFirst({
-    where: { jahr },
-    orderBy: { laufendeNummer: 'desc' },
+  const lastReceipt = await prisma.donationReceipt.findFirst({
+    where: { year },
+    orderBy: { runningNumber: 'desc' },
   });
 
-  const laufendeNummer = letzteQuittung ? letzteQuittung.laufendeNummer + 1 : 1;
-  const nummer = `SQ-${jahr}-${String(laufendeNummer).padStart(4, '0')}`;
+  const runningNumber = lastReceipt ? lastReceipt.runningNumber + 1 : 1;
+  const number = `SQ-${year}-${String(runningNumber).padStart(4, '0')}`;
 
-  return { nummer, jahr, laufendeNummer };
+  return { number, year, runningNumber };
 }

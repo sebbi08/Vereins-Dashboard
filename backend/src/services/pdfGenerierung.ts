@@ -5,15 +5,15 @@ import os from 'os';
 import path from 'path';
 import { PDFDocument, RotationTypes, StandardFonts } from 'pdf-lib';
 import PizZip from 'pizzip';
-import type { VorlageTyp } from 'shared';
+import type { TemplateType } from 'shared';
 import { promisify } from 'util';
 import type { PrismaClient } from '../../prisma/generated/client.js';
-import { QUITTUNGEN_DIR, RECHNUNGEN_DIR, toAbsolutePath, toRelativePath } from '../config.js';
-import { betragInWorten, formatBetrag, formatDatum } from './betragInWorten.js';
+import { INVOICES_DIR, RECEIPTS_DIR, toAbsolutePath, toRelativePath } from '../config.js';
+import { amountInWords, formatAmount, formatDate } from './amountInWords.js';
 
 const execAsync = promisify(exec);
 
-export interface AnschreibenDaten {
+export interface CoverLetterData {
   BriefAnrede: string;
   Anrede: string;
   Name: string;
@@ -25,7 +25,7 @@ export interface AnschreibenDaten {
   Kassenwart: string;
 }
 
-export interface PdfFormularDaten {
+export interface PdfFormData {
   name: string;
   betrag: string;
   betragInBuchstaben: string;
@@ -39,16 +39,16 @@ export interface PdfFormularDaten {
   quittungsNummer?: string;
 }
 
-export interface VorschauEinstellungen {
-  kassenwart: string;
-  gemeinnuetzigerZweck: string;
-  finanzamtName: string;
-  steuernummer: string;
-  freistellungsdatum: string;
-  veranlagungszeitraum: string;
+export interface PreviewSettings {
+  treasurer: string;
+  charitablePurpose: string;
+  taxOfficeName: string;
+  taxNumber: string;
+  exemptionDate: string;
+  assessmentPeriod: string;
 }
 
-export interface RechnungDaten {
+export interface InvoiceData {
   Anrede: string;
   Name: string;
   Strasse: string;
@@ -65,12 +65,12 @@ export interface RechnungDaten {
   TableWithServices: string;
 }
 
-function getDocxTablePositionen(
-  positionen: Array<{ text: string; priceInCents: number }>,
+function getDocxTableLineItems(
+  lineItems: Array<{ text: string; priceInCents: number }>,
   resolved = false,
 ): string {
   let tableItems = '';
-  positionen.forEach((item, index) => {
+  lineItems.forEach((item, index) => {
     const textContent = resolved ? item.text : `{text${index}}`;
     const priceContent = resolved ? (item.priceInCents / 100).toFixed(2) : `{price${index}}`;
     tableItems += `
@@ -148,43 +148,40 @@ function getDocxTablePositionen(
         </w:tbl>`;
 }
 
-async function fuelleAnschreibenVorlage(
-  vorlageBuffer: Buffer,
-  daten: AnschreibenDaten,
+async function fillCoverLetterTemplate(
+  templateBuffer: Buffer,
+  data: CoverLetterData,
 ): Promise<Buffer> {
-  const zip = new PizZip(vorlageBuffer);
+  const zip = new PizZip(templateBuffer);
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks: true,
   });
-  doc.render(daten);
+  doc.render(data);
   return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
 }
 
-async function fuelleRechnungsVorlage(
-  vorlageBuffer: Buffer,
-  daten: RechnungDaten,
-): Promise<Buffer> {
-  const zip = new PizZip(vorlageBuffer);
+async function fillInvoiceTemplate(templateBuffer: Buffer, data: InvoiceData): Promise<Buffer> {
+  const zip = new PizZip(templateBuffer);
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,
     linebreaks: true,
   });
   doc.render({
-    Anrede: daten.Anrede,
-    Name: daten.Name,
-    Strasse: daten.Strasse,
-    Ort: daten.Ort,
-    Heute: daten.Heute,
-    Title: daten.Title,
-    ReNr: daten.ReNr,
-    Netto: daten.Netto,
-    Steuer: daten.Steuer,
-    Brutto: daten.Brutto,
-    ust: daten.ust,
-    MailAnrede: daten.MailAnrede,
-    PaymentDetails: daten.PaymentDetails,
-    TableWithServices: daten.TableWithServices,
+    Anrede: data.Anrede,
+    Name: data.Name,
+    Strasse: data.Strasse,
+    Ort: data.Ort,
+    Heute: data.Heute,
+    Title: data.Title,
+    ReNr: data.ReNr,
+    Netto: data.Netto,
+    Steuer: data.Steuer,
+    Brutto: data.Brutto,
+    ust: data.ust,
+    MailAnrede: data.MailAnrede,
+    PaymentDetails: data.PaymentDetails,
+    TableWithServices: data.TableWithServices,
     monthlyPay: false,
     MonthlyBruto: '',
   });
@@ -192,7 +189,7 @@ async function fuelleRechnungsVorlage(
   return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
 }
 
-async function docxZuPdf(docxBuffer: Buffer): Promise<Buffer> {
+async function docxToPdf(docxBuffer: Buffer): Promise<Buffer> {
   const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lo-'));
   const docxPath = path.join(tmpDir, 'input.docx');
   const pdfPath = path.join(tmpDir, 'input.pdf');
@@ -208,11 +205,11 @@ async function docxZuPdf(docxBuffer: Buffer): Promise<Buffer> {
   }
 }
 
-async function fuellePdfFormular(vorlageBuffer: Buffer, daten: PdfFormularDaten): Promise<Buffer> {
-  const pdfDoc = await PDFDocument.load(vorlageBuffer);
+async function fillPdfForm(templateBuffer: Buffer, data: PdfFormData): Promise<Buffer> {
+  const pdfDoc = await PDFDocument.load(templateBuffer);
   const form = pdfDoc.getForm();
 
-  const leseFelderSicher = () => {
+  const safeReadFields = () => {
     try {
       return form.getFields();
     } catch {
@@ -224,42 +221,42 @@ async function fuellePdfFormular(vorlageBuffer: Buffer, daten: PdfFormularDaten)
     try {
       form.getTextField(name).setText(value);
     } catch {
-      // Feld existiert nicht in dieser Version — ignorieren
+      // Field doesn't exist in this version — ignore
     }
   };
 
-  setTextField('Name', daten.name);
-  setTextField('Betrag', daten.betrag);
-  setTextField('BetragInBuchstaben', daten.betragInBuchstaben);
-  setTextField('TagDerZuwendung', daten.tagDerZuwendung);
-  setTextField('Zweck', daten.zweck);
-  setTextField('Steuer Nr', daten.steuerNr);
-  setTextField('SteuerNrDatum', daten.steuerNrDatum);
-  setTextField('VeranlagungsZeitraum', daten.veranlagungsZeitraum);
-  setTextField('Finanzamt', daten.finanzamtName);
-  setTextField('OrtDatum', daten.ortDatumUnterschrift);
+  setTextField('Name', data.name);
+  setTextField('Betrag', data.betrag);
+  setTextField('BetragInBuchstaben', data.betragInBuchstaben);
+  setTextField('TagDerZuwendung', data.tagDerZuwendung);
+  setTextField('Zweck', data.zweck);
+  setTextField('Steuer Nr', data.steuerNr);
+  setTextField('SteuerNrDatum', data.steuerNrDatum);
+  setTextField('VeranlagungsZeitraum', data.veranlagungsZeitraum);
+  setTextField('Finanzamt', data.finanzamtName);
+  setTextField('OrtDatum', data.ortDatumUnterschrift);
 
   try {
     form.flatten();
   } catch {
-    // Manche PDF-Vorlagen enthalten inkonsistente AcroForm-Strukturen,
-    // bei denen pdf-lib beim Flattening fehlschlägt. In dem Fall behalten
-    // wir die ausgefüllten Felder und setzen sie nach Möglichkeit read-only.
-    for (const feld of leseFelderSicher()) {
+    // Some PDF templates contain inconsistent AcroForm structures
+    // where pdf-lib fails during flattening. In that case we keep
+    // the filled fields and set them read-only if possible.
+    for (const field of safeReadFields()) {
       try {
-        feld.enableReadOnly();
+        field.enableReadOnly();
       } catch {
-        // Nicht jedes Feld lässt sich in jeder Vorlage mutieren.
+        // Not every field can be mutated in every template.
       }
     }
   }
 
-  if (daten.quittungsNummer) {
+  if (data.quittungsNummer) {
     const pages = pdfDoc.getPages();
     const firstPage = pages[0];
     if (firstPage) {
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      firstPage.drawText(`${daten.quittungsNummer}`, {
+      firstPage.drawText(`${data.quittungsNummer}`, {
         x: 32,
         y: 20,
         size: 9,
@@ -272,9 +269,9 @@ async function fuellePdfFormular(vorlageBuffer: Buffer, daten: PdfFormularDaten)
   try {
     return Buffer.from(await pdfDoc.save());
   } catch {
-    // Einige Vorlagen haben defekte AcroForm-Einträge. Dann scheitert pdf-lib
-    // beim automatischen Aktualisieren der Appearance-Streams. In dem Fall
-    // speichern wir ohne dieses Update, damit die Datei trotzdem erzeugt wird.
+    // Some templates have broken AcroForm entries. Then pdf-lib fails
+    // during automatic appearance stream updates. In that case
+    // save without this update so the file is still generated.
     return Buffer.from(
       await pdfDoc.save({
         updateFieldAppearances: false,
@@ -283,31 +280,31 @@ async function fuellePdfFormular(vorlageBuffer: Buffer, daten: PdfFormularDaten)
   }
 }
 
-export function getDummyDaten(
-  typ: VorlageTyp,
-  einstellungen: VorschauEinstellungen,
-): AnschreibenDaten | PdfFormularDaten | RechnungDaten {
-  if (typ === 'ANSCHREIBEN') {
+export function getDummyData(
+  type: TemplateType,
+  settings: PreviewSettings,
+): CoverLetterData | PdfFormData | InvoiceData {
+  if (type === 'ANSCHREIBEN') {
     return {
       BriefAnrede: 'Sehr geehrte Damen und Herren',
       Anrede: 'Max Mustermann',
       Name: 'Muserfirma GmbH',
       Strasse: 'Musterstraße 1',
       Ort: '67105 Schifferstadt',
-      Heute: formatDatum(new Date()),
+      Heute: formatDate(new Date()),
       Betrag: '100,00 €',
       TagDerZuwendung: '01.01.2024',
-      Kassenwart: einstellungen.kassenwart || 'Kassenwart Max Mustermann',
+      Kassenwart: settings.treasurer || 'Kassenwart Max Mustermann',
     };
   }
 
-  if (typ === 'RECHNUNG') {
+  if (type === 'RECHNUNG') {
     return {
       Anrede: '',
       Name: 'Muserfirma GmbH',
       Strasse: 'Musterstraße 1',
       Ort: '67105 Schifferstadt',
-      Heute: formatDatum(new Date()),
+      Heute: formatDate(new Date()),
       Title: 'Miete Musikheim April 2026',
       ReNr: '1 / 2026',
       Netto: '84,03',
@@ -317,45 +314,45 @@ export function getDummyDaten(
       MailAnrede: 'Sehr geehrte Damen und Herren',
       PaymentDetails:
         'Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.',
-      TableWithServices: getDocxTablePositionen(
+      TableWithServices: getDocxTableLineItems(
         [{ text: 'Miete Musikheim', priceInCents: 8403 }],
         true,
       ),
-    } as RechnungDaten;
+    } as InvoiceData;
   }
 
   return {
     name: 'Max Mustermann, Musterstraße 1, 67105 Schifferstadt',
     betrag: '100,00 €',
-    betragInBuchstaben: betragInWorten(10000).replace(/^./, (first) => first.toLowerCase()),
+    betragInBuchstaben: amountInWords(10000).replace(/^./, (first) => first.toLowerCase()),
     tagDerZuwendung: '01.01.2024',
-    zweck: einstellungen.gemeinnuetzigerZweck,
-    steuerNr: einstellungen.steuernummer,
-    steuerNrDatum: formatiereDatum(einstellungen.freistellungsdatum),
-    veranlagungsZeitraum: einstellungen.veranlagungszeitraum,
-    finanzamtName: einstellungen.finanzamtName,
-    ortDatumUnterschrift: `Schifferstadt, ${formatDatum(new Date())}`,
+    zweck: settings.charitablePurpose,
+    steuerNr: settings.taxNumber,
+    steuerNrDatum: formatGermanDate(settings.exemptionDate),
+    veranlagungsZeitraum: settings.assessmentPeriod,
+    finanzamtName: settings.taxOfficeName,
+    ortDatumUnterschrift: `Schifferstadt, ${formatDate(new Date())}`,
     quittungsNummer: '000001',
   };
 }
 
-export async function generierePreviewVorlage(
-  typ: VorlageTyp,
-  vorlageBuffer: Buffer,
-  daten: AnschreibenDaten | PdfFormularDaten | RechnungDaten,
+export async function generatePreviewTemplate(
+  type: TemplateType,
+  templateBuffer: Buffer,
+  data: CoverLetterData | PdfFormData | InvoiceData,
 ): Promise<Buffer> {
-  if (typ === 'ANSCHREIBEN') {
-    const filledDocx = await fuelleAnschreibenVorlage(vorlageBuffer, daten as AnschreibenDaten);
-    return docxZuPdf(filledDocx);
+  if (type === 'ANSCHREIBEN') {
+    const filledDocx = await fillCoverLetterTemplate(templateBuffer, data as CoverLetterData);
+    return docxToPdf(filledDocx);
   }
-  if (typ === 'RECHNUNG') {
-    const filledDocx = await fuelleRechnungsVorlage(vorlageBuffer, daten as RechnungDaten);
-    return docxZuPdf(filledDocx);
+  if (type === 'RECHNUNG') {
+    const filledDocx = await fillInvoiceTemplate(templateBuffer, data as InvoiceData);
+    return docxToPdf(filledDocx);
   }
-  return fuellePdfFormular(vorlageBuffer, daten as PdfFormularDaten);
+  return fillPdfForm(templateBuffer, data as PdfFormData);
 }
 
-async function verbindePdfs(pdfs: Buffer[]): Promise<Buffer> {
+async function mergePdfs(pdfs: Buffer[]): Promise<Buffer> {
   const merged = await PDFDocument.create();
   for (const pdfBuffer of pdfs) {
     const doc = await PDFDocument.load(pdfBuffer);
@@ -365,9 +362,9 @@ async function verbindePdfs(pdfs: Buffer[]): Promise<Buffer> {
   return Buffer.from(await merged.save());
 }
 
-/** Wandelt ein ISO-Datum (YYYY-MM-DD) ins deutsche Format (DD.MM.YYYY) um.
- *  Gibt den Eingabewert unverändert zurück, falls er kein ISO-Datum ist. */
-function formatiereDatum(iso: string): string {
+/** Converts an ISO date (YYYY-MM-DD) to German format (DD.MM.YYYY).
+ *  Returns the input unchanged if it's not an ISO date. */
+function formatGermanDate(iso: string): string {
   if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
     const [y, m, d] = iso.split('-');
     return `${d}.${m}.${y}`;
@@ -375,163 +372,157 @@ function formatiereDatum(iso: string): string {
   return iso;
 }
 
-export async function generiereQuittungPdf(
+export async function generateReceiptPdf(
   prisma: PrismaClient,
   revisionId: number,
 ): Promise<string> {
-  const revision = await prisma.spendenQuittungRevision.findUniqueOrThrow({
+  const revision = await prisma.donationReceiptRevision.findUniqueOrThrow({
     where: { id: revisionId },
     include: {
-      quittung: true,
-      anschreibenVorlage: true,
-      quittungsVorlage: true,
+      donationReceipt: true,
+      coverLetterTemplate: true,
+      receiptTemplate: true,
     },
   });
 
-  const betragFormatiert = formatBetrag(revision.spendenbetragCents);
-  const betragWorte = betragInWorten(revision.spendenbetragCents);
-  const spendendatumFormatiert = formatDatum(revision.spendendatum);
+  const amountFormatted = formatAmount(revision.donationAmountCents);
+  const amountWords = amountInWords(revision.donationAmountCents);
+  const donationDateFormatted = formatDate(revision.donationDate);
 
   const pdfs: Buffer[] = [];
 
-  if (revision.mitAnschreiben && revision.anschreibenVorlage) {
-    const vorlageBuffer = await fs.promises.readFile(
-      toAbsolutePath(revision.anschreibenVorlage.dateiPfad),
+  if (revision.withCoverLetter && revision.coverLetterTemplate) {
+    const templateBuffer = await fs.promises.readFile(
+      toAbsolutePath(revision.coverLetterTemplate.filePath),
     );
-    const revisionMitAnrede = revision as typeof revision & {
-      adressAnrede?: string | null;
-      briefAnrede?: string | null;
-    };
-    const adressAnrede = revisionMitAnrede.adressAnrede ?? '';
-    const briefAnrede = revisionMitAnrede.briefAnrede ?? '';
-    const filledDocx = await fuelleAnschreibenVorlage(vorlageBuffer, {
-      BriefAnrede: briefAnrede,
-      Anrede: adressAnrede,
+    const filledDocx = await fillCoverLetterTemplate(templateBuffer, {
+      BriefAnrede: revision.letterSalutation,
+      Anrede: revision.addressSalutation ?? '',
       Name: revision.name,
-      Strasse: revision.strasse,
-      Ort: revision.ort,
-      Heute: formatDatum(new Date()),
-      Betrag: betragFormatiert,
-      TagDerZuwendung: spendendatumFormatiert,
-      Kassenwart: revision.kassenwart,
+      Strasse: revision.street,
+      Ort: revision.city,
+      Heute: formatDate(new Date()),
+      Betrag: amountFormatted,
+      TagDerZuwendung: donationDateFormatted,
+      Kassenwart: revision.treasurer,
     });
-    const anschreibenPdf = await docxZuPdf(filledDocx);
-    pdfs.push(anschreibenPdf);
+    const coverLetterPdf = await docxToPdf(filledDocx);
+    pdfs.push(coverLetterPdf);
   }
 
-  const quittungsVorlageBuffer = await fs.promises.readFile(
-    toAbsolutePath(revision.quittungsVorlage.dateiPfad),
+  const receiptTemplateBuffer = await fs.promises.readFile(
+    toAbsolutePath(revision.receiptTemplate.filePath),
   );
-  const quittungPdf = await fuellePdfFormular(quittungsVorlageBuffer, {
-    name: `${revision.name}, ${revision.strasse}, ${revision.ort}`,
-    betrag: betragFormatiert,
-    betragInBuchstaben: betragWorte,
-    tagDerZuwendung: spendendatumFormatiert,
-    zweck: revision.gemeinnuetzigerZweck,
-    steuerNr: revision.steuernummer,
-    steuerNrDatum: formatiereDatum(revision.freistellungsdatum),
-    veranlagungsZeitraum: revision.veranlagungszeitraum,
-    finanzamtName: revision.finanzamtName,
-    ortDatumUnterschrift: `Schifferstadt, ${formatDatum(new Date())}`,
-    quittungsNummer: revision.quittung.nummer,
+  const receiptPdf = await fillPdfForm(receiptTemplateBuffer, {
+    name: `${revision.name}, ${revision.street}, ${revision.city}`,
+    betrag: amountFormatted,
+    betragInBuchstaben: amountWords,
+    tagDerZuwendung: donationDateFormatted,
+    zweck: revision.charitablePurpose,
+    steuerNr: revision.taxNumber,
+    steuerNrDatum: formatGermanDate(revision.exemptionDate),
+    veranlagungsZeitraum: revision.assessmentPeriod,
+    finanzamtName: revision.taxOfficeName,
+    ortDatumUnterschrift: `Schifferstadt, ${formatDate(new Date())}`,
+    quittungsNummer: revision.donationReceipt.number,
   });
-  pdfs.push(quittungPdf);
+  pdfs.push(receiptPdf);
 
-  const finalPdf = pdfs.length > 1 ? await verbindePdfs(pdfs) : pdfs[0];
+  const finalPdf = pdfs.length > 1 ? await mergePdfs(pdfs) : pdfs[0];
 
   const outputDir = path.join(
-    QUITTUNGEN_DIR,
-    String(revision.quittungId),
-    `r${revision.revisionNummer}`,
+    RECEIPTS_DIR,
+    String(revision.donationReceiptId),
+    `r${revision.revisionNumber}`,
   );
   await fs.promises.mkdir(outputDir, { recursive: true });
 
-  const dateiName = `${revision.quittung.nummer}-R${revision.revisionNummer}.pdf`;
-  const outputPath = path.join(outputDir, dateiName);
+  const fileName = `${revision.donationReceipt.number}-R${revision.revisionNumber}.pdf`;
+  const outputPath = path.join(outputDir, fileName);
   await fs.promises.writeFile(outputPath, finalPdf);
 
   return toRelativePath(outputPath);
 }
 
-export async function generiereRechnungPdf(
+export async function generateInvoicePdf(
   prisma: PrismaClient,
   revisionId: number,
 ): Promise<string> {
-  const revision = await prisma.rechnungRevision.findUniqueOrThrow({
+  const revision = await prisma.invoiceRevision.findUniqueOrThrow({
     where: { id: revisionId },
     include: {
-      rechnung: true,
-      vorlage: true,
+      invoice: true,
+      template: true,
     },
   });
 
-  const positionen: Array<{ text: string; priceInCents: number }> = JSON.parse(revision.positionen);
-  const netto = positionen.reduce((sum, p) => sum + p.priceInCents, 0);
-  const steuer = Math.round(netto * (revision.ust / 100));
-  const brutto = netto + steuer;
+  const lineItems: Array<{ text: string; priceInCents: number }> = JSON.parse(revision.positions);
+  const net = lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
+  const tax = Math.round(net * (revision.vat / 100));
+  const gross = net + tax;
 
-  const invoiceDateFormatted = revision.rechnungsdatum.toLocaleDateString('de');
+  const invoiceDateFormatted = revision.invoiceDate.toLocaleDateString('de');
 
-  const paymentDetails = revision.einzug
-    ? `Der Betrag wird in den nächsten Tagen mit dem Vermerk "${revision.rechnung.nummer}" von Ihrem Konto eingezogen.`
+  const paymentDetails = revision.directDebit
+    ? `Der Betrag wird in den nächsten Tagen mit dem Vermerk "${revision.invoice.number}" von Ihrem Konto eingezogen.`
     : 'Bitte Überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.';
 
-  const tableXml = getDocxTablePositionen(positionen);
+  const tableXml = getDocxTableLineItems(lineItems);
 
-  const vorlageBuffer = await fs.promises.readFile(toAbsolutePath(revision.vorlage.dateiPfad));
+  const templateBuffer = await fs.promises.readFile(toAbsolutePath(revision.template.filePath));
 
   // Pass 1: Template-level placeholders
-  const zip1 = new PizZip(vorlageBuffer);
+  const zip1 = new PizZip(templateBuffer);
   const doc1 = new Docxtemplater(zip1, {
     paragraphLoop: true,
     linebreaks: true,
   });
   doc1.render({
-    Anrede: revision.anrede,
+    Anrede: revision.salutation,
     Name: revision.name,
-    Strasse: revision.strasse,
-    Ort: revision.ort,
+    Strasse: revision.street,
+    Ort: revision.city,
     Heute: invoiceDateFormatted,
     Title: revision.title,
-    ReNr: revision.rechnung.nummer,
-    Netto: (netto / 100).toFixed(2),
-    Steuer: (steuer / 100).toFixed(2),
-    Brutto: (brutto / 100).toFixed(2),
-    ust: revision.ust,
-    MailAnrede: revision.mailAnrede,
+    ReNr: revision.invoice.number,
+    Netto: (net / 100).toFixed(2),
+    Steuer: (tax / 100).toFixed(2),
+    Brutto: (gross / 100).toFixed(2),
+    ust: revision.vat,
+    MailAnrede: revision.emailSalutation,
     PaymentDetails: paymentDetails,
     TableWithServices: tableXml,
     monthlyPay: false,
     MonthlyBruto: '',
   });
 
-  // Pass 2: Per-position placeholders
+  // Pass 2: Per-line-item placeholders
   const doc2 = new Docxtemplater(doc1.getZip(), {
     paragraphLoop: true,
     linebreaks: true,
   });
   const pass2Data: Record<string, string> = {};
-  positionen.forEach((pos, idx) => {
-    pass2Data[`text${idx}`] = pos.text;
-    pass2Data[`price${idx}`] = (pos.priceInCents / 100).toFixed(2);
+  lineItems.forEach((item, idx) => {
+    pass2Data[`text${idx}`] = item.text;
+    pass2Data[`price${idx}`] = (item.priceInCents / 100).toFixed(2);
   });
   doc2.render(pass2Data);
 
   const docxBuffer = doc2
     .getZip()
     .generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
-  const pdfBuffer = await docxZuPdf(docxBuffer);
+  const pdfBuffer = await docxToPdf(docxBuffer);
 
   const outputDir = path.join(
-    RECHNUNGEN_DIR,
-    String(revision.rechnungId),
-    `r${revision.revisionNummer}`,
+    INVOICES_DIR,
+    String(revision.invoiceId),
+    `r${revision.revisionNumber}`,
   );
   await fs.promises.mkdir(outputDir, { recursive: true });
 
-  const safeNum = revision.rechnung.nummer.replace(/\s*\/\s*/g, '-');
-  const dateiName = `${safeNum}-R${revision.revisionNummer}.pdf`;
-  const outputPath = path.join(outputDir, dateiName);
+  const safeNum = revision.invoice.number.replace(/\s*\/\s*/g, '-');
+  const fileName = `${safeNum}-R${revision.revisionNumber}.pdf`;
+  const outputPath = path.join(outputDir, fileName);
   await fs.promises.writeFile(outputPath, pdfBuffer);
 
   return toRelativePath(outputPath);

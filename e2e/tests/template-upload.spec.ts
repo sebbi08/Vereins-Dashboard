@@ -27,14 +27,14 @@ async function uploadAndSave(
   const iframe = await $('iframe');
   await iframe.waitForDisplayed({ timeout });
 
-  const saveBtn = await $('button=Vorlage speichern');
+  const saveBtn = await $('button=Save Template');
   await saveBtn.waitForClickable({ timeout: 10000 });
   await saveBtn.click();
 
   await browser.waitUntil(
     async () => {
       const text = await $('body').getText();
-      return text.includes('Vorlage erfolgreich hochgeladen');
+      return text.includes('Template uploaded successfully');
     },
     { timeout, timeoutMsg: `Upload of ${file} did not succeed` },
   );
@@ -49,26 +49,26 @@ async function uploadDocxAndSave(accept: string, file: string, modalTitle: strin
     const body = await $('body');
     const text = await body.getText();
     // Verify the UI shows upload feedback (success or validation error)
-    expect(text).toMatch(/erfolgreich|Fehler|Vorschau|Pflichtfeld|Version/);
+    expect(text).toMatch(/successful|error|preview|required field|Version/);
     return false;
   }
 }
 
-async function verifyVorlageInBackend(typ: string, expectedFileName: string) {
-  const vorlagen = await browser.execute(async () => {
-    const res = await fetch('/api/vorlagen');
+async function verifyTemplateInBackend(typ: string, expectedFileName: string) {
+  const templates = await browser.execute(async () => {
+    const res = await fetch('/api/templates');
     return res.json();
   });
 
-  const found = (vorlagen as Array<{ typ: string; dateiName: string; aktiv: boolean }>).some(
-    (v) => v.typ === typ && v.aktiv,
+  const found = (templates as Array<{ type: string; fileName: string; active: boolean }>).some(
+    (v) => v.type === typ && v.active,
   );
 
   expect(found).toBe(true);
 
   // Verify the download endpoint returns the file
   const downloadStatus = await browser.execute(async (t: string) => {
-    const res = await fetch(`/api/vorlagen/${t}/download`);
+    const res = await fetch(`/api/templates/${t}/download`);
     return res.status;
   }, typ);
 
@@ -82,45 +82,45 @@ async function verifyVersionDisplayed(typ: string) {
 }
 
 describe('Template uploads', () => {
-  describe('Spendenquittung Einstellungen', () => {
+  describe('Donation Receipt Settings', () => {
     beforeEach(async () => {
-      await browser.url('/spenden-quittung/einstellungen');
+      await browser.url('/donation-receipt/settings');
     });
 
-    it('uploads Anschreiben template (.docx)', async function () {
+    it('uploads Cover Letter template (.docx)', async function () {
       this.timeout(120000);
       const uploaded = await uploadDocxAndSave(
         '.docx',
         'Briefkopf spende.docx',
-        'Anschreiben Vorschau',
+        'Cover Letter Preview',
       );
       if (uploaded) {
-        await verifyVorlageInBackend('ANSCHREIBEN', 'Briefkopf spende.docx');
+        await verifyTemplateInBackend('ANSCHREIBEN', 'Briefkopf spende.docx');
       }
     });
 
-    it('uploads Quittung template (.pdf)', async function () {
+    it('uploads Receipt template (.pdf)', async function () {
       this.timeout(90000);
-      await uploadAndSave('.pdf', 'geldspende_verein.pdf', 'Quittung Vorschau');
-      await verifyVorlageInBackend('QUITTUNG', 'geldspende_verein.pdf');
+      await uploadAndSave('.pdf', 'geldspende_verein.pdf', 'Receipt Preview');
+      await verifyTemplateInBackend('QUITTUNG', 'geldspende_verein.pdf');
     });
   });
 
-  describe('Rechnung Einstellungen', () => {
+  describe('Invoice Settings', () => {
     beforeEach(async () => {
-      await browser.url('/rechnung/einstellungen');
+      await browser.url('/invoice/settings');
     });
 
     after(async () => {
       // Navigate back to settings to verify via UI
-      await browser.url('/rechnung/einstellungen');
+      await browser.url('/invoice/settings');
     });
 
-    it('uploads Rechnung template (.docx)', async function () {
+    it('uploads Invoice template (.docx)', async function () {
       this.timeout(120000);
-      const uploaded = await uploadDocxAndSave('.docx', 'Rechnung.docx', 'Rechnung Vorschau');
+      const uploaded = await uploadDocxAndSave('.docx', 'Rechnung.docx', 'Invoice Preview');
       if (uploaded) {
-        await verifyVorlageInBackend('RECHNUNG', 'Rechnung.docx');
+        await verifyTemplateInBackend('RECHNUNG', 'Rechnung.docx');
         await verifyVersionDisplayed('RECHNUNG');
       }
     });

@@ -4,24 +4,24 @@ import { ref } from 'vue';
 export const useAppStore = defineStore('app', () => {
   const appName = ref('MV Dashboard');
 
-  // true = aktive Quittungs-Vorlage vorhanden, false = keine, null = noch nicht geprüft
-  const quittungsVorlageVorhanden = ref<boolean | null>(null);
-  const rechnungsVorlageVorhanden = ref<boolean | null>(null);
+  // true = active receipt template present, false = none, null = not yet checked
+  const receiptTemplateAvailable = ref<boolean | null>(null);
+  const invoiceTemplateAvailable = ref<boolean | null>(null);
 
-  async function pruefeVorlagen() {
+  async function checkTemplates() {
     try {
-      const res = await fetch('/api/vorlagen');
+      const res = await fetch('/api/templates');
       if (!res.ok) {
-        quittungsVorlageVorhanden.value = false;
+        receiptTemplateAvailable.value = false;
         return;
       }
-      const vorlagen: { typ: string }[] = await res.json();
-      quittungsVorlageVorhanden.value = vorlagen.some((v) => v.typ === 'QUITTUNG');
-      rechnungsVorlageVorhanden.value = vorlagen.some((v) => v.typ === 'RECHNUNG');
+      const templates: { type: string }[] = await res.json();
+      receiptTemplateAvailable.value = templates.some((v) => v.type === 'QUITTUNG');
+      invoiceTemplateAvailable.value = templates.some((v) => v.type === 'RECHNUNG');
     } catch {
-      quittungsVorlageVorhanden.value = false;
+      receiptTemplateAvailable.value = false;
     }
   }
 
-  return { appName, quittungsVorlageVorhanden, rechnungsVorlageVorhanden, pruefeVorlagen };
+  return { appName, receiptTemplateAvailable, invoiceTemplateAvailable, checkTemplates };
 });

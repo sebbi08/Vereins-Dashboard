@@ -14,67 +14,67 @@ beforeAll(async () => {
 
 useCleanDatabase();
 
-describe('GET /api/einstellungen', () => {
+describe('GET /api/settings', () => {
   it('returns an object with the default settings keys', async () => {
     await initializeApp(); // seed defaults
-    const res = await request.get('/api/einstellungen');
+    const res = await request.get('/api/settings');
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('kassenwart');
-    expect(res.body).toHaveProperty('gemeinnuetzigerZweck');
-    expect(res.body).toHaveProperty('finanzamtName');
-    expect(res.body).toHaveProperty('steuernummer');
-    expect(res.body).toHaveProperty('freistellungsdatum');
-    expect(res.body).toHaveProperty('veranlagungszeitraum');
+    expect(res.body).toHaveProperty('treasurer');
+    expect(res.body).toHaveProperty('charitablePurpose');
+    expect(res.body).toHaveProperty('taxOfficeName');
+    expect(res.body).toHaveProperty('taxNumber');
+    expect(res.body).toHaveProperty('exemptionDate');
+    expect(res.body).toHaveProperty('assessmentPeriod');
   });
 
-  it('returns the default gemeinnuetzigerZweck value', async () => {
+  it('returns the default charitablePurpose value', async () => {
     await initializeApp();
-    const res = await request.get('/api/einstellungen');
-    expect(res.body.gemeinnuetzigerZweck).toBe('');
+    const res = await request.get('/api/settings');
+    expect(res.body.charitablePurpose).toBe('');
   });
 });
 
-describe('PUT /api/einstellungen', () => {
+describe('PUT /api/settings', () => {
   beforeEach(async () => {
     await initializeApp();
   });
 
   it('updates an existing setting', async () => {
     const res = await request
-      .put('/api/einstellungen')
-      .send({ kassenwart: 'Max Mustermann' })
+      .put('/api/settings')
+      .send({ treasurer: 'Max Mustermann' })
       .set('Content-Type', 'application/json');
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('message');
 
-    const updated = await prisma.systemEinstellung.findUnique({ where: { key: 'kassenwart' } });
+    const updated = await prisma.systemSetting.findUnique({ where: { key: 'treasurer' } });
     expect(updated?.value).toBe('Max Mustermann');
   });
 
   it('creates a new setting if it did not exist', async () => {
-    await prisma.systemEinstellung.deleteMany({ where: { key: 'finanzamtName' } });
+    await prisma.systemSetting.deleteMany({ where: { key: 'taxOfficeName' } });
 
     const res = await request
-      .put('/api/einstellungen')
-      .send({ finanzamtName: 'Finanzamt Berlin' })
+      .put('/api/settings')
+      .send({ taxOfficeName: 'Finanzamt Berlin' })
       .set('Content-Type', 'application/json');
 
     expect(res.status).toBe(200);
 
-    const setting = await prisma.systemEinstellung.findUnique({ where: { key: 'finanzamtName' } });
+    const setting = await prisma.systemSetting.findUnique({ where: { key: 'taxOfficeName' } });
     expect(setting?.value).toBe('Finanzamt Berlin');
   });
 
   it('ignores unknown keys', async () => {
     const res = await request
-      .put('/api/einstellungen')
+      .put('/api/settings')
       .send({ unknownKey: 'value' })
       .set('Content-Type', 'application/json');
 
     expect(res.status).toBe(200);
 
-    const setting = await prisma.systemEinstellung.findUnique({ where: { key: 'unknownKey' } });
+    const setting = await prisma.systemSetting.findUnique({ where: { key: 'unknownKey' } });
     expect(setting).toBeNull();
   });
 });

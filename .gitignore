@@ -34,3 +34,4 @@ AGENTS.md
 
 backend/prisma/generated
 .browser-cache
+e2e/data

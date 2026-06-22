@@ -14,21 +14,21 @@ beforeAll(async () => {
 
 useCleanDatabase();
 
-async function createSpender(data?: Partial<Parameters<typeof prisma.spender.create>[0]['data']>) {
-  return prisma.spender.create({
+async function createSpender(data?: Partial<Parameters<typeof prisma.donor.create>[0]['data']>) {
+  return prisma.donor.create({
     data: {
       name: 'Max Mustermann',
-      strasse: 'Musterstraße 1',
-      ort: 'Musterstadt',
-      briefAnrede: 'Sehr geehrter Herr Mustermann',
+      street: 'Musterstraße 1',
+      city: 'Musterstadt',
+      letterSalutation: 'Sehr geehrter Herr Mustermann',
       ...data,
     },
   });
 }
 
-describe('GET /api/spender', () => {
+describe('GET /api/donor', () => {
   it('returns an empty array when no spender exist', async () => {
-    const res = await request.get('/api/spender');
+    const res = await request.get('/api/donor');
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
@@ -37,7 +37,7 @@ describe('GET /api/spender', () => {
     await createSpender({ name: 'Zorro Z' });
     await createSpender({ name: 'Anna A' });
 
-    const res = await request.get('/api/spender');
+    const res = await request.get('/api/donor');
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(2);
     expect(res.body[0].name).toBe('Anna A');
@@ -48,7 +48,7 @@ describe('GET /api/spender', () => {
     await createSpender({ name: 'Hans Schmidt' });
     await createSpender({ name: 'Maria Müller' });
 
-    const res = await request.get('/api/spender?q=Schmidt');
+    const res = await request.get('/api/donor?q=Schmidt');
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
     expect(res.body[0].name).toBe('Hans Schmidt');
@@ -60,18 +60,18 @@ describe('GET /api/spender', () => {
     );
     await Promise.all(creates);
 
-    const res = await request.get('/api/spender');
+    const res = await request.get('/api/donor');
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(20);
   });
 });
 
-describe('PATCH /api/spender/:id', () => {
+describe('PATCH /api/donor/:id', () => {
   it('updates a spender field', async () => {
     const spender = await createSpender();
 
     const res = await request
-      .patch(`/api/spender/${spender.id}`)
+      .patch(`/api/donor/${spender.id}`)
       .send({ name: 'Max Updated' })
       .set('Content-Type', 'application/json');
 
@@ -80,7 +80,7 @@ describe('PATCH /api/spender/:id', () => {
   });
 
   it('returns 400 for an invalid id', async () => {
-    const res = await request.patch('/api/spender/not-a-number').send({ name: 'Test' });
+    const res = await request.patch('/api/donor/not-a-number').send({ name: 'Test' });
     expect(res.status).toBe(400);
   });
 });

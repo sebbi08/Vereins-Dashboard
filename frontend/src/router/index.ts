@@ -1,12 +1,12 @@
-import EinstellungenView from '@/views/EinstellungenView.vue';
+import DonationReceiptDetailView from '@/views/DonationReceiptDetailView.vue';
+import DonationReceiptFormView from '@/views/DonationReceiptFormView.vue';
+import DonationReceiptView from '@/views/DonationReceiptView.vue';
 import HomeView from '@/views/HomeView.vue';
-import RechnungView from '@/views/RechnungView.vue';
-import RechnungDetailView from '@/views/RechnungDetailView.vue';
-import RechnungEinstellungenView from '@/views/RechnungEinstellungenView.vue';
-import RechnungFormView from '@/views/RechnungFormView.vue';
-import SpendenQuittungDetailView from '@/views/SpendenQuittungDetailView.vue';
-import SpendenQuittungFormView from '@/views/SpendenQuittungFormView.vue';
-import SpendenQuittungView from '@/views/SpendenQuittungView.vue';
+import InvoiceDetailView from '@/views/InvoiceDetailView.vue';
+import InvoiceFormView from '@/views/InvoiceFormView.vue';
+import InvoiceSettingsView from '@/views/InvoiceSettingsView.vue';
+import InvoiceView from '@/views/InvoiceView.vue';
+import SettingsView from '@/views/SettingsView.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
 const router = createRouter({
@@ -14,54 +14,54 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: HomeView },
     {
-      path: '/spenden-quittung',
-      name: 'spenden-quittung',
-      component: SpendenQuittungView,
+      path: '/donation-receipt',
+      name: 'donation-receipt',
+      component: DonationReceiptView,
     },
     {
-      path: '/spenden-quittung/neu',
-      name: 'spenden-quittung-neu',
-      component: SpendenQuittungFormView,
+      path: '/donation-receipt/new',
+      name: 'donation-receipt-new',
+      component: DonationReceiptFormView,
     },
     {
-      path: '/spenden-quittung/:id',
-      name: 'spenden-quittung-detail',
-      component: SpendenQuittungDetailView,
+      path: '/donation-receipt/:id',
+      name: 'donation-receipt-detail',
+      component: DonationReceiptDetailView,
     },
     {
-      path: '/spenden-quittung/:id/revision',
-      name: 'spenden-quittung-revision',
-      component: SpendenQuittungFormView,
+      path: '/donation-receipt/:id/revision',
+      name: 'donation-receipt-revision',
+      component: DonationReceiptFormView,
     },
-    { path: '/rechnung', name: 'rechnung', component: RechnungView },
+    { path: '/invoice', name: 'invoice', component: InvoiceView },
     {
-      path: '/rechnung/neu',
-      name: 'rechnung-neu',
-      component: RechnungFormView,
-    },
-    {
-      path: '/rechnung/:id',
-      name: 'rechnung-detail',
-      component: RechnungDetailView,
+      path: '/invoice/new',
+      name: 'invoice-new',
+      component: InvoiceFormView,
     },
     {
-      path: '/rechnung/:id/revision',
-      name: 'rechnung-revision',
-      component: RechnungFormView,
+      path: '/invoice/:id',
+      name: 'invoice-detail',
+      component: InvoiceDetailView,
     },
     {
-      path: '/rechnung/einstellungen',
-      name: 'rechnung-einstellungen',
-      component: RechnungEinstellungenView,
+      path: '/invoice/:id/revision',
+      name: 'invoice-revision',
+      component: InvoiceFormView,
     },
     {
-      path: '/spenden-quittung/einstellungen',
-      name: 'spenden-quittung-einstellungen',
-      component: EinstellungenView,
+      path: '/invoice/settings',
+      name: 'invoice-settings',
+      component: InvoiceSettingsView,
     },
     {
-      path: '/einstellungen',
-      redirect: '/spenden-quittung/einstellungen',
+      path: '/donation-receipt/settings',
+      name: 'donation-receipt-settings',
+      component: SettingsView,
+    },
+    {
+      path: '/settings',
+      redirect: '/donation-receipt/settings',
     },
   ],
 });

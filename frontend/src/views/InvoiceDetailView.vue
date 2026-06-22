@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PdfStatus, RechnungDto, RechnungRevisionDto } from 'shared';
+import type { PdfStatus, InvoiceDto, InvoiceRevisionDto } from 'shared';
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 
@@ -7,33 +7,33 @@ const route = useRoute();
 const router = useRouter();
 const id = parseInt(String(route.params.id));
 
-const rechnung = ref<RechnungDto | null>(null);
-const laden = ref(false);
-const fehler = ref('');
-const storniertFehler = ref('');
-const retryPdfErfolg = ref<Record<number, string>>({});
-const retryPdfFehler = ref<Record<number, string>>({});
-const retryLaden = ref<Record<number, boolean>>({});
+const invoice = ref<InvoiceDto | null>(null);
+const loading = ref(false);
+const error = ref('');
+const cancelError = ref('');
+const retryPdfSuccess = ref<Record<number, string>>({});
+const retryPdfError = ref<Record<number, string>>({});
+const retryLoading = ref<Record<number, boolean>>({});
 
-async function laden_() {
-  laden.value = true;
+async function loadData() {
+  loading.value = true;
   try {
-    const res = await fetch(`/api/rechnung/${id}`);
+    const res = await fetch(`/api/invoice/${id}`);
     if (!res.ok) {
-      fehler.value = 'Rechnung konnte nicht geladen werden';
+      error.value = 'Invoice could not be loaded';
       return;
     }
-    rechnung.value = await res.json();
+    invoice.value = await res.json();
   } catch {
-    fehler.value = 'Netzwerkfehler';
+    error.value = 'Network error';
   } finally {
-    laden.value = false;
+    loading.value = false;
   }
 }
 
-onMounted(laden_);
+onMounted(loadData);
 
-function formatBetrag(cents: number) {
+function formatAmount(cents: number) {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(cents / 100);
 }
 
@@ -41,9 +41,9 @@ function formatDatum(iso: string) {
   return new Intl.DateTimeFormat('de-DE').format(new Date(iso));
 }
 
-function berechneBrutto(rev: RechnungRevisionDto): number {
-  const netto = rev.eingaben.positionen.reduce((sum, p) => sum + p.priceInCents, 0);
-  const steuer = Math.round(netto * (rev.eingaben.ust / 100));
+function berechneBrutto(rev: InvoiceRevisionDto): number {
+  const netto = rev.inputs.lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
+  const steuer = Math.round(netto * (rev.inputs.vat / 100));
   return netto + steuer;
 }
 
@@ -51,49 +51,49 @@ function ustLabel(ust: number): string {
   return ust === 7 ? '7%' : '19%';
 }
 
-function zahlungsartLabel(einzug: boolean): string {
-  return einzug ? 'Lastschrift (Einzug)' : 'Überweisung';
+function paymentMethodLabel(directDebit: boolean): string {
+  return directDebit ? 'Direct Debit' : 'Bank Transfer';
 }
 
-async function stornieren() {
-  storniertFehler.value = '';
+async function cancel() {
+  cancelError.value = '';
   try {
-    const res = await fetch(`/api/rechnung/${id}/stornieren`, { method: 'PATCH' });
+    const res = await fetch(`/api/invoice/${id}/cancel`, { method: 'PATCH' });
     if (!res.ok) {
       const err = await res.json();
-      storniertFehler.value = err.error || 'Fehler beim Stornieren';
+      cancelError.value = err.error || 'Error cancelling';
       return;
     }
-    await laden_();
+    await loadData();
   } catch {
-    storniertFehler.value = 'Netzwerkfehler';
+    cancelError.value = 'Network error';
   }
 }
 
 async function retryPdf(revisionId: number) {
-  retryPdfErfolg.value[revisionId] = '';
-  retryPdfFehler.value[revisionId] = '';
-  retryLaden.value[revisionId] = true;
+  retryPdfSuccess.value[revisionId] = '';
+  retryPdfError.value[revisionId] = '';
+  retryLoading.value[revisionId] = true;
 
   try {
-    const res = await fetch(`/api/rechnung/revision/${revisionId}/retry-pdf`, { method: 'POST' });
+    const res = await fetch(`/api/invoice/revision/${revisionId}/retry-pdf`, { method: 'POST' });
     const result = await res.json();
 
     if (res.ok) {
-      retryPdfErfolg.value[revisionId] = 'PDF erfolgreich generiert';
-      await laden_();
+      retryPdfSuccess.value[revisionId] = 'PDF generated successfully';
+      await loadData();
     } else {
-      retryPdfFehler.value[revisionId] = result.error || 'Fehler beim Retry';
+      retryPdfError.value[revisionId] = result.error || 'Error on retry';
     }
   } catch {
-    retryPdfFehler.value[revisionId] = 'Netzwerkfehler';
+    retryPdfError.value[revisionId] = 'Network error';
   } finally {
-    retryLaden.value[revisionId] = false;
+    retryLoading.value[revisionId] = false;
   }
 }
 
 function downloadPdf(revisionId: number) {
-  window.open(`/api/rechnung/revision/${revisionId}/download`, '_blank');
+  window.open(`/api/invoice/revision/${revisionId}/download`, '_blank');
 }
 
 function pdfStatusBadge(status: PdfStatus) {
@@ -109,17 +109,17 @@ function pdfStatusBadge(status: PdfStatus) {
 <template>
   <div>
     <div class="flex items-center gap-3 mb-6">
-      <button class="text-gray-400 hover:text-gray-700" @click="router.push('/rechnung')">
-        ← Zurück
+      <button class="text-gray-400 hover:text-gray-700" @click="router.push('/invoice')">
+        ← Back
       </button>
-      <h2 class="text-2xl font-bold text-gray-800">Rechnung {{ rechnung?.nummer }}</h2>
+      <h2 class="text-2xl font-bold text-gray-800">Invoice {{ invoice?.number }}</h2>
     </div>
 
-    <div v-if="laden" class="p-8 text-center text-gray-400">Lädt…</div>
-    <div v-else-if="fehler" class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">
-      {{ fehler }}
+    <div v-if="loading" class="p-8 text-center text-gray-400">Loading…</div>
+    <div v-else-if="error" class="bg-red-50 border border-red-200 text-red-700 p-4 rounded-lg">
+      {{ error }}
     </div>
-    <template v-else-if="rechnung">
+    <template v-else-if="invoice">
       <div class="space-y-6">
         <!-- Status -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -129,23 +129,23 @@ function pdfStatusBadge(status: PdfStatus) {
               <span
                 :class="[
                   'inline-block text-sm font-medium px-2 py-0.5 rounded-full mt-1',
-                  rechnung.status === 'AKTIV'
+                  invoice.status === 'AKTIV'
                     ? 'bg-green-100 text-green-700'
                     : 'bg-gray-100 text-gray-500',
                 ]"
               >
-                {{ rechnung.status }}
+                {{ invoice.status }}
               </span>
             </div>
             <div>
-              <p class="text-sm text-gray-500">Erstellt am</p>
+              <p class="text-sm text-gray-500">Created at</p>
               <p class="text-sm font-medium text-gray-800 mt-1">
-                {{ formatDatum(rechnung.createdAt) }}
+                {{ formatDatum(invoice.createdAt) }}
               </p>
             </div>
             <div>
-              <p class="text-sm text-gray-500">Empfänger</p>
-              <p class="text-sm font-medium text-gray-800 mt-1">{{ rechnung.empfaenger.name }}</p>
+              <p class="text-sm text-gray-500">Recipient</p>
+              <p class="text-sm font-medium text-gray-800 mt-1">{{ invoice.recipient.name }}</p>
             </div>
           </div>
         </div>
@@ -153,34 +153,34 @@ function pdfStatusBadge(status: PdfStatus) {
         <!-- Actions -->
         <div class="flex items-center gap-3">
           <button
-            v-if="rechnung.status === 'AKTIV'"
+            v-if="invoice.status === 'AKTIV'"
             class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-            @click="router.push(`/rechnung/${id}/revision`)"
+            @click="router.push(`/invoice/${id}/revision`)"
           >
-            Neue Revision
+            New Revision
           </button>
           <button
-            v-if="rechnung.status === 'AKTIV'"
+            v-if="invoice.status === 'AKTIV'"
             class="border border-red-300 text-red-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
-            @click="stornieren"
+            @click="cancel"
           >
-            Stornieren
+            Cancel
           </button>
-          <p v-if="storniertFehler" class="text-red-600 text-sm">{{ storniertFehler }}</p>
+          <p v-if="cancelError" class="text-red-600 text-sm">{{ cancelError }}</p>
         </div>
 
-        <!-- Revisionen -->
+        <!-- Revisions -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <h3 class="font-semibold text-gray-800 px-6 py-4 border-b">Revisionen</h3>
-          <div v-if="!rechnung.revisionen?.length" class="p-6 text-center text-gray-400 text-sm">
-            Keine Revisionen vorhanden
+          <h3 class="font-semibold text-gray-800 px-6 py-4 border-b">Revisions</h3>
+          <div v-if="!invoice.revisions?.length" class="p-6 text-center text-gray-400 text-sm">
+            No revisions available
           </div>
           <div v-else class="divide-y">
-            <div v-for="rev in rechnung.revisionen" :key="rev.id" class="p-6">
+            <div v-for="rev in invoice.revisions" :key="rev.id" class="p-6">
               <div class="flex items-start justify-between mb-3">
                 <div class="flex items-center gap-3">
                   <span class="text-sm font-semibold text-gray-800"
-                    >Revision {{ rev.revisionNummer }}</span
+                    >Revision {{ rev.revisionNumber }}</span
                   >
                   <span :class="pdfStatusBadge(rev.pdfStatus)">{{ rev.pdfStatus }}</span>
                   <span
@@ -194,49 +194,49 @@ function pdfStatusBadge(status: PdfStatus) {
                     {{ rev.status }}
                   </span>
                 </div>
-                <p class="text-xs text-gray-400">{{ formatDatum(rev.erstelltAm) }}</p>
+                <p class="text-xs text-gray-400">{{ formatDatum(rev.createdAt) }}</p>
               </div>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                 <div>
-                  <span class="text-gray-500">Empfänger:</span>
+                  <span class="text-gray-500">Recipient:</span>
                   <span class="text-gray-800"
-                    >{{ rev.eingaben.name }}, {{ rev.eingaben.strasse }},
-                    {{ rev.eingaben.ort }}</span
+                    >{{ rev.inputs.name }}, {{ rev.inputs.street }},
+                    {{ rev.inputs.city }}</span
                   >
                 </div>
                 <div>
-                  <span class="text-gray-500">Titel:</span>
-                  <span class="text-gray-800">{{ rev.eingaben.title }}</span>
+                  <span class="text-gray-500">Title:</span>
+                  <span class="text-gray-800">{{ rev.inputs.title }}</span>
                 </div>
                 <div>
-                  <span class="text-gray-500">USt:</span>
-                  <span class="text-gray-800">{{ ustLabel(rev.eingaben.ust) }}</span>
+                  <span class="text-gray-500">VAT:</span>
+                  <span class="text-gray-800">{{ ustLabel(rev.inputs.vat) }}</span>
                 </div>
                 <div>
-                  <span class="text-gray-500">Zahlung:</span>
-                  <span class="text-gray-800">{{ zahlungsartLabel(rev.eingaben.einzug) }}</span>
+                  <span class="text-gray-500">Payment:</span>
+                  <span class="text-gray-800">{{ paymentMethodLabel(rev.inputs.directDebit) }}</span>
                 </div>
                 <div class="md:col-span-2">
-                  <span class="text-gray-500">Betrag (Brutto):</span>
+                  <span class="text-gray-500">Amount (Gross):</span>
                   <span class="text-gray-800 font-medium">{{
-                    formatBetrag(berechneBrutto(rev))
+                    formatAmount(berechneBrutto(rev))
                   }}</span>
                 </div>
               </div>
 
               <!-- Positionen -->
               <div class="mt-3">
-                <p class="text-xs text-gray-500 mb-1">Positionen:</p>
+                <p class="text-xs text-gray-500 mb-1">Line Items:</p>
                 <div class="bg-gray-50 rounded-lg p-3 text-sm">
                   <div
-                    v-for="(pos, idx) in rev.eingaben.positionen"
+                    v-for="(pos, idx) in rev.inputs.lineItems"
                     :key="idx"
                     class="flex justify-between py-1 border-b border-gray-100 last:border-0"
                   >
                     <span class="text-gray-700">{{ pos.text }}</span>
                     <span class="text-gray-800 font-medium">{{
-                      formatBetrag(pos.priceInCents)
+                      formatAmount(pos.priceInCents)
                     }}</span>
                   </div>
                 </div>
@@ -249,21 +249,21 @@ function pdfStatusBadge(status: PdfStatus) {
                   class="text-blue-600 hover:underline text-sm"
                   @click="downloadPdf(rev.id)"
                 >
-                  PDF herunterladen
+                  Download PDF
                 </button>
                 <button
                   v-if="rev.pdfStatus === 'FAILED' && rev.status === 'AKTIV'"
                   class="text-amber-600 hover:underline text-sm"
-                  :disabled="retryLaden[rev.id]"
+                  :disabled="retryLoading[rev.id]"
                   @click="retryPdf(rev.id)"
                 >
-                  {{ retryLaden[rev.id] ? 'Generiere...' : 'PDF neu generieren' }}
+                  {{ retryLoading[rev.id] ? 'Generiere...' : 'PDF neu generieren' }}
                 </button>
-                <p v-if="retryPdfErfolg[rev.id]" class="text-green-600 text-xs">
-                  {{ retryPdfErfolg[rev.id] }}
+                <p v-if="retryPdfSuccess[rev.id]" class="text-green-600 text-xs">
+                  {{ retryPdfSuccess[rev.id] }}
                 </p>
-                <p v-if="retryPdfFehler[rev.id]" class="text-red-600 text-xs">
-                  {{ retryPdfFehler[rev.id] }}
+                <p v-if="retryPdfError[rev.id]" class="text-red-600 text-xs">
+                  {{ retryPdfError[rev.id] }}
                 </p>
               </div>
             </div>

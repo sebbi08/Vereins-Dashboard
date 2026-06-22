@@ -1,32 +1,32 @@
-import { createPinia } from 'pinia';
 import { mount } from '@vue/test-utils';
-import type { SpenderDto } from 'shared';
+import { createPinia } from 'pinia';
+import type { DonorDto } from 'shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import SpenderAutocomplete from '../components/SpenderAutocomplete.vue';
+import DonorAutocomplete from '../components/DonorAutocomplete.vue';
 
-const mockSpender: SpenderDto[] = [
+const mockDonor: DonorDto[] = [
   {
     id: 1,
     name: 'Hans Schmidt',
-    strasse: 'Musterstr. 1',
-    ort: 'Berlin',
-    briefAnrede: 'Sehr geehrter Herr Schmidt',
-    adressAnrede: null,
+    street: 'Musterstr. 1',
+    city: 'Berlin',
+    letterSalutation: 'Sehr geehrter Herr Schmidt',
+    addressSalutation: null,
   },
   {
     id: 2,
     name: 'Maria Müller',
-    strasse: 'Testgasse 2',
-    ort: 'Hamburg',
-    briefAnrede: 'Sehr geehrte Frau Müller',
-    adressAnrede: null,
+    street: 'Testgasse 2',
+    city: 'Hamburg',
+    letterSalutation: 'Sehr geehrte Frau Müller',
+    addressSalutation: null,
   },
 ];
 
-describe('SpenderAutocomplete', () => {
+describe('DonorAutocomplete', () => {
   beforeEach(() => {
     global.fetch = vi.fn().mockResolvedValue({
-      json: vi.fn().mockResolvedValue(mockSpender),
+      json: vi.fn().mockResolvedValue(mockDonor),
     } as unknown as Response);
     vi.useFakeTimers();
   });
@@ -37,7 +37,7 @@ describe('SpenderAutocomplete', () => {
   });
 
   it('renders a text input', () => {
-    const wrapper = mount(SpenderAutocomplete, {
+    const wrapper = mount(DonorAutocomplete, {
       props: { modelValue: null },
       global: { plugins: [createPinia()] },
     });
@@ -45,8 +45,8 @@ describe('SpenderAutocomplete', () => {
   });
 
   it('shows modelValue name in the input when provided', () => {
-    const wrapper = mount(SpenderAutocomplete, {
-      props: { modelValue: mockSpender[0] },
+    const wrapper = mount(DonorAutocomplete, {
+      props: { modelValue: mockDonor[0] },
       global: { plugins: [createPinia()] },
     });
     const input = wrapper.find('input').element as HTMLInputElement;
@@ -54,7 +54,7 @@ describe('SpenderAutocomplete', () => {
   });
 
   it('does not call fetch when query is shorter than 2 characters', async () => {
-    const wrapper = mount(SpenderAutocomplete, {
+    const wrapper = mount(DonorAutocomplete, {
       props: { modelValue: null },
       global: { plugins: [createPinia()] },
     });
@@ -66,7 +66,7 @@ describe('SpenderAutocomplete', () => {
   });
 
   it('calls fetch with the search query after debounce', async () => {
-    const wrapper = mount(SpenderAutocomplete, {
+    const wrapper = mount(DonorAutocomplete, {
       props: { modelValue: null },
       global: { plugins: [createPinia()] },
     });
@@ -74,12 +74,12 @@ describe('SpenderAutocomplete', () => {
     await input.setValue('Han');
     await input.trigger('input');
     vi.runAllTimers();
-    expect(global.fetch).toHaveBeenCalledWith('/api/spender?q=Han');
+    expect(global.fetch).toHaveBeenCalledWith('/api/donor?q=Han');
   });
 
   it('emits update:modelValue with null when user types', async () => {
-    const wrapper = mount(SpenderAutocomplete, {
-      props: { modelValue: mockSpender[0] },
+    const wrapper = mount(DonorAutocomplete, {
+      props: { modelValue: mockDonor[0] },
       global: { plugins: [createPinia()] },
     });
     const input = wrapper.find('input');
@@ -90,7 +90,7 @@ describe('SpenderAutocomplete', () => {
   });
 
   it('shows dropdown results after search', async () => {
-    const wrapper = mount(SpenderAutocomplete, {
+    const wrapper = mount(DonorAutocomplete, {
       props: { modelValue: null },
       global: { plugins: [createPinia()] },
     });
@@ -107,7 +107,7 @@ describe('SpenderAutocomplete', () => {
   });
 
   it('emits update:modelValue with the selected spender', async () => {
-    const wrapper = mount(SpenderAutocomplete, {
+    const wrapper = mount(DonorAutocomplete, {
       props: { modelValue: null },
       global: { plugins: [createPinia()] },
     });
@@ -131,7 +131,7 @@ describe('SpenderAutocomplete', () => {
   });
 
   it('emits "neu" event when new donor option is clicked', async () => {
-    const wrapper = mount(SpenderAutocomplete, {
+    const wrapper = mount(DonorAutocomplete, {
       props: { modelValue: null },
       global: { plugins: [createPinia()] },
     });

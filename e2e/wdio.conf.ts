@@ -1,18 +1,37 @@
 import { Browser, detectBrowserPlatform, install, resolveBuildId } from '@puppeteer/browsers';
 import type { Options } from '@wdio/types';
-
 import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
-import { type StartedTestContainer } from 'testcontainers';
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const BROWSER_CACHE_DIR = path.join(PROJECT_ROOT, '.browser-cache');
 
+const BACKEND_URL = 'http://localhost:3000';
+const FRONTEND_URL = 'http://localhost:5173';
+
 const IS_HEADLESS = process.env.WDIO_HEADLESS !== 'false'; // true by default
 
-let startedContainer: StartedTestContainer | undefined;
 let chromeBinaryPath: string | undefined;
 let chromedriverProcess: ChildProcess | undefined;
+
+async function waitForServer(url: string, timeout = 30_000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    try {
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(t);
+      if (res.ok || res.status < 500) return;
+    } catch {
+      // not ready yet
+    }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(`Server at ${url} did not start within ${timeout}ms`);
+}
+
+// ── WDIO config ──────────────────────────────────────────────────────
 
 export const config: Options.Testrunner = {
   runner: 'local',
@@ -37,7 +56,7 @@ export const config: Options.Testrunner = {
   ],
 
   logLevel: 'error',
-  baseUrl: 'http://localhost:5173',
+  baseUrl: FRONTEND_URL,
   waitforTimeout: 10_000,
   connectionRetryTimeout: 120_000,
   connectionRetryCount: 3,
@@ -51,8 +70,25 @@ export const config: Options.Testrunner = {
     timeout: 60_000,
   },
 
+  // ── before each spec file: reset backend data ────────────────────
+
+  async before() {
+    console.log('\n[E2E] Resetting backend data before spec…');
+    try {
+      const res = await fetch(BACKEND_URL + '/api/e2e/reset', { method: 'POST' });
+      const body = await res.json();
+      if (!res.ok) throw new Error(`Reset failed: ${JSON.stringify(body)}`);
+      console.log('[E2E] Backend data reset complete\n');
+    } catch (err) {
+      console.error('[E2E] Data reset failed:', err);
+      throw err;
+    }
+  },
+
+  // ── once before all specs: download browsers, wait for servers ────
+
   async onPrepare(_config, capabilities) {
-    // Download and start chromedriver matching the Chrome version
+    // ── Download Chrome + ChromeDriver ───────────────────────────
     const platform = detectBrowserPlatform()!;
     const chromeBuildId = await resolveBuildId(Browser.CHROME, platform, 'stable');
     console.log(`\n[E2E] Ensuring Chrome ${chromeBuildId} is available…`);
@@ -74,12 +110,11 @@ export const config: Options.Testrunner = {
     console.log(`[E2E] Chrome binary: ${chromeBinaryPath}`);
     console.log(`[E2E] ChromeDriver: ${chromedriverInstall.executablePath}`);
 
-    // Start chromedriver
+    // ── Start ChromeDriver ───────────────────────────────────────
     chromedriverProcess = spawn(chromedriverInstall.executablePath, ['--port=9515'], {
       stdio: 'pipe',
     });
 
-    // Wait for chromedriver status endpoint to respond
     for (let i = 0; i < 40; i++) {
       try {
         const res = await fetch('http://localhost:9515/status');
@@ -89,68 +124,38 @@ export const config: Options.Testrunner = {
       }
     }
 
-    // Verify it's running
     try {
       const status = await fetch('http://localhost:9515/status');
       if (!status.ok) throw new Error(`ChromeDriver status: ${status.status}`);
     } catch {
       throw new Error('ChromeDriver failed to start');
     }
+    console.log('[E2E] ChromeDriver started');
 
-    console.log('[E2E] ChromeDriver started\n');
-
-    let baseUrl: string;
-
-    const devServerPort = process.env.WDIO_LOCAL_PORT ?? '5173';
-    baseUrl = `http://localhost:${devServerPort}`;
-    console.log(`\n[E2E] Using local dev server at ${baseUrl}`);
-
-    console.log(`[E2E] Waiting for dev server to be ready…`);
-    let isReady = false;
-    let attempts = 0;
-    const maxAttempts = 60;
-
-    while (!isReady && attempts < maxAttempts) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
-        const response = await fetch(baseUrl, { signal: controller.signal });
-        clearTimeout(timeoutId);
-        isReady = response.status < 500;
-        if (isReady) {
-          console.log(`[E2E] Dev server is ready!`);
-        }
-      } catch {
-        // Server not ready yet
-      }
-
-      if (!isReady) {
-        attempts++;
-        await new Promise((r) => setTimeout(r, 1000));
-      }
-    }
-
-    if (!isReady) {
-      throw new Error(
-        `Dev server at ${baseUrl} did not become ready within ${maxAttempts} seconds. ` +
-          `Make sure to run \`npm run dev\` before running local e2e tests. ` +
-          `(You can override the port with WDIO_LOCAL_PORT env var if running on a different port.)`,
-      );
-    }
-
-    console.log(`[E2E] Tests will run against: ${baseUrl}\n`);
-
-    _config.baseUrl = baseUrl;
+    // ── Configure base URL + Chrome binary for all capabilities ──
+    _config.baseUrl = FRONTEND_URL;
     for (const cap of Array.isArray(capabilities) ? capabilities : [capabilities]) {
       const c = cap as Record<string, unknown>;
-      c['wdio:baseUrl'] = baseUrl;
+      c['wdio:baseUrl'] = FRONTEND_URL;
       const opts = (c['goog:chromeOptions'] ?? {}) as Record<string, unknown>;
       const args = (opts['args'] as string[] | undefined) ?? [];
       opts['binary'] = chromeBinaryPath;
       opts['args'] = args;
       c['goog:chromeOptions'] = opts;
     }
+
+    // ── Wait for servers started by run-tests.sh ─────────────────
+    console.log(`\n[E2E] Waiting for backend on ${BACKEND_URL}…`);
+    await waitForServer(BACKEND_URL + '/api/health', 60_000);
+    console.log('[E2E] Backend ready');
+
+    console.log(`[E2E] Waiting for frontend on ${FRONTEND_URL}…`);
+    await waitForServer(FRONTEND_URL, 60_000);
+    console.log('[E2E] Frontend ready');
+    console.log(`[E2E] Tests will run against: ${FRONTEND_URL}\n`);
   },
+
+  // ── cleanup after all specs ─────────────────────────────────────
 
   async onComplete() {
     if (chromedriverProcess) {
@@ -163,9 +168,6 @@ export const config: Options.Testrunner = {
         }
       }, 2000);
     }
-    if (startedContainer) {
-      console.log('\n[E2E] Stopping container…');
-      await startedContainer.stop();
-    }
+    console.log('\n[E2E] Done');
   },
 };

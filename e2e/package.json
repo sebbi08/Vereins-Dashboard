@@ -3,8 +3,8 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "test": "wdio run wdio.conf.ts",
-    "test:headed": "WDIO_HEADLESS=false wdio run wdio.conf.ts"
+    "test": "bash run-tests.sh",
+    "test:headed": "export WDIO_HEADLESS=false && bash run-tests.sh"
   },
   "devDependencies": {
     "@puppeteer/browsers": "^2.13.1",

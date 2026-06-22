@@ -1,17 +1,17 @@
 import type { PrismaClient } from '../../prisma/generated/client.js';
 
-export async function generiereRechnungsNummer(
+export async function generateInvoiceNumber(
   prisma: PrismaClient,
-): Promise<{ nummer: string; jahr: number; laufendeNummer: number }> {
-  const jahr = new Date().getFullYear();
+): Promise<{ number: string; year: number; runningNumber: number }> {
+  const year = new Date().getFullYear();
 
-  const letzteRechnung = await prisma.rechnung.findFirst({
-    where: { jahr },
-    orderBy: { laufendeNummer: 'desc' },
+  const lastInvoice = await prisma.invoice.findFirst({
+    where: { year },
+    orderBy: { runningNumber: 'desc' },
   });
 
-  const laufendeNummer = letzteRechnung ? letzteRechnung.laufendeNummer + 1 : 1;
-  const nummer = `${laufendeNummer} / ${jahr}`;
+  const runningNumber = lastInvoice ? lastInvoice.runningNumber + 1 : 1;
+  const number = `${runningNumber} / ${year}`;
 
-  return { nummer, jahr, laufendeNummer };
+  return { number, year, runningNumber };
 }

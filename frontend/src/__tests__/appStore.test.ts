@@ -10,62 +10,62 @@ describe('useAppStore', () => {
   it('has correct initial state', () => {
     const store = useAppStore();
     expect(store.appName).toBe('MV Dashboard');
-    expect(store.quittungsVorlageVorhanden).toBeNull();
+    expect(store.receiptTemplateAvailable).toBeNull();
   });
 
-  it('sets quittungsVorlageVorhanden to true when a QUITTUNG vorlage exists', async () => {
+  it('sets receiptTemplateAvailable to true when a QUITTUNG template exists', async () => {
     global.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: vi.fn().mockResolvedValueOnce([{ typ: 'QUITTUNG', id: 1 }]),
+      json: vi.fn().mockResolvedValueOnce([{ type: 'QUITTUNG', id: 1 }]),
     } as unknown as Response);
 
     const store = useAppStore();
-    await store.pruefeVorlagen();
+    await store.checkTemplates();
 
-    expect(store.quittungsVorlageVorhanden).toBe(true);
+    expect(store.receiptTemplateAvailable).toBe(true);
   });
 
-  it('sets quittungsVorlageVorhanden to false when no QUITTUNG vorlage exists', async () => {
+  it('sets receiptTemplateAvailable to false when no QUITTUNG template exists', async () => {
     global.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
-      json: vi.fn().mockResolvedValueOnce([{ typ: 'ANSCHREIBEN', id: 1 }]),
+      json: vi.fn().mockResolvedValueOnce([{ type: 'ANSCHREIBEN', id: 1 }]),
     } as unknown as Response);
 
     const store = useAppStore();
-    await store.pruefeVorlagen();
+    await store.checkTemplates();
 
-    expect(store.quittungsVorlageVorhanden).toBe(false);
+    expect(store.receiptTemplateAvailable).toBe(false);
   });
 
-  it('sets quittungsVorlageVorhanden to false when fetch returns a non-ok response', async () => {
+  it('sets receiptTemplateAvailable to false when fetch returns a non-ok response', async () => {
     global.fetch = vi.fn().mockResolvedValueOnce({
       ok: false,
     } as unknown as Response);
 
     const store = useAppStore();
-    await store.pruefeVorlagen();
+    await store.checkTemplates();
 
-    expect(store.quittungsVorlageVorhanden).toBe(false);
+    expect(store.receiptTemplateAvailable).toBe(false);
   });
 
-  it('sets quittungsVorlageVorhanden to false when fetch throws', async () => {
+  it('sets receiptTemplateAvailable to false when fetch throws', async () => {
     global.fetch = vi.fn().mockRejectedValueOnce(new Error('Network error'));
 
     const store = useAppStore();
-    await store.pruefeVorlagen();
+    await store.checkTemplates();
 
-    expect(store.quittungsVorlageVorhanden).toBe(false);
+    expect(store.receiptTemplateAvailable).toBe(false);
   });
 
-  it('sets quittungsVorlageVorhanden to false when vorlagen list is empty', async () => {
+  it('sets receiptTemplateAvailable to false when vorlagen list is empty', async () => {
     global.fetch = vi.fn().mockResolvedValueOnce({
       ok: true,
       json: vi.fn().mockResolvedValueOnce([]),
     } as unknown as Response);
 
     const store = useAppStore();
-    await store.pruefeVorlagen();
+    await store.checkTemplates();
 
-    expect(store.quittungsVorlageVorhanden).toBe(false);
+    expect(store.receiptTemplateAvailable).toBe(false);
   });
 });
