@@ -49,6 +49,10 @@ function formatDate(iso: string) {
   return new Intl.DateTimeFormat('de-DE').format(new Date(iso));
 }
 
+function openInvoiceDetails(id: number) {
+  router.push(`/invoice/${id}`);
+}
+
 const totalCount = computed(() => invoices.value.length);
 </script>
 
@@ -85,10 +89,7 @@ const totalCount = computed(() => invoices.value.length);
       <span class="mt-0.5 text-lg leading-none">⚠️</span>
       <span>
         No invoice template uploaded. Please upload a template before creating invoices.
-        <router-link
-          to="/invoice/settings"
-          class="ml-1 font-medium underline hover:text-amber-900"
-        >
+        <router-link to="/invoice/settings" class="ml-1 font-medium underline hover:text-amber-900">
           Go to Settings →</router-link
         >
       </span>
@@ -157,7 +158,12 @@ const totalCount = computed(() => invoices.value.length);
           <tr
             v-for="r in invoices"
             :key="r.id"
-            class="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+            class="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
+            tabindex="0"
+            role="button"
+            @click="openInvoiceDetails(r.id)"
+            @keydown.enter.prevent="openInvoiceDetails(r.id)"
+            @keydown.space.prevent="openInvoiceDetails(r.id)"
           >
             <td class="px-4 py-3 font-mono text-xs font-medium text-gray-800">{{ r.number }}</td>
             <td class="px-4 py-3 text-gray-700">{{ r.recipientName }}</td>
@@ -180,14 +186,8 @@ const totalCount = computed(() => invoices.value.length);
             </td>
             <td class="px-4 py-3 text-right">
               <button
-                class="text-blue-600 hover:underline text-xs mr-3"
-                @click="router.push(`/invoice/${r.id}`)"
-              >
-                Details
-              </button>
-              <button
-                class="text-gray-500 hover:text-blue-600 text-xs"
-                @click="router.push(`/invoice/new?copyFrom=${r.id}`)"
+                class="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors"
+                @click.stop="router.push(`/invoice/new?copyFrom=${r.id}`)"
               >
                 Copy
               </button>

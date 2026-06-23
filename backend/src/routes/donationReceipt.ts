@@ -367,7 +367,9 @@ donationReceiptRouter.post('/', async (req, res) => {
 
       if (body.inputs.withCoverLetter) {
         donorUpdateData.letterSalutation = body.inputs.letterSalutation.trim();
-        donorUpdateData.addressSalutation = normalizeAddressSalutation(body.inputs.addressSalutation);
+        donorUpdateData.addressSalutation = normalizeAddressSalutation(
+          body.inputs.addressSalutation,
+        );
       }
 
       await tx.donor.update({ where: { id: donorId }, data: donorUpdateData });

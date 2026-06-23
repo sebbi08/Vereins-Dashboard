@@ -293,7 +293,64 @@ invoiceRouter.post('/revision/:revisionId/send-email', async (req, res) => {
     return;
   }
 
+  const revision = await prisma.invoiceRevision.findUnique({
+    where: { id },
+    select: { id: true, invoiceId: true },
+  });
+  if (!revision) {
+    res.status(404).json({ error: 'Revision not found' });
+    return;
+  }
+
+  const latestRevision = await prisma.invoiceRevision.findFirst({
+    where: { invoiceId: revision.invoiceId },
+    orderBy: { revisionNumber: 'desc' },
+    select: { id: true },
+  });
+
+  if (!latestRevision || latestRevision.id !== id) {
+    res.status(400).json({ error: 'Email can only be sent for the latest revision' });
+    return;
+  }
+
   const result = await sendInvoiceEmail(prisma, id);
+  if (result.success) {
+    res.json({ emailStatus: 'SENT' as const, emailError: null });
+  } else {
+    res.status(400).json({ emailStatus: 'FAILED' as const, emailError: result.error });
+  }
+});
+
+// POST /api/invoice/revision/:revisionId/send-test-email
+// NOTE: This route MUST come before /:id to avoid matching "send-test-email" as an id
+invoiceRouter.post('/revision/:revisionId/send-test-email', async (req, res) => {
+  const id = parseInt(req.params.revisionId);
+  if (isNaN(id)) {
+    res.status(400).json({ error: 'Invalid revision ID' });
+    return;
+  }
+
+  const revision = await prisma.invoiceRevision.findUnique({
+    where: { id },
+    select: { id: true, invoiceId: true },
+  });
+  if (!revision) {
+    res.status(404).json({ error: 'Revision not found' });
+    return;
+  }
+
+  const latestRevision = await prisma.invoiceRevision.findFirst({
+    where: { invoiceId: revision.invoiceId },
+    orderBy: { revisionNumber: 'desc' },
+    select: { id: true },
+  });
+
+  if (!latestRevision || latestRevision.id !== id) {
+    res.status(400).json({ error: 'Email can only be sent for the latest revision' });
+    return;
+  }
+
+  const result = await sendInvoiceEmail(prisma, id, { forceTestAddress: true });
   if (result.success) {
     res.json({ emailStatus: 'SENT' as const, emailError: null });
   } else {

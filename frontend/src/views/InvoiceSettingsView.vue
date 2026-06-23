@@ -75,7 +75,10 @@ async function sendTestEmail() {
     if (res.ok) {
       emailTestResult.value = { success: true, message: data.message || 'Test email sent' };
     } else {
-      emailTestResult.value = { success: false, message: data.error || 'Failed to send test email' };
+      emailTestResult.value = {
+        success: false,
+        message: data.error || 'Failed to send test email',
+      };
     }
   } catch {
     emailTestResult.value = { success: false, message: 'Network error' };
@@ -366,10 +369,7 @@ async function saveEditRec() {
         <div v-if="uploadSuccess" class="text-green-600 text-xs mb-2">
           {{ uploadSuccess }}
         </div>
-        <label
-          class="cursor-pointer"
-          :class="{ 'pointer-events-none opacity-50': uploadLoading }"
-        >
+        <label class="cursor-pointer" :class="{ 'pointer-events-none opacity-50': uploadLoading }">
           <span
             class="inline-flex items-center gap-1.5 border border-gray-300 text-gray-600 px-3 py-1.5 rounded-lg text-xs hover:bg-gray-50"
           >
@@ -509,14 +509,20 @@ async function saveEditRec() {
           :disabled="emailTestLoading"
           @click="sendTestEmail"
         >
-          <span v-if="emailTestLoading" class="animate-spin rounded-full h-3 w-3 border-2 border-gray-400 border-b-transparent inline-block mr-1"></span>
+          <span
+            v-if="emailTestLoading"
+            class="animate-spin rounded-full h-3 w-3 border-2 border-gray-400 border-b-transparent inline-block mr-1"
+          ></span>
           {{ emailTestLoading ? 'Sending…' : 'Send Test Email' }}
         </button>
       </div>
 
       <p v-if="emailSaveSuccess" class="text-green-600 text-xs mt-2">{{ emailSaveSuccess }}</p>
       <p v-if="emailSaveError" class="text-red-600 text-xs mt-2">{{ emailSaveError }}</p>
-      <div v-if="emailTestResult" :class="['text-xs mt-2', emailTestResult.success ? 'text-green-600' : 'text-red-600']">
+      <div
+        v-if="emailTestResult"
+        :class="['text-xs mt-2', emailTestResult.success ? 'text-green-600' : 'text-red-600']"
+      >
         {{ emailTestResult.message }}
       </div>
     </div>
@@ -546,7 +552,10 @@ async function saveEditRec() {
       </p>
 
       <div v-if="recLoading" class="py-6 text-center text-gray-400 text-sm">Loading…</div>
-      <div v-else-if="filteredRecipients.length === 0" class="py-6 text-center text-gray-400 text-sm">
+      <div
+        v-else-if="filteredRecipients.length === 0"
+        class="py-6 text-center text-gray-400 text-sm"
+      >
         No recipients found.
       </div>
       <table v-else class="w-full text-sm">
@@ -568,23 +577,51 @@ async function saveEditRec() {
           >
             <template v-if="editingRecId === r.id">
               <td class="px-1 py-1">
-                <input v-model="recEditForm.name" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  v-model="recEditForm.name"
+                  type="text"
+                  class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </td>
               <td class="px-1 py-1">
-                <input v-model="recEditForm.street" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  v-model="recEditForm.street"
+                  type="text"
+                  class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </td>
               <td class="px-1 py-1">
-                <input v-model="recEditForm.city" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  v-model="recEditForm.city"
+                  type="text"
+                  class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </td>
               <td class="px-1 py-1">
-                <input v-model="recEditForm.salutation" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  v-model="recEditForm.salutation"
+                  type="text"
+                  class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </td>
               <td class="px-1 py-1">
-                <input v-model="recEditForm.email" type="email" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  v-model="recEditForm.email"
+                  type="email"
+                  class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </td>
               <td class="px-1 py-1 text-right whitespace-nowrap">
-                <button :disabled="recSaving" class="text-green-600 hover:underline text-xs mr-2 disabled:opacity-40" @click="saveEditRec">Save</button>
-                <button class="text-gray-400 hover:underline text-xs" @click="cancelEditRec">Cancel</button>
+                <button
+                  :disabled="recSaving"
+                  class="text-green-600 hover:underline text-xs mr-2 disabled:opacity-40"
+                  @click="saveEditRec"
+                >
+                  Save
+                </button>
+                <button class="text-gray-400 hover:underline text-xs" @click="cancelEditRec">
+                  Cancel
+                </button>
               </td>
             </template>
             <template v-else>
@@ -594,7 +631,9 @@ async function saveEditRec() {
               <td class="px-3 py-2 text-gray-600">{{ r.salutation ?? '–' }}</td>
               <td class="px-3 py-2 text-gray-500">{{ r.email ?? '–' }}</td>
               <td class="px-3 py-2 text-right">
-                <button class="text-blue-600 hover:underline text-xs" @click="startEditRec(r)">Edit</button>
+                <button class="text-blue-600 hover:underline text-xs" @click="startEditRec(r)">
+                  Edit
+                </button>
               </td>
             </template>
           </tr>
@@ -609,9 +648,7 @@ async function saveEditRec() {
       <div class="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
         <div class="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <h3 class="text-lg font-semibold text-gray-800">Invoice Preview</h3>
-          <button @click="closePreviewModal" class="text-gray-400 hover:text-gray-600">
-            ×
-          </button>
+          <button @click="closePreviewModal" class="text-gray-400 hover:text-gray-600">×</button>
         </div>
 
         <div class="p-6 overflow-auto flex-1">
@@ -635,10 +672,7 @@ async function saveEditRec() {
             title="Template Preview"
           ></iframe>
 
-          <div
-            v-else-if="!previewLoading && !previewError"
-            class="text-center text-gray-500 py-12"
-          >
+          <div v-else-if="!previewLoading && !previewError" class="text-center text-gray-500 py-12">
             No preview available
           </div>
         </div>

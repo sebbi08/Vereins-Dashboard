@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { InvoiceInputs, InvoiceRecipientDto } from 'shared';
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
 
@@ -12,6 +12,9 @@ const invoiceId = route.params.id ? parseInt(String(route.params.id)) : null;
 const copyFromId = route.query.copyFrom ? parseInt(String(route.query.copyFrom)) : null;
 const isNewRevision = !!invoiceId;
 const isCopy = !!copyFromId;
+const recipientFieldsLocked = computed(
+  () => !isNewRevision && !!recipient.value && !newRecipient.value,
+);
 
 const sending = ref(false);
 const error = ref('');
@@ -109,9 +112,7 @@ async function ladeRevision() {
     const e = data.activeRevision.inputs as InvoiceInputs;
     inputs.value = {
       ...e,
-      invoiceDate: e.invoiceDate.includes('T')
-        ? e.invoiceDate.split('T')[0]
-        : e.invoiceDate,
+      invoiceDate: e.invoiceDate.includes('T') ? e.invoiceDate.split('T')[0] : e.invoiceDate,
     };
   }
 
@@ -320,10 +321,10 @@ async function submit() {
             <input
               v-model="inputs.salutation"
               type="text"
-              :disabled="!!recipient && !newRecipient"
+              :disabled="recipientFieldsLocked"
               :class="[
                 'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                recipient && !newRecipient
+                recipientFieldsLocked
                   ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
                   : 'border-gray-300 focus:ring-blue-500',
               ]"
@@ -335,10 +336,10 @@ async function submit() {
               v-model="inputs.name"
               type="text"
               required
-              :disabled="!!recipient && !newRecipient"
+              :disabled="recipientFieldsLocked"
               :class="[
                 'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                recipient && !newRecipient
+                recipientFieldsLocked
                   ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
                   : 'border-gray-300 focus:ring-blue-500',
               ]"
@@ -350,10 +351,10 @@ async function submit() {
               v-model="inputs.street"
               type="text"
               required
-              :disabled="!!recipient && !newRecipient"
+              :disabled="recipientFieldsLocked"
               :class="[
                 'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                recipient && !newRecipient
+                recipientFieldsLocked
                   ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
                   : 'border-gray-300 focus:ring-blue-500',
               ]"
@@ -365,16 +366,20 @@ async function submit() {
               v-model="inputs.city"
               type="text"
               required
-              :disabled="!!recipient && !newRecipient"
+              :disabled="recipientFieldsLocked"
               :class="[
                 'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                recipient && !newRecipient
+                recipientFieldsLocked
                   ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
                   : 'border-gray-300 focus:ring-blue-500',
               ]"
             />
           </div>
         </div>
+
+        <p v-if="isNewRevision" class="mt-3 text-xs text-gray-500">
+          Editing these recipient fields updates the linked recipient record for this invoice.
+        </p>
       </div>
 
       <!-- Invoice Details -->
@@ -403,11 +408,7 @@ async function submit() {
         <div class="mb-4">
           <label class="block text-sm font-medium text-gray-700 mb-2">Line Items</label>
           <div class="space-y-2">
-            <div
-              v-for="(pos, idx) in inputs.lineItems"
-              :key="idx"
-              class="flex gap-2 items-start"
-            >
+            <div v-for="(pos, idx) in inputs.lineItems" :key="idx" class="flex gap-2 items-start">
               <div class="flex-1">
                 <input
                   v-model="pos.text"

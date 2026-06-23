@@ -46,8 +46,6 @@ describe('Donation Receipts list', () => {
 });
 
 describe('Create Donation Receipt', () => {
-  let receiptId = 0;
-
   before(async function () {
     this.timeout(30000);
     await uploadReceiptTemplate();

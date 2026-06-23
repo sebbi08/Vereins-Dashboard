@@ -6,9 +6,9 @@ import type { TemplateType } from 'shared';
 import { TEMPLATES_DIR, toAbsolutePath, toRelativePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
 import {
-    generatePreviewTemplate,
-    getDummyData,
-    type PreviewSettings,
+  generatePreviewTemplate,
+  getDummyData,
+  type PreviewSettings,
 } from '../services/pdfGeneration.js';
 import { validateTemplate } from '../services/templateValidation.js';
 

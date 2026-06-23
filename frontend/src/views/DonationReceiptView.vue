@@ -49,6 +49,10 @@ function formatDate(iso: string) {
   return new Intl.DateTimeFormat('de-DE').format(new Date(iso));
 }
 
+function openReceiptDetails(id: number) {
+  router.push(`/donation-receipt/${id}`);
+}
+
 const totalCount = computed(() => receipts.value.length);
 </script>
 
@@ -161,7 +165,12 @@ const totalCount = computed(() => receipts.value.length);
           <tr
             v-for="q in receipts"
             :key="q.id"
-            class="border-b border-gray-100 hover:bg-gray-50 transition-colors"
+            class="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
+            tabindex="0"
+            role="button"
+            @click="openReceiptDetails(q.id)"
+            @keydown.enter.prevent="openReceiptDetails(q.id)"
+            @keydown.space.prevent="openReceiptDetails(q.id)"
           >
             <td class="px-4 py-3 font-mono text-xs font-medium text-gray-800">{{ q.number }}</td>
             <td class="px-4 py-3 text-gray-700">{{ q.donorName }}</td>
@@ -184,14 +193,8 @@ const totalCount = computed(() => receipts.value.length);
             </td>
             <td class="px-4 py-3 text-right">
               <button
-                class="text-blue-600 hover:underline text-xs mr-3"
-                @click="router.push(`/donation-receipt/${q.id}`)"
-              >
-                Details
-              </button>
-              <button
-                class="text-gray-500 hover:text-blue-600 text-xs"
-                @click="router.push(`/donation-receipt/new?copyFrom=${q.id}`)"
+                class="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors"
+                @click.stop="router.push(`/donation-receipt/new?copyFrom=${q.id}`)"
               >
                 Copy
               </button>

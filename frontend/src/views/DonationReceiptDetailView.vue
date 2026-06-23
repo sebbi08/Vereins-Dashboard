@@ -77,12 +77,20 @@ function formatDateTime(iso: string) {
     new Date(iso),
   );
 }
+
+function downloadRevisionPdf(revisionId: number) {
+  window.open(`/api/donation-receipt/revision/${revisionId}/download`, '_blank');
+}
 </script>
 
 <template>
   <div>
     <div class="flex items-center gap-3 mb-6">
-      <button class="text-gray-400 hover:text-gray-700" @click="router.push('/donation-receipt')">
+      <button
+        type="button"
+        class="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+        @click="router.push('/donation-receipt')"
+      >
         ← Back
       </button>
       <h2 class="text-2xl font-bold text-gray-800">Receipt Details</h2>
@@ -144,8 +152,8 @@ function formatDateTime(iso: string) {
 
       <div v-if="cancelConfirmation" class="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
         <p class="text-sm text-red-700 mb-3">
-          Receipt <strong>{{ receipt.number }}</strong> really cancel? This action cannot
-          nicht rückgängig gemacht werden.
+          Receipt <strong>{{ receipt.number }}</strong> really cancel? This action cannot nicht
+          rückgängig gemacht werden.
         </p>
         <div class="flex gap-2">
           <button class="bg-red-600 text-white px-4 py-2 rounded-lg text-sm" @click="cancel">
@@ -203,14 +211,14 @@ function formatDateTime(iso: string) {
               >
                 {{ retryRunning ? 'Regenerating…' : 'Retry PDF' }}
               </button>
-              <a
+              <button
                 v-if="rev.filePath && rev.pdfStatus === 'OK'"
-                :href="`/api/donation-receipt/revision/${rev.id}/download`"
-                target="_blank"
-                class="text-blue-600 hover:underline text-sm"
+                class="border border-blue-300 text-blue-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
+                type="button"
+                @click="downloadRevisionPdf(rev.id)"
               >
                 Download PDF
-              </a>
+              </button>
             </div>
           </div>
 
@@ -221,7 +229,7 @@ function formatDateTime(iso: string) {
             <p>{{ rev.pdfError || 'PDF konnte nicht erzeugt werden. Please try again.' }}</p>
             <button
               v-if="rev.pdfTechError"
-              class="mt-2 text-xs underline"
+              class="mt-2 border border-amber-300 bg-white px-3 py-1.5 rounded-lg text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors"
               @click="detailsOffen[rev.id] = !detailsOffen[rev.id]"
             >
               {{ detailsOffen[rev.id] ? 'Details ausblenden' : 'Details anzeigen' }}

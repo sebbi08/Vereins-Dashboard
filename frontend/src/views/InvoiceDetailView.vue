@@ -15,6 +15,7 @@ const retryPdfSuccess = ref<Record<number, string>>({});
 const retryPdfError = ref<Record<number, string>>({});
 const retryLoading = ref<Record<number, boolean>>({});
 const sendEmailLoading = ref<Record<number, boolean>>({});
+const sendTestEmailLoading = ref<Record<number, boolean>>({});
 const sendEmailSuccess = ref<Record<number, string>>({});
 const sendEmailError = ref<Record<number, string>>({});
 
@@ -58,6 +59,14 @@ function paymentMethodLabel(directDebit: boolean): string {
   return directDebit ? 'Direct Debit' : 'Bank Transfer';
 }
 
+function isLatestRevision(revisionId: number): boolean {
+  return invoice.value?.revisions?.[0]?.id === revisionId;
+}
+
+function downloadRevisionPdf(revisionId: number) {
+  window.open(`/api/invoice/revision/${revisionId}/download`, '_blank');
+}
+
 async function cancel() {
   cancelError.value = '';
   try {
@@ -96,6 +105,11 @@ async function retryPdf(revisionId: number) {
 }
 
 async function sendEmail(revisionId: number) {
+  const confirmed = window.confirm(
+    'Send this invoice to the real recipient now? This action sends the email to the recipient address.',
+  );
+  if (!confirmed) return;
+
   sendEmailSuccess.value[revisionId] = '';
   sendEmailError.value[revisionId] = '';
   sendEmailLoading.value[revisionId] = true;
@@ -117,8 +131,28 @@ async function sendEmail(revisionId: number) {
   }
 }
 
-function downloadPdf(revisionId: number) {
-  window.open(`/api/invoice/revision/${revisionId}/download`, '_blank');
+async function sendTestEmail(revisionId: number) {
+  sendEmailSuccess.value[revisionId] = '';
+  sendEmailError.value[revisionId] = '';
+  sendTestEmailLoading.value[revisionId] = true;
+
+  try {
+    const res = await fetch(`/api/invoice/revision/${revisionId}/send-test-email`, {
+      method: 'POST',
+    });
+    const result = await res.json();
+
+    if (res.ok) {
+      sendEmailSuccess.value[revisionId] = 'Test email sent to configured test address';
+      await loadData();
+    } else {
+      sendEmailError.value[revisionId] = result.emailError || 'Error sending test email';
+    }
+  } catch {
+    sendEmailError.value[revisionId] = 'Network error';
+  } finally {
+    sendTestEmailLoading.value[revisionId] = false;
+  }
 }
 
 function pdfStatusBadge(status: PdfStatus) {
@@ -134,7 +168,11 @@ function pdfStatusBadge(status: PdfStatus) {
 <template>
   <div>
     <div class="flex items-center gap-3 mb-6">
-      <button class="text-gray-400 hover:text-gray-700" @click="router.push('/invoice')">
+      <button
+        type="button"
+        class="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+        @click="router.push('/invoice')"
+      >
         ← Back
       </button>
       <h2 class="text-2xl font-bold text-gray-800">Invoice {{ invoice?.number }}</h2>
@@ -232,8 +270,7 @@ function pdfStatusBadge(status: PdfStatus) {
                 <div>
                   <span class="text-gray-500">Recipient:</span>
                   <span class="text-gray-800"
-                    >{{ rev.inputs.name }}, {{ rev.inputs.street }},
-                    {{ rev.inputs.city }}</span
+                    >{{ rev.inputs.name }}, {{ rev.inputs.street }}, {{ rev.inputs.city }}</span
                   >
                 </div>
                 <div>
@@ -246,7 +283,9 @@ function pdfStatusBadge(status: PdfStatus) {
                 </div>
                 <div>
                   <span class="text-gray-500">Payment:</span>
-                  <span class="text-gray-800">{{ paymentMethodLabel(rev.inputs.directDebit) }}</span>
+                  <span class="text-gray-800">{{
+                    paymentMethodLabel(rev.inputs.directDebit)
+                  }}</span>
                 </div>
                 <div class="md:col-span-2">
                   <span class="text-gray-500">Amount (Gross):</span>
@@ -277,15 +316,17 @@ function pdfStatusBadge(status: PdfStatus) {
               <div class="flex items-center gap-3 mt-3">
                 <button
                   v-if="rev.pdfStatus === 'OK'"
-                  class="text-blue-600 hover:underline text-sm"
-                  @click="downloadPdf(rev.id)"
+                  class="border border-blue-300 text-blue-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
+                  type="button"
+                  @click="downloadRevisionPdf(rev.id)"
                 >
                   Download PDF
                 </button>
                 <button
                   v-if="rev.pdfStatus === 'FAILED' && rev.status === 'AKTIV'"
-                  class="text-amber-600 hover:underline text-sm"
+                  class="border border-amber-300 text-amber-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-amber-50 transition-colors disabled:opacity-50"
                   :disabled="retryLoading[rev.id]"
+                  type="button"
                   @click="retryPdf(rev.id)"
                 >
                   {{ retryLoading[rev.id] ? 'Generiere...' : 'PDF neu generieren' }}
@@ -297,21 +338,36 @@ function pdfStatusBadge(status: PdfStatus) {
                   {{ retryPdfError[rev.id] }}
                 </p>
                 <button
-                  v-if="rev.pdfStatus === 'OK' && rev.emailStatus !== 'SENT'"
-                  class="text-green-600 hover:underline text-sm"
+                  v-if="
+                    rev.pdfStatus === 'OK' && invoice.status === 'AKTIV' && isLatestRevision(rev.id)
+                  "
+                  class="border border-indigo-300 text-indigo-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-50 transition-colors disabled:opacity-50"
+                  :disabled="sendTestEmailLoading[rev.id]"
+                  type="button"
+                  @click="sendTestEmail(rev.id)"
+                >
+                  {{ sendTestEmailLoading[rev.id] ? 'Sending test…' : 'Send Test Email' }}
+                </button>
+                <button
+                  v-if="
+                    rev.pdfStatus === 'OK' &&
+                    invoice.status === 'AKTIV' &&
+                    rev.emailStatus !== 'SENT' &&
+                    isLatestRevision(rev.id)
+                  "
+                  class="border border-green-300 text-green-700 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-green-50 transition-colors disabled:opacity-50"
                   :disabled="sendEmailLoading[rev.id]"
+                  type="button"
                   @click="sendEmail(rev.id)"
                 >
                   {{ sendEmailLoading[rev.id] ? 'Sending…' : 'Send via Email' }}
                 </button>
-                <span
-                  v-if="rev.emailStatus === 'SENT'"
-                  class="text-green-600 text-xs font-medium"
-                >Email Sent ✓</span>
-                <span
-                  v-if="rev.emailStatus === 'FAILED'"
-                  class="text-red-600 text-xs"
-                >Email failed{{ rev.emailError ? ': ' + rev.emailError : '' }}</span>
+                <span v-if="rev.emailStatus === 'SENT'" class="text-green-600 text-xs font-medium"
+                  >Email Sent ✓</span
+                >
+                <span v-if="rev.emailStatus === 'FAILED'" class="text-red-600 text-xs"
+                  >Email failed{{ rev.emailError ? ': ' + rev.emailError : '' }}</span
+                >
                 <p v-if="sendEmailSuccess[rev.id]" class="text-green-600 text-xs">
                   {{ sendEmailSuccess[rev.id] }}
                 </p>

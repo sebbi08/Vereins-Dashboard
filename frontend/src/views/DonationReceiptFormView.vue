@@ -47,7 +47,9 @@ const amountEuro = ref('');
 const letterSalutationMissing = computed(
   () => inputs.value.withCoverLetter && !inputs.value.letterSalutation.trim(),
 );
-const showLetterSalutationError = computed(() => letterSalutationMissing.value && validationAttempted.value);
+const showLetterSalutationError = computed(
+  () => letterSalutationMissing.value && validationAttempted.value,
+);
 
 function amountFromEuro(val: string): number {
   const cleaned = val.replace(',', '.').replace(/[^0-9.]/g, '');
@@ -262,7 +264,13 @@ async function submit() {
     <div class="flex items-center gap-3 mb-6">
       <button class="text-gray-400 hover:text-gray-700" @click="router.back()">← Back</button>
       <h2 class="text-2xl font-bold text-gray-800">
-        {{ isNewRevision ? 'Create New Revision' : isCopy ? 'Duplicate Receipt' : 'New Donation Receipt' }}
+        {{
+          isNewRevision
+            ? 'Create New Revision'
+            : isCopy
+              ? 'Duplicate Receipt'
+              : 'New Donation Receipt'
+        }}
       </h2>
     </div>
 
@@ -296,9 +304,7 @@ async function submit() {
         <h3 class="font-semibold text-gray-800 mb-4">Donor</h3>
 
         <div v-if="!isNewRevision" class="mb-3">
-          <label class="block text-sm font-medium text-gray-700 mb-1"
-            >Search or create donor</label
-          >
+          <label class="block text-sm font-medium text-gray-700 mb-1">Search or create donor</label>
           <DonorAutocomplete
             :model-value="donor"
             @update:model-value="onDonorAusgewaehlt"
@@ -466,9 +472,7 @@ async function submit() {
             />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1"
-              >Exemption Date</label
-            >
+            <label class="block text-sm font-medium text-gray-700 mb-1">Exemption Date</label>
             <input
               v-model="inputs.exemptionDate"
               type="date"

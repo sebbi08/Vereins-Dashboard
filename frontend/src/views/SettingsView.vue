@@ -243,7 +243,13 @@ const donorError = ref('');
 const donorSearch = ref('');
 
 const editingDonorId = ref<number | null>(null);
-const editForm = ref({ name: '', street: '', city: '', letterSalutation: '', addressSalutation: '' });
+const editForm = ref({
+  name: '',
+  street: '',
+  city: '',
+  letterSalutation: '',
+  addressSalutation: '',
+});
 const donorSaving = ref(false);
 
 async function loadDonors() {
@@ -379,9 +385,7 @@ async function saveEditDonor() {
           />
         </div>
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1"
-            >Exemption Date</label
-          >
+          <label class="block text-sm font-medium text-gray-700 mb-1">Exemption Date</label>
           <input
             v-model="settings.exemptionDate"
             type="date"
@@ -525,23 +529,51 @@ async function saveEditDonor() {
           >
             <template v-if="editingDonorId === d.id">
               <td class="px-1 py-1">
-                <input v-model="editForm.name" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  v-model="editForm.name"
+                  type="text"
+                  class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </td>
               <td class="px-1 py-1">
-                <input v-model="editForm.street" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  v-model="editForm.street"
+                  type="text"
+                  class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </td>
               <td class="px-1 py-1">
-                <input v-model="editForm.city" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  v-model="editForm.city"
+                  type="text"
+                  class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </td>
               <td class="px-1 py-1">
-                <input v-model="editForm.letterSalutation" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  v-model="editForm.letterSalutation"
+                  type="text"
+                  class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </td>
               <td class="px-1 py-1">
-                <input v-model="editForm.addressSalutation" type="text" class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input
+                  v-model="editForm.addressSalutation"
+                  type="text"
+                  class="w-full border border-gray-300 rounded px-1.5 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
               </td>
               <td class="px-1 py-1 text-right whitespace-nowrap">
-                <button :disabled="donorSaving" class="text-green-600 hover:underline text-xs mr-2 disabled:opacity-40" @click="saveEditDonor">Save</button>
-                <button class="text-gray-400 hover:underline text-xs" @click="cancelEditDonor">Cancel</button>
+                <button
+                  :disabled="donorSaving"
+                  class="text-green-600 hover:underline text-xs mr-2 disabled:opacity-40"
+                  @click="saveEditDonor"
+                >
+                  Save
+                </button>
+                <button class="text-gray-400 hover:underline text-xs" @click="cancelEditDonor">
+                  Cancel
+                </button>
               </td>
             </template>
             <template v-else>
@@ -551,7 +583,9 @@ async function saveEditDonor() {
               <td class="px-3 py-2 text-gray-600">{{ d.letterSalutation }}</td>
               <td class="px-3 py-2 text-gray-500">{{ d.addressSalutation ?? '–' }}</td>
               <td class="px-3 py-2 text-right">
-                <button class="text-blue-600 hover:underline text-xs" @click="startEditDonor(d)">Edit</button>
+                <button class="text-blue-600 hover:underline text-xs" @click="startEditDonor(d)">
+                  Edit
+                </button>
               </td>
             </template>
           </tr>
@@ -566,13 +600,9 @@ async function saveEditDonor() {
       <div class="bg-white rounded-xl shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] flex flex-col">
         <div class="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <h3 class="text-lg font-semibold text-gray-800">
-            {{
-              currentPreviewType === 'ANSCHREIBEN' ? 'Cover Letter Preview' : 'Receipt Preview'
-            }}
+            {{ currentPreviewType === 'ANSCHREIBEN' ? 'Cover Letter Preview' : 'Receipt Preview' }}
           </h3>
-          <button @click="closePreviewModal" class="text-gray-400 hover:text-gray-600">
-            ×
-          </button>
+          <button @click="closePreviewModal" class="text-gray-400 hover:text-gray-600">×</button>
         </div>
 
         <div class="p-6 overflow-auto flex-1">
@@ -596,10 +626,7 @@ async function saveEditDonor() {
             title="Template Preview"
           ></iframe>
 
-          <div
-            v-else-if="!previewLoading && !previewError"
-            class="text-center text-gray-500 py-12"
-          >
+          <div v-else-if="!previewLoading && !previewError" class="text-center text-gray-500 py-12">
             No preview available
           </div>
         </div>

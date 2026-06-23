@@ -41,8 +41,6 @@ describe('Invoice list', () => {
 });
 
 describe('Create Invoice', () => {
-  let invoiceId = 0;
-
   before(async function () {
     this.timeout(30000);
     await uploadInvoiceTemplate();

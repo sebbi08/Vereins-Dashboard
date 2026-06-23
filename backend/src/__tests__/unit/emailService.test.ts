@@ -127,7 +127,7 @@ describe('sendInvoiceEmail — dev override', () => {
     email: 'max@example.com',
     pdfStatus: 'OK' as const,
     filePath: 'invoices/1/r1/doc.pdf',
-    invoice: { number: '2024-001' },
+    invoice: { number: '2024-001', status: 'AKTIV' as const },
   };
 
   function buildPrismaMock(
@@ -209,6 +209,52 @@ describe('sendInvoiceEmail — dev override', () => {
     expect(mailOpts.text).not.toContain('[DEV OVERRIDE');
   });
 
+  it('sends to test address in production when forceTestAddress is true', async () => {
+    process.env.NODE_ENV = 'production';
+
+    const prismaMock = buildPrismaMock();
+    const result = await sendInvoiceEmail(prismaMock, 1, { forceTestAddress: true });
+
+    expect(result.success).toBe(true);
+    expect(sendMailMock).toHaveBeenCalledTimes(1);
+    const mailOpts = sendMailMock.mock.calls[0][0];
+    expect(mailOpts.to).toBe('test@example.com');
+    expect(mailOpts.text).toContain(
+      '[TEST SEND — Original recipient: Max Mustermann <max@example.com>]',
+    );
+    expect(prismaMock.invoiceRevision.update).not.toHaveBeenCalled();
+  });
+
+  it('allows forceTestAddress sends multiple times without changing email status', async () => {
+    process.env.NODE_ENV = 'production';
+
+    const prismaMock = buildPrismaMock();
+
+    const first = await sendInvoiceEmail(prismaMock, 1, { forceTestAddress: true });
+    const second = await sendInvoiceEmail(prismaMock, 1, { forceTestAddress: true });
+
+    expect(first.success).toBe(true);
+    expect(second.success).toBe(true);
+    expect(sendMailMock).toHaveBeenCalledTimes(2);
+    expect(prismaMock.invoiceRevision.update).not.toHaveBeenCalled();
+  });
+
+  it('returns error when forceTestAddress is true but no test address is configured', async () => {
+    process.env.NODE_ENV = 'production';
+
+    const settingsWithoutTest = smtpSettings.map((s) =>
+      s.key === 'emailTestAddress' ? { ...s, value: '' } : s,
+    );
+
+    const result = await sendInvoiceEmail(buildPrismaMock({ settings: settingsWithoutTest }), 1, {
+      forceTestAddress: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Test email address is not configured');
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
   it('returns error when revision is not found', async () => {
     process.env.NODE_ENV = 'development';
 
@@ -234,5 +280,37 @@ describe('sendInvoiceEmail — dev override', () => {
 
     expect(result.success).toBe(false);
     expect(result.error).toBe('SMTP settings are not configured');
+  });
+
+  it('returns error when the invoice is canceled', async () => {
+    process.env.NODE_ENV = 'production';
+
+    const canceledRevision = {
+      ...revision,
+      invoice: { ...revision.invoice, status: 'STORNIERT' as const },
+    };
+
+    const result = await sendInvoiceEmail(buildPrismaMock({ revision: canceledRevision }), 1);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Canceled invoices cannot be sent by email');
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  it('returns error for test sends when the invoice is canceled', async () => {
+    process.env.NODE_ENV = 'production';
+
+    const canceledRevision = {
+      ...revision,
+      invoice: { ...revision.invoice, status: 'STORNIERT' as const },
+    };
+
+    const result = await sendInvoiceEmail(buildPrismaMock({ revision: canceledRevision }), 1, {
+      forceTestAddress: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Canceled invoices cannot be sent by email');
+    expect(sendMailMock).not.toHaveBeenCalled();
   });
 });

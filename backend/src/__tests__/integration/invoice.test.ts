@@ -245,3 +245,165 @@ describe('POST /api/invoice/revision/:revisionId/retry-pdf', () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe('POST /api/invoice/revision/:revisionId/send-email', () => {
+  it('returns 400 when trying to send an older revision', async () => {
+    const { template, invoice, revision } = await seedRecipientAndInvoice();
+
+    await prisma.invoiceRevision.update({
+      where: { id: revision.id },
+      data: { status: 'ERSETZT' },
+    });
+
+    await prisma.invoiceRevision.create({
+      data: {
+        invoiceId: invoice.id,
+        revisionNumber: 2,
+        status: 'AKTIV',
+        salutation: '',
+        name: 'Test Firma',
+        street: 'Teststraße 1',
+        city: 'Teststadt',
+        invoiceDate: new Date('2026-06-02'),
+        title: 'Test Rechnung R2',
+        positions: JSON.stringify([{ text: 'Test Position 2', priceInCents: 12000 }]),
+        vat: 19,
+        directDebit: false,
+        email: 'test@example.com',
+        emailSalutation: 'Sehr geehrte Damen und Herren',
+        templateId: template.id,
+        pdfStatus: 'OK',
+      },
+    });
+
+    const sendOlder = await request.post(`/api/invoice/revision/${revision.id}/send-email`);
+    expect(sendOlder.status).toBe(400);
+    expect(sendOlder.body.error).toBe('Email can only be sent for the latest revision');
+  });
+});
+
+describe('POST /api/invoice/revision/:revisionId/send-test-email', () => {
+  it('returns 400 when trying to send-test an older revision', async () => {
+    const { template, invoice, revision } = await seedRecipientAndInvoice();
+
+    await prisma.invoiceRevision.update({
+      where: { id: revision.id },
+      data: { status: 'ERSETZT' },
+    });
+
+    await prisma.invoiceRevision.create({
+      data: {
+        invoiceId: invoice.id,
+        revisionNumber: 2,
+        status: 'AKTIV',
+        salutation: '',
+        name: 'Test Firma',
+        street: 'Teststraße 1',
+        city: 'Teststadt',
+        invoiceDate: new Date('2026-06-02'),
+        title: 'Test Rechnung R2',
+        positions: JSON.stringify([{ text: 'Test Position 2', priceInCents: 12000 }]),
+        vat: 19,
+        directDebit: false,
+        email: 'test@example.com',
+        emailSalutation: 'Sehr geehrte Damen und Herren',
+        templateId: template.id,
+        pdfStatus: 'OK',
+      },
+    });
+
+    const sendOlder = await request.post(`/api/invoice/revision/${revision.id}/send-test-email`);
+    expect(sendOlder.status).toBe(400);
+    expect(sendOlder.body.error).toBe('Email can only be sent for the latest revision');
+  });
+});
+
+describe('POST /api/invoice/revision/:revisionId/send-email with canceled invoice', () => {
+  it('returns 400 when the invoice is canceled', async () => {
+    const { invoice, revision } = await seedRecipientAndInvoice();
+
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: 'STORNIERT' },
+    });
+    await prisma.invoiceRevision.update({
+      where: { id: revision.id },
+      data: { pdfStatus: 'OK', filePath: 'invoices/1/r1/doc.pdf' },
+    });
+
+    const res = await request.post(`/api/invoice/revision/${revision.id}/send-email`);
+    expect(res.status).toBe(400);
+    expect(res.body.emailError).toBe('Canceled invoices cannot be sent by email');
+  });
+
+  it('returns 400 for test sends when the invoice is canceled', async () => {
+    const { invoice, revision } = await seedRecipientAndInvoice();
+
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: 'STORNIERT' },
+    });
+    await prisma.invoiceRevision.update({
+      where: { id: revision.id },
+      data: { pdfStatus: 'OK', filePath: 'invoices/1/r1/doc.pdf' },
+    });
+
+    const res = await request.post(`/api/invoice/revision/${revision.id}/send-test-email`);
+    expect(res.status).toBe(400);
+    expect(res.body.emailError).toBe('Canceled invoices cannot be sent by email');
+  });
+});
+
+describe('POST /api/invoice/:id/revision', () => {
+  it('updates the linked recipient record in place for a new revision', async () => {
+    const { invoice, recipient } = await seedRecipientAndInvoice();
+
+    const res = await request.post(`/api/invoice/${invoice.id}/revision`).send({
+      inputs: {
+        salutation: 'Herr',
+        name: 'Updated Firma',
+        street: 'Neue Straße 5',
+        city: 'Neu Stadt',
+        invoiceDate: '2026-06-15',
+        title: 'Updated Test Rechnung',
+        lineItems: [{ text: 'Updated Position', priceInCents: 15000 }],
+        vat: 19,
+        directDebit: false,
+        email: 'updated@example.com',
+        emailSalutation: 'Sehr geehrter Herr',
+      },
+    });
+
+    expect(res.status).toBe(201);
+    expect(res.body.recipientUpdated).toBe(true);
+
+    const updatedRecipient = await prisma.invoiceRecipient.findUnique({
+      where: { id: recipient.id },
+    });
+    expect(updatedRecipient).not.toBeNull();
+    expect(updatedRecipient).toMatchObject({
+      id: recipient.id,
+      name: 'Updated Firma',
+      street: 'Neue Straße 5',
+      city: 'Neu Stadt',
+      email: 'updated@example.com',
+      salutation: 'Herr',
+    });
+
+    const updatedRevision = await prisma.invoiceRevision.findUnique({
+      where: { id: res.body.revisionId },
+    });
+    expect(updatedRevision).not.toBeNull();
+    expect(updatedRevision?.name).toBe('Updated Firma');
+    expect(updatedRevision?.email).toBe('updated@example.com');
+
+    const invoiceAfter = await prisma.invoice.findUnique({
+      where: { id: invoice.id },
+      include: { recipient: true, revisions: true },
+    });
+    expect(invoiceAfter?.recipient.id).toBe(recipient.id);
+    expect(invoiceAfter?.recipient.name).toBe('Updated Firma');
+    expect(invoiceAfter?.revisions).toHaveLength(2);
+    expect(invoiceAfter?.revisions.find((r) => r.status === 'AKTIV')?.revisionNumber).toBe(2);
+  });
+});

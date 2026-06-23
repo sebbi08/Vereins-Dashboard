@@ -161,10 +161,7 @@ async function fillCoverLetterTemplate(
   return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
 }
 
-async function fillInvoiceTemplate(
-  templateBuffer: Buffer,
-  data: InvoiceData,
-): Promise<Buffer> {
+async function fillInvoiceTemplate(templateBuffer: Buffer, data: InvoiceData): Promise<Buffer> {
   const zip = new PizZip(templateBuffer);
   const doc = new Docxtemplater(zip, {
     paragraphLoop: true,

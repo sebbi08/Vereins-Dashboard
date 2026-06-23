@@ -17,6 +17,7 @@ export function replaceVariables(template: string, vars: Record<string, string>)
 export async function sendInvoiceEmail(
   prisma: PrismaClient,
   revisionId: number,
+  options?: { forceTestAddress?: boolean },
 ): Promise<{ success: boolean; error?: string }> {
   const revision = await prisma.invoiceRevision.findUnique({
     where: { id: revisionId },
@@ -29,6 +30,10 @@ export async function sendInvoiceEmail(
 
   if (revision.pdfStatus !== 'OK' || !revision.filePath) {
     return { success: false, error: 'No PDF available for this revision' };
+  }
+
+  if (revision.invoice.status === 'STORNIERT') {
+    return { success: false, error: 'Canceled invoices cannot be sent by email' };
   }
 
   const settings = await prisma.systemSetting.findMany();
@@ -58,11 +63,20 @@ export async function sendInvoiceEmail(
   let to = revision.email;
   let body = replaceVariables(emailBody, vars);
   const subject = replaceVariables(emailSubject, vars);
+  const forceTestAddress = options?.forceTestAddress === true;
 
-  const isDev = process.env.NODE_ENV !== 'production';
-  if (isDev && testAddress) {
-    body = `[DEV OVERRIDE — Original recipient: ${revision.name} <${revision.email}>]\n\n${body}`;
+  if (forceTestAddress) {
+    if (!testAddress) {
+      return { success: false, error: 'Test email address is not configured' };
+    }
+    body = `[TEST SEND — Original recipient: ${revision.name} <${revision.email}>]\n\n${body}`;
     to = testAddress;
+  } else {
+    const isDev = process.env.NODE_ENV !== 'production';
+    if (isDev && testAddress) {
+      body = `[DEV OVERRIDE — Original recipient: ${revision.name} <${revision.email}>]\n\n${body}`;
+      to = testAddress;
+    }
   }
 
   const transporter = nodemailer.createTransport({
@@ -90,6 +104,10 @@ export async function sendInvoiceEmail(
       ],
     });
 
+    if (forceTestAddress) {
+      return { success: true };
+    }
+
     await prisma.invoiceRevision.update({
       where: { id: revisionId },
       data: { emailStatus: 'SENT', emailError: null },
@@ -98,6 +116,10 @@ export async function sendInvoiceEmail(
     return { success: true };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
+
+    if (forceTestAddress) {
+      return { success: false, error: errorMessage };
+    }
 
     await prisma.invoiceRevision.update({
       where: { id: revisionId },

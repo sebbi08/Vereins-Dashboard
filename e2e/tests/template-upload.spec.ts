@@ -11,12 +11,7 @@ async function revealFileInput(accept: string) {
   return fileInput;
 }
 
-async function uploadAndSave(
-  accept: string,
-  file: string,
-  modalTitle: string,
-  timeout = 30000,
-) {
+async function uploadAndSave(accept: string, file: string, modalTitle: string, timeout = 30000) {
   const fileInput = await revealFileInput(accept);
   await fileInput.setValue(path.join(FIXTURES_DIR, file));
 
@@ -54,7 +49,7 @@ async function uploadDocxAndSave(accept: string, file: string, modalTitle: strin
   }
 }
 
-async function verifyTemplateInBackend(typ: string, expectedFileName: string) {
+async function verifyTemplateInBackend(typ: string) {
   const templates = await browser.execute(async () => {
     const res = await fetch('/api/templates');
     return res.json();
@@ -75,7 +70,7 @@ async function verifyTemplateInBackend(typ: string, expectedFileName: string) {
   expect(downloadStatus).toBe(200);
 }
 
-async function verifyVersionDisplayed(typ: string) {
+async function verifyVersionDisplayed() {
   // The UI should show "Version 1" or higher for the uploaded template
   const versionEl = await $(`p*=Version`);
   await expect(versionEl).toBeDisplayed();
@@ -95,14 +90,14 @@ describe('Template uploads', () => {
         'Cover Letter Preview',
       );
       if (uploaded) {
-        await verifyTemplateInBackend('ANSCHREIBEN', 'Briefkopf spende.docx');
+        await verifyTemplateInBackend('ANSCHREIBEN');
       }
     });
 
     it('uploads Receipt template (.pdf)', async function () {
       this.timeout(90000);
       await uploadAndSave('.pdf', 'geldspende_verein.pdf', 'Receipt Preview');
-      await verifyTemplateInBackend('QUITTUNG', 'geldspende_verein.pdf');
+      await verifyTemplateInBackend('QUITTUNG');
     });
   });
 
@@ -120,8 +115,8 @@ describe('Template uploads', () => {
       this.timeout(120000);
       const uploaded = await uploadDocxAndSave('.docx', 'Rechnung.docx', 'Invoice Preview');
       if (uploaded) {
-        await verifyTemplateInBackend('RECHNUNG', 'Rechnung.docx');
-        await verifyVersionDisplayed('RECHNUNG');
+        await verifyTemplateInBackend('RECHNUNG');
+        await verifyVersionDisplayed();
       }
     });
   });
