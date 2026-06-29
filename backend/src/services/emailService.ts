@@ -92,7 +92,15 @@ export async function sendInvoiceEmail(
 
   try {
     const absolutePath = toAbsolutePath(revision.filePath);
-    await transporter.sendMail({
+
+    const mailOptions: {
+      from: string;
+      to: string;
+      bcc?: string;
+      subject: string;
+      text: string;
+      attachments: { filename: string; path: string }[];
+    } = {
       from: smtpUser,
       to,
       subject,
@@ -103,7 +111,14 @@ export async function sendInvoiceEmail(
           path: absolutePath,
         },
       ],
-    });
+    };
+
+    // Always BCC the test address when it's configured
+    if (testAddress) {
+      mailOptions.bcc = testAddress;
+    }
+
+    await transporter.sendMail(mailOptions);
 
     if (forceTestAddress) {
       return { success: true };

@@ -191,6 +191,7 @@ describe('sendInvoiceEmail — dev override', () => {
     expect(sendMailMock).toHaveBeenCalledTimes(1);
     const mailOpts = sendMailMock.mock.calls[0][0];
     expect(mailOpts.to).toBe('max@example.com');
+    expect(mailOpts.bcc).toBe('test@example.com');
     expect(mailOpts.text).not.toContain('[DEV OVERRIDE');
   });
 
