@@ -42,6 +42,10 @@ emailSettingsRouter.put('/', async (req, res) => {
   res.json({ message: 'Email settings saved' });
 });
 
+emailSettingsRouter.get('/mode', (_req, res) => {
+  res.json({ mode: process.env.NODE_ENV === 'production' ? 'production' : 'development' });
+});
+
 emailSettingsRouter.post('/test', async (_req, res) => {
   const result = await sendTestEmail(prisma);
   if (result.success) {

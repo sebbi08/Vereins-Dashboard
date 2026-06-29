@@ -57,6 +57,7 @@ export async function sendInvoiceEmail(
     salutation: revision.emailSalutation,
     name: revision.name,
     number: revision.invoice.number,
+    title: revision.title,
     email: revision.email,
   };
 

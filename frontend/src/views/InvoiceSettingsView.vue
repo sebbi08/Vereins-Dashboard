@@ -34,6 +34,7 @@ const emailSaveSuccess = ref('');
 const emailSaveError = ref('');
 const emailTestLoading = ref(false);
 const emailTestResult = ref<{ success: boolean; message: string } | null>(null);
+const envMode = ref<string>('');
 
 async function loadEmailSettings() {
   try {
@@ -41,6 +42,18 @@ async function loadEmailSettings() {
     if (res.ok) {
       const data = await res.json();
       Object.assign(emailSettings.value, data);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+async function loadEnvMode() {
+  try {
+    const res = await fetch('/api/email-settings/mode');
+    if (res.ok) {
+      const data = await res.json();
+      envMode.value = data.mode;
     }
   } catch {
     // ignore
@@ -99,6 +112,7 @@ onMounted(() => {
   loadTemplate();
   loadRecipients();
   loadEmailSettings();
+  loadEnvMode();
 });
 
 async function uploadTemplate(datei: File): Promise<boolean> {
@@ -401,7 +415,20 @@ async function saveEditRec() {
 
     <!-- Email Settings -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mt-6">
-      <h3 class="font-semibold text-gray-800 mb-4">Email Settings</h3>
+      <div class="flex items-center gap-3 mb-4">
+        <h3 class="font-semibold text-gray-800">Email Settings</h3>
+        <span
+          v-if="envMode"
+          :class="[
+            'text-xs font-medium px-2 py-0.5 rounded-full',
+            envMode === 'production'
+              ? 'bg-green-100 text-green-700'
+              : 'bg-amber-100 text-amber-700',
+          ]"
+        >
+          {{ envMode === 'production' ? 'PROD' : 'DEV' }}
+        </span>
+      </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
@@ -458,7 +485,9 @@ async function saveEditRec() {
       <div class="mt-4">
         <label class="block text-sm font-medium text-gray-700 mb-1">
           Email Subject
-          <span class="text-xs text-gray-400">({number}, {salutation}, {name}, {email})</span>
+          <span class="text-xs text-gray-400"
+            >({number}, {salutation}, {name}, {title}, {email})</span
+          >
         </label>
         <input
           v-model="emailSettings.emailSubject"
@@ -471,7 +500,9 @@ async function saveEditRec() {
       <div class="mt-4">
         <label class="block text-sm font-medium text-gray-700 mb-1">
           Email Body
-          <span class="text-xs text-gray-400">({salutation}, {name}, {number}, {email})</span>
+          <span class="text-xs text-gray-400"
+            >({salutation}, {name}, {number}, {title}, {email})</span
+          >
         </label>
         <textarea
           v-model="emailSettings.emailBody"

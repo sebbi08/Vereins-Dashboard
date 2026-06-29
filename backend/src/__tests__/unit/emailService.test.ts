@@ -125,6 +125,7 @@ describe('sendInvoiceEmail — dev override', () => {
     emailSalutation: 'Herr',
     name: 'Max Mustermann',
     email: 'max@example.com',
+    title: 'Jahresbeitrag 2024',
     pdfStatus: 'OK' as const,
     filePath: 'invoices/1/r1/doc.pdf',
     invoice: { number: '2024-001', status: 'AKTIV' as const },
