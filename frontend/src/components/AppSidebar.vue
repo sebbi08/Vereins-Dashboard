@@ -6,6 +6,8 @@ const navItems = [
   { name: 'Donation Receipt', to: '/donation-receipt' },
   { name: 'Invoice', to: '/invoice' },
 ];
+
+const appVersion = import.meta.env.VITE_APP_VERSION;
 </script>
 
 <template>
@@ -24,5 +26,8 @@ const navItems = [
         {{ item.name }}
       </RouterLink>
     </nav>
+    <footer class="px-4 py-3 border-t border-gray-200">
+      <p class="text-xs text-gray-400 text-center">Version {{ appVersion }}</p>
+    </footer>
   </aside>
 </template>

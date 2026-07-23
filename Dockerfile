@@ -13,6 +13,10 @@ RUN npm ci
 
 # Copy source and build
 COPY . .
+
+ARG VERSION
+ENV VITE_APP_VERSION=${VERSION}
+
 RUN npm run build
 
 # Production stage
