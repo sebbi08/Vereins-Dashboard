@@ -34,7 +34,8 @@ COPY --from=builder /app/backend/package*.json ./backend/
 COPY --from=builder /app/shared/package*.json ./shared/
 
 # Install runtime dependencies (including Prisma CLI for deploy-time migrations)
-RUN npm ci --workspace=backend
+# HUSKY=0 prevents the prepare script from failing when husky is not installed (CI/Docker)
+RUN HUSKY=0 npm ci --workspace=backend
 
 # Copy backend build and its dependencies
 COPY --from=builder /app/backend/dist ./backend/dist
