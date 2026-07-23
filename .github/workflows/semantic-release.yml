@@ -10,8 +10,8 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write   # needed to push tags and create GitHub Release
-  issues: write     # needed to comment on released issues/PRs
+  contents: write # needed to push tags and create GitHub Release
+  issues: write # needed to comment on released issues/PRs
   pull-requests: write
 
 jobs:
@@ -22,7 +22,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # full history needed for commit analysis
+          fetch-depth: 0 # full history needed for commit analysis
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

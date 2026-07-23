@@ -18,19 +18,20 @@ Add automated semantic versioning with GitHub Releases via `semantic-release`, a
 
 ### Tools
 
-| Tool | Purpose |
-|---|---|
-| `semantic-release` | Analyzes commits since last tag, bumps version, generates changelog, creates GitHub Release |
-| `@semantic-release/github` | GitHub Release publishing plugin (bundled with semantic-release) |
-| `@semantic-release/commit-analyzer` | Determines version bump from commits (bundled) |
-| `@semantic-release/release-notes-generator` | Generates release notes (bundled) |
-| `@commitlint/cli` | Lint commit messages |
-| `@commitlint/config-conventional` | Conventional commit rules |
-| `husky` | Git hooks manager |
+| Tool                                        | Purpose                                                                                     |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `semantic-release`                          | Analyzes commits since last tag, bumps version, generates changelog, creates GitHub Release |
+| `@semantic-release/github`                  | GitHub Release publishing plugin (bundled with semantic-release)                            |
+| `@semantic-release/commit-analyzer`         | Determines version bump from commits (bundled)                                              |
+| `@semantic-release/release-notes-generator` | Generates release notes (bundled)                                                           |
+| `@commitlint/cli`                           | Lint commit messages                                                                        |
+| `@commitlint/config-conventional`           | Conventional commit rules                                                                   |
+| `husky`                                     | Git hooks manager                                                                           |
 
 ### Configuration
 
 **`.releaserc.json`** (root):
+
 ```json
 {
   "branches": ["master"],
@@ -53,10 +54,10 @@ Runs `npx commitlint --edit $1` on each commit.
 
 ### Scripts Added
 
-| Script | Command |
-|---|---|
+| Script    | Command                |
+| --------- | ---------------------- |
 | `release` | `npx semantic-release` |
-| `prepare` | `husky` |
+| `prepare` | `husky`                |
 
 ### Required Environment
 
