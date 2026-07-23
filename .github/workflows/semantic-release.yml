@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       released_version: ${{ steps.get-version.outputs.version }}
+      new_release: ${{ steps.check-release.outputs.new_release }}
 
     steps:
       - name: Check out repository
@@ -44,6 +45,12 @@ jobs:
       - name: Integration tests
         run: npm run test:integration
 
+      - name: Capture current latest tag
+        id: prev-tag
+        run: |
+          TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - name: Semantic Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -51,10 +58,20 @@ jobs:
 
       - name: Get released version
         id: get-version
-        run: echo "version=$(git describe --tags --abbrev=0)" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(git describe --tags --abbrev=0 2>/dev/null || echo '')" >> "$GITHUB_OUTPUT"
+
+      - name: Check if new release was created
+        id: check-release
+        run: |
+          if [[ "${{ steps.get-version.outputs.version }}" != "${{ steps.prev-tag.outputs.tag }}" && -n "${{ steps.get-version.outputs.version }}" ]]; then
+            echo "new_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "new_release=false" >> "$GITHUB_OUTPUT"
+          fi
 
   build-and-push:
     needs: release
+    if: needs.release.outputs.new_release == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
