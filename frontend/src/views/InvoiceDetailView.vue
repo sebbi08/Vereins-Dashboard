@@ -18,6 +18,7 @@ const sendEmailLoading = ref<Record<number, boolean>>({});
 const sendTestEmailLoading = ref<Record<number, boolean>>({});
 const sendEmailSuccess = ref<Record<number, string>>({});
 const sendEmailError = ref<Record<number, string>>({});
+const detailsOffen = ref<Record<number, boolean>>({});
 
 async function loadData() {
   loading.value = true;
@@ -43,6 +44,12 @@ function formatAmount(cents: number) {
 
 function formatDatum(iso: string) {
   return new Intl.DateTimeFormat('de-DE').format(new Date(iso));
+}
+
+function formatDateTime(iso: string) {
+  return new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short' }).format(
+    new Date(iso),
+  );
 }
 
 function berechneBrutto(rev: InvoiceRevisionDto): number {
@@ -201,9 +208,15 @@ function pdfStatusBadge(status: PdfStatus) {
               </span>
             </div>
             <div>
+              <p class="text-sm text-gray-500">Invoice Date</p>
+              <p class="text-sm font-medium text-gray-800 mt-1">
+                {{ formatDatum(invoice.invoiceDate) }}
+              </p>
+            </div>
+            <div>
               <p class="text-sm text-gray-500">Created at</p>
               <p class="text-sm font-medium text-gray-800 mt-1">
-                {{ formatDatum(invoice.createdAt) }}
+                {{ formatDateTime(invoice.createdAt) }}
               </p>
             </div>
             <div>
@@ -263,7 +276,7 @@ function pdfStatusBadge(status: PdfStatus) {
                     {{ rev.status }}
                   </span>
                 </div>
-                <p class="text-xs text-gray-400">{{ formatDatum(rev.createdAt) }}</p>
+                <p class="text-xs text-gray-400">{{ formatDateTime(rev.createdAt) }}</p>
               </div>
 
               <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
@@ -276,6 +289,22 @@ function pdfStatusBadge(status: PdfStatus) {
                 <div>
                   <span class="text-gray-500">Title:</span>
                   <span class="text-gray-800">{{ rev.inputs.title }}</span>
+                </div>
+                <div>
+                  <span class="text-gray-500">Salutation:</span>
+                  <span class="text-gray-800">{{ rev.inputs.salutation || '—' }}</span>
+                </div>
+                <div>
+                  <span class="text-gray-500">Email:</span>
+                  <span class="text-gray-800">{{ rev.inputs.email || '—' }}</span>
+                </div>
+                <div>
+                  <span class="text-gray-500">Email Salutation:</span>
+                  <span class="text-gray-800">{{ rev.inputs.emailSalutation || '—' }}</span>
+                </div>
+                <div>
+                  <span class="text-gray-500">Invoice Date:</span>
+                  <span class="text-gray-800">{{ formatDatum(rev.inputs.invoiceDate) }}</span>
                 </div>
                 <div>
                   <span class="text-gray-500">VAT:</span>
@@ -293,6 +322,26 @@ function pdfStatusBadge(status: PdfStatus) {
                     formatAmount(berechneBrutto(rev))
                   }}</span>
                 </div>
+              </div>
+
+              <!-- PDF Error -->
+              <div
+                v-if="rev.pdfStatus === 'FAILED'"
+                class="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+              >
+                <p>{{ rev.pdfError || 'PDF could not be generated. Please try again.' }}</p>
+                <button
+                  v-if="rev.pdfTechError"
+                  class="mt-2 border border-amber-300 bg-white px-3 py-1.5 rounded-lg text-xs font-medium text-amber-800 hover:bg-amber-100 transition-colors"
+                  @click="detailsOffen[rev.id] = !detailsOffen[rev.id]"
+                >
+                  {{ detailsOffen[rev.id] ? 'Hide Details' : 'Show Details' }}
+                </button>
+                <pre
+                  v-if="rev.pdfTechError && detailsOffen[rev.id]"
+                  class="mt-2 whitespace-pre-wrap rounded border border-amber-300 bg-white p-2 text-xs text-amber-900"
+                  >{{ rev.pdfTechError }}</pre
+                >
               </div>
 
               <!-- Positionen -->

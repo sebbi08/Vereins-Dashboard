@@ -54,6 +54,7 @@ export interface InvoiceListItem {
   invoiceDate: string;
   createdAt: string;
   activeRevisionNumber: number | null;
+  emailStatus: 'NOT_SENT' | 'SENT' | 'FAILED';
 }
 
 export interface InvoiceRevisionDto {

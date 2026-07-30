@@ -192,7 +192,7 @@ invoiceRouter.get('/', async (req, res) => {
         take: 1,
       },
     },
-    orderBy: { invoiceDate: 'desc' },
+    orderBy: { number: 'desc' },
   });
 
   const list: InvoiceListItem[] = invoices.map((r) => ({
@@ -204,6 +204,7 @@ invoiceRouter.get('/', async (req, res) => {
     invoiceDate: r.invoiceDate.toISOString(),
     createdAt: r.createdAt.toISOString(),
     activeRevisionNumber: r.revisions[0]?.revisionNumber ?? null,
+    emailStatus: (r.revisions[0]?.emailStatus as 'NOT_SENT' | 'SENT' | 'FAILED') ?? 'NOT_SENT',
   }));
 
   res.json(list);

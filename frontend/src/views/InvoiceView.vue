@@ -53,6 +53,24 @@ function openInvoiceDetails(id: number) {
   router.push(`/invoice/${id}`);
 }
 
+function emailStatusBadge(status: string) {
+  const map: Record<string, string> = {
+    SENT: 'bg-green-100 text-green-700',
+    FAILED: 'bg-red-100 text-red-700',
+    NOT_SENT: 'bg-gray-100 text-gray-500',
+  };
+  return `inline-block text-xs font-medium px-2 py-0.5 rounded-full ${map[status] || ''}`;
+}
+
+function emailStatusLabel(status: string) {
+  const map: Record<string, string> = {
+    SENT: 'Sent',
+    FAILED: 'Failed',
+    NOT_SENT: '—',
+  };
+  return map[status] || status;
+}
+
 const totalCount = computed(() => invoices.value.length);
 </script>
 
@@ -150,6 +168,7 @@ const totalCount = computed(() => invoices.value.length);
             <th class="text-right px-4 py-3 font-medium text-gray-600">Amount</th>
             <th class="text-left px-4 py-3 font-medium text-gray-600">Invoice Date</th>
             <th class="text-left px-4 py-3 font-medium text-gray-600">Rev.</th>
+            <th class="text-left px-4 py-3 font-medium text-gray-600">Email</th>
             <th class="text-left px-4 py-3 font-medium text-gray-600">Status</th>
             <th class="px-4 py-3"></th>
           </tr>
@@ -172,6 +191,11 @@ const totalCount = computed(() => invoices.value.length);
             </td>
             <td class="px-4 py-3 text-gray-600">{{ formatDate(r.invoiceDate) }}</td>
             <td class="px-4 py-3 text-gray-500">R{{ r.activeRevisionNumber ?? '–' }}</td>
+            <td class="px-4 py-3">
+              <span :class="emailStatusBadge(r.emailStatus)">
+                {{ emailStatusLabel(r.emailStatus) }}
+              </span>
+            </td>
             <td class="px-4 py-3">
               <span
                 :class="[

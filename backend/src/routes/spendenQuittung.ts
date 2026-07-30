@@ -176,7 +176,7 @@ donationReceiptRouter.get('/', async (req, res) => {
         take: 1,
       },
     },
-    orderBy: { donationDate: 'desc' },
+    orderBy: { number: 'desc' },
   });
 
   const list: DonationReceiptListItem[] = receipts.map((q) => ({
