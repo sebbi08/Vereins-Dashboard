@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import fs from 'fs';
-import type { PdfStatus, ReceiptInputs, DonationReceiptListItem } from 'shared';
+import type { DonationReceiptListItem, PdfStatus, ReceiptInputs } from 'shared';
 import type { Prisma } from '../../prisma/generated/client.js';
 import { toAbsolutePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
