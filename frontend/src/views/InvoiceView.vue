@@ -15,6 +15,83 @@ const fromDate = ref('');
 const toDate = ref('');
 const withCancelled = ref(false);
 
+const selectedIds = ref<Set<number>>(new Set());
+
+function toggleSelectAll() {
+  if (selectedIds.value.size === invoices.value.length) {
+    selectedIds.value = new Set();
+  } else {
+    selectedIds.value = new Set(invoices.value.map((i) => i.id));
+  }
+}
+
+function toggleSelect(id: number) {
+  const next = new Set(selectedIds.value);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+  selectedIds.value = next;
+}
+
+const allSelected = computed(
+  () => invoices.value.length > 0 && selectedIds.value.size === invoices.value.length,
+);
+
+async function downloadSelected() {
+  const ids = [...selectedIds.value];
+  if (ids.length === 0) return;
+
+  try {
+    const res = await fetch('/api/invoice/download-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json();
+      if (body.ids && Array.isArray(body.ids)) {
+        const problemSet = new Set(body.ids as number[]);
+        const next = new Set(selectedIds.value);
+        for (const id of problemSet) next.delete(id);
+        selectedIds.value = next;
+
+        const label =
+          body.error === 'CANCELLED'
+            ? 'cancelled'
+            : body.error === 'PDF_NOT_READY'
+              ? 'PDF not ready'
+              : body.error === 'NOT_FOUND'
+                ? 'not found'
+                : 'invalid';
+        const count = body.ids.length;
+        alert(
+          `${count} invoice${count > 1 ? 's' : ''} cannot be downloaded: ${label}. The ${count > 1 ? 'se' : ''}${count > 1 ? ' have' : ' has'} been deselected.`,
+        );
+      } else {
+        alert('Download failed. Please try again.');
+      }
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="(.+)"/);
+    a.href = url;
+    a.download = match ? match[1] : 'rechnungen.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  } catch {
+    alert('Download failed. Please try again.');
+  }
+}
+
 async function loadData() {
   loading.value = true;
   error.value = '';
@@ -79,6 +156,13 @@ const totalCount = computed(() => invoices.value.length);
     <div class="flex items-center justify-between mb-6 gap-3">
       <h2 class="text-2xl font-bold text-gray-800">Invoices</h2>
       <div class="flex items-center gap-2">
+        <button
+          :disabled="selectedIds.size === 0"
+          class="border border-blue-300 text-blue-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          @click="downloadSelected"
+        >
+          Download selected ({{ selectedIds.size }})
+        </button>
         <button
           class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
           @click="router.push('/invoice/settings')"
@@ -163,6 +247,14 @@ const totalCount = computed(() => invoices.value.length);
       <table v-else class="w-full text-sm">
         <thead>
           <tr class="border-b border-gray-200 bg-gray-50">
+            <th class="text-center px-4 py-3 w-10">
+              <input
+                type="checkbox"
+                :checked="allSelected"
+                class="rounded"
+                @click.stop="toggleSelectAll"
+              />
+            </th>
             <th class="text-left px-4 py-3 font-medium text-gray-600">Number</th>
             <th class="text-left px-4 py-3 font-medium text-gray-600">Recipient</th>
             <th class="text-right px-4 py-3 font-medium text-gray-600">Amount</th>
@@ -184,6 +276,14 @@ const totalCount = computed(() => invoices.value.length);
             @keydown.enter.prevent="openInvoiceDetails(r.id)"
             @keydown.space.prevent="openInvoiceDetails(r.id)"
           >
+            <td class="px-4 py-3 text-center" @click.stop>
+              <input
+                type="checkbox"
+                :checked="selectedIds.has(r.id)"
+                class="rounded"
+                @change="toggleSelect(r.id)"
+              />
+            </td>
             <td class="px-4 py-3 font-mono text-xs font-medium text-gray-800">{{ r.number }}</td>
             <td class="px-4 py-3 text-gray-700">{{ r.recipientName }}</td>
             <td class="px-4 py-3 text-right font-medium text-gray-800">
