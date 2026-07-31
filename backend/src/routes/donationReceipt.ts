@@ -1,3 +1,4 @@
+import { ZipArchive } from 'archiver';
 import { Router } from 'express';
 import fs from 'fs';
 import type { DonationReceiptListItem, PdfStatus, ReceiptInputs } from 'shared';
@@ -191,6 +192,94 @@ donationReceiptRouter.get('/', async (req, res) => {
   }));
 
   res.json(list);
+});
+
+// POST /api/donation-receipt/download-batch
+// NOTE: This route MUST come before /:id to avoid matching "download-batch" as an id
+donationReceiptRouter.post('/download-batch', async (req, res) => {
+  const ids: unknown = req.body?.ids;
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    !ids.every((id: unknown) => typeof id === 'number' && Number.isFinite(id))
+  ) {
+    res.status(400).json({ error: 'MISSING_IDS', ids: [] });
+    return;
+  }
+
+  // Validate all IDs first — collect problems
+  const notFound: number[] = [];
+  const cancelled: number[] = [];
+  const notReady: number[] = [];
+  const validEntries: { number: string; revisionNumber: number; filePath: string }[] = [];
+
+  for (const id of ids) {
+    const receipt = await prisma.donationReceipt.findUnique({
+      where: { id },
+      include: {
+        revisions: {
+          where: { status: 'AKTIV' },
+          orderBy: { revisionNumber: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!receipt) {
+      notFound.push(id);
+      continue;
+    }
+
+    if (receipt.status === 'STORNIERT') {
+      cancelled.push(id);
+      continue;
+    }
+
+    const rev = receipt.revisions[0];
+    if (!rev || !rev.filePath || rev.pdfStatus !== 'OK') {
+      notReady.push(id);
+      continue;
+    }
+
+    validEntries.push({
+      number: receipt.number,
+      revisionNumber: rev.revisionNumber,
+      filePath: rev.filePath,
+    });
+  }
+
+  if (notFound.length > 0 || cancelled.length > 0 || notReady.length > 0) {
+    const allProblemIds = [...notFound, ...cancelled, ...notReady];
+    if (notFound.length > 0) {
+      res.status(400).json({ error: 'NOT_FOUND', ids: allProblemIds });
+    } else if (cancelled.length > 0) {
+      res.status(400).json({ error: 'CANCELLED', ids: allProblemIds });
+    } else {
+      res.status(400).json({ error: 'PDF_NOT_READY', ids: allProblemIds });
+    }
+    return;
+  }
+
+  // All valid — build ZIP
+  const dateStr = new Date().toISOString().slice(0, 10);
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="quittungen-${dateStr}.zip"`);
+
+  const archive = new ZipArchive({ zlib: { level: 9 } });
+  archive.on('error', () => {
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Server error during ZIP creation' });
+    }
+  });
+
+  archive.pipe(res);
+
+  for (const entry of validEntries) {
+    const name = `${entry.number}-R${entry.revisionNumber}.pdf`;
+    archive.file(toAbsolutePath(entry.filePath), { name });
+  }
+
+  await archive.finalize();
 });
 
 // GET /api/donation-receipt/revision/:revisionId/download
