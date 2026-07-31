@@ -350,7 +350,7 @@ describe('InvoiceView — selection & download', () => {
         expect(vm(wrapper).selectedIds.size).toBe(1);
 
         expect(alertSpy).toHaveBeenCalledWith(
-          '2 invoices cannot be downloaded: cancelled. The se have been deselected.',
+          '2 invoices cannot be downloaded: cancelled. They have been deselected.',
         );
       });
 
@@ -372,7 +372,7 @@ describe('InvoiceView — selection & download', () => {
         await vm(wrapper).downloadSelected();
 
         expect(alertSpy).toHaveBeenCalledWith(
-          '1 invoice cannot be downloaded: PDF not ready. The  has been deselected.',
+          '1 invoice cannot be downloaded: PDF not ready. It has been deselected.',
         );
       });
 
@@ -394,7 +394,7 @@ describe('InvoiceView — selection & download', () => {
         await vm(wrapper).downloadSelected();
 
         expect(alertSpy).toHaveBeenCalledWith(
-          '1 invoice cannot be downloaded: not found. The  has been deselected.',
+          '1 invoice cannot be downloaded: not found. It has been deselected.',
         );
       });
 
@@ -416,7 +416,7 @@ describe('InvoiceView — selection & download', () => {
         await vm(wrapper).downloadSelected();
 
         expect(alertSpy).toHaveBeenCalledWith(
-          '1 invoice cannot be downloaded: invalid. The  has been deselected.',
+          '1 invoice cannot be downloaded: invalid. It has been deselected.',
         );
       });
 

@@ -68,7 +68,7 @@ async function downloadSelected() {
                 : 'invalid';
         const count = body.ids.length;
         alert(
-          `${count} invoice${count > 1 ? 's' : ''} cannot be downloaded: ${label}. The ${count > 1 ? 'se' : ''}${count > 1 ? ' have' : ' has'} been deselected.`,
+          `${count} invoice${count > 1 ? 's' : ''} cannot be downloaded: ${label}. ${count > 1 ? 'They have' : 'It has'} been deselected.`,
         );
       } else {
         alert('Download failed. Please try again.');
