@@ -26,6 +26,21 @@ function parseId(raw: string): number | null {
   return isNaN(id) ? null : id;
 }
 
+function isRecordNotFound(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && err.code === 'P2025';
+}
+
+function hasValidName(body: DraftBody): boolean {
+  const name: unknown = body.inputs?.name;
+  return typeof name === 'string' && name.trim() !== '';
+}
+
+// Invoices store UTC midnight of a calendar day; use the server's local calendar day.
+function todayAsInvoiceDate(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
+}
+
 function draftToContent(draft: InvoiceDraft): InvoiceContent {
   return {
     salutation: draft.salutation,
@@ -106,7 +121,7 @@ invoiceDraftRouter.get('/:id', async (req, res) => {
 // POST /api/invoice-draft
 invoiceDraftRouter.post('/', async (req, res) => {
   const body = req.body as DraftBody;
-  if (!body.inputs?.name?.trim()) {
+  if (!hasValidName(body)) {
     res.status(400).json({ error: 'Name is required' });
     return;
   }
@@ -138,7 +153,7 @@ invoiceDraftRouter.put('/:id', async (req, res) => {
   }
 
   const body = req.body as DraftBody;
-  if (!body.inputs?.name?.trim()) {
+  if (!hasValidName(body)) {
     res.status(400).json({ error: 'Name is required' });
     return;
   }
@@ -159,8 +174,13 @@ invoiceDraftRouter.put('/:id', async (req, res) => {
     })
     .catch((err: unknown) => {
       if (err instanceof RecipientError) return err;
+      if (isRecordNotFound(err)) return null;
       throw err;
     });
+  if (result === null) {
+    res.status(404).json({ error: 'Draft not found' });
+    return;
+  }
   if (result instanceof RecipientError) {
     res.status(400).json({ error: result.message });
     return;
@@ -182,13 +202,17 @@ invoiceDraftRouter.delete('/:id', async (req, res) => {
     return;
   }
 
-  await prisma.invoiceDraft.delete({ where: { id } });
+  try {
+    await prisma.invoiceDraft.delete({ where: { id } });
+  } catch (err) {
+    if (isRecordNotFound(err)) {
+      res.status(404).json({ error: 'Draft not found' });
+      return;
+    }
+    throw err;
+  }
   res.status(204).end();
 });
-
-function isRecordNotFound(err: unknown): boolean {
-  return typeof err === 'object' && err !== null && 'code' in err && err.code === 'P2025';
-}
 
 // POST /api/invoice-draft/:id/activate
 invoiceDraftRouter.post('/:id/activate', async (req, res) => {
@@ -224,7 +248,7 @@ invoiceDraftRouter.post('/:id/activate', async (req, res) => {
       const { invoice, revision } = await createInvoiceWithFirstRevision(tx, {
         recipientId: draft.recipientId,
         inputs,
-        invoiceDate: new Date(),
+        invoiceDate: todayAsInvoiceDate(),
         templateId: invoiceTemplate.id,
       });
       // Throws P2025 if a concurrent activation already deleted the draft,

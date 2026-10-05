@@ -137,6 +137,11 @@ describe('InvoiceFormView — new invoice', () => {
     expect(vm(wrapper).error).toBe('Name is required');
   });
 
+  it('does not disable native validation in new mode', async () => {
+    const wrapper = await mountForm();
+    expect(wrapper.find('form').attributes('novalidate')).toBeUndefined();
+  });
+
   it('save-draft is a plain button in new mode', async () => {
     const wrapper = await mountForm();
     expect(wrapper.find('[data-testid="save-draft"]').attributes('type')).toBe('button');
@@ -183,6 +188,25 @@ describe('InvoiceFormView — draft mode', () => {
     expect(button.attributes('type')).toBe('submit');
 
     await button.trigger('click');
+    await flushPromises();
+
+    expect(calls().filter((c) => c.startsWith('PUT'))).toHaveLength(1);
+  });
+
+  it('incomplete draft: form has novalidate and save-draft PUTs exactly once', async () => {
+    replies['GET /api/invoice-draft/42'] = {
+      status: 200,
+      body: {
+        ...draftDto,
+        recipient: { ...draftDto.recipient, street: '', city: '' },
+        inputs: { ...draftDto.inputs, street: '', city: '', title: '' },
+      },
+    };
+    replies['PUT /api/invoice-draft/42'] = { status: 200, body: { draftId: 42 } };
+    const wrapper = await mountForm();
+
+    expect(wrapper.find('form').attributes('novalidate')).toBeDefined();
+    await wrapper.find('[data-testid="save-draft"]').trigger('click');
     await flushPromises();
 
     expect(calls().filter((c) => c.startsWith('PUT'))).toHaveLength(1);

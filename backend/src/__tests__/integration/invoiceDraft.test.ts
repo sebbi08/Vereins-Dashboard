@@ -94,6 +94,15 @@ describe('POST /api/invoice-draft', () => {
     });
   });
 
+  it('rejects a non-string name with 400', async () => {
+    const res = await request.post('/api/invoice-draft').send({
+      recipientData: { name: 'X', street: '', city: '' },
+      inputs: { ...completeInputs, name: 123 },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Name is required');
+  });
+
   it('accepts an incomplete draft with only a name', async () => {
     const draftId = await createDraft(nameOnlyInputs);
     const draft = await prisma.invoiceDraft.findUniqueOrThrow({ where: { id: draftId } });
@@ -282,7 +291,7 @@ describe('DELETE /api/invoice-draft/:id', () => {
 });
 
 describe('POST /api/invoice-draft/:id/activate', () => {
-  it('creates an invoice with the next number, today as date, and revision 1', async () => {
+  it('creates an invoice with the next number, today (UTC midnight) as date, and revision 1', async () => {
     const template = await seedTemplate();
     const year = new Date().getFullYear();
     const existingRecipient = await prisma.invoiceRecipient.create({
@@ -300,9 +309,13 @@ describe('POST /api/invoice-draft/:id/activate', () => {
     const draftId = await createDraft();
     const draft = await prisma.invoiceDraft.findUniqueOrThrow({ where: { id: draftId } });
 
-    const before = Date.now();
+    const utcMidnightOfLocalToday = () => {
+      const n = new Date();
+      return new Date(Date.UTC(n.getFullYear(), n.getMonth(), n.getDate())).toISOString();
+    };
+    const before = utcMidnightOfLocalToday();
     const res = await request.post(`/api/invoice-draft/${draftId}/activate`);
-    const after = Date.now();
+    const after = utcMidnightOfLocalToday();
 
     expect(res.status).toBe(201);
     expect(res.body.pdfStatus).toBe('PENDING');
@@ -313,8 +326,7 @@ describe('POST /api/invoice-draft/:id/activate', () => {
     expect(invoice.number).toBe(`2 / ${year}`);
     expect(invoice.status).toBe('AKTIV');
     expect(invoice.recipientId).toBe(draft.recipientId);
-    expect(invoice.invoiceDate.getTime()).toBeGreaterThanOrEqual(before - 1000);
-    expect(invoice.invoiceDate.getTime()).toBeLessThanOrEqual(after + 1000);
+    expect([before, after]).toContain(invoice.invoiceDate.toISOString());
     // the draft's sent invoiceDate (2020-01-01) is ignored
     expect(invoice.invoiceDate.getFullYear()).toBe(year);
 

@@ -330,6 +330,7 @@ async function activateDraft() {
 async function deleteDraft() {
   if (!confirm('Delete this draft?')) return;
   clearMessages();
+  sending.value = true;
   try {
     const res = await fetch(`/api/invoice-draft/${draftId}`, { method: 'DELETE' });
     if (!res.ok) {
@@ -340,6 +341,8 @@ async function deleteDraft() {
     router.push('/invoice');
   } catch {
     error.value = 'Network error while deleting';
+  } finally {
+    sending.value = false;
   }
 }
 
@@ -396,7 +399,7 @@ function onFormSubmit() {
       {{ success }}
     </div>
 
-    <form class="space-y-6" @submit.prevent="onFormSubmit">
+    <form class="space-y-6" :novalidate="isDraft" @submit.prevent="onFormSubmit">
       <!-- Recipient -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 class="font-semibold text-gray-800 mb-4">Recipient</h3>
