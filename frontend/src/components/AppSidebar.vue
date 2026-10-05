@@ -8,10 +8,6 @@ import { activeNavKey, NAV_ITEMS } from './navItems';
 
 withDefaults(defineProps<{ showBrand?: boolean }>(), { showBrand: true });
 
-const emit = defineEmits<{
-  navigate: [];
-}>();
-
 const route = useRoute();
 const activeKey = computed(() => activeNavKey(route.path));
 
@@ -23,37 +19,35 @@ const themeOptions: { label: string; value: ThemeMode; icon: string }[] = [
 ];
 
 const appVersion = import.meta.env.VITE_APP_VERSION;
-
-function onNavigate(event: MouseEvent, navigate: (e?: MouseEvent) => unknown) {
-  navigate(event);
-  emit('navigate');
-}
 </script>
 
 <template>
   <div class="app-nav">
     <h1 v-if="showBrand" class="app-nav__brand">MV Dashboard</h1>
 
-    <Menu :model="NAV_ITEMS" class="app-nav__menu">
-      <template #item="{ item, props }">
-        <RouterLink v-slot="{ href, navigate }" :to="item.route" custom>
-          <a
-            :href="href"
-            v-bind="props.action"
-            :data-testid="`nav-${item.key}`"
-            class="app-nav__link"
-            :class="{
-              'app-nav__link--active': item.key === activeKey,
-              'app-nav__link--sub': item.sub,
-            }"
-            @click="onNavigate($event, navigate)"
-          >
-            <span :class="item.icon" aria-hidden="true" />
-            <span>{{ item.label }}</span>
-          </a>
-        </RouterLink>
-      </template>
-    </Menu>
+    <nav aria-label="Main navigation">
+      <Menu :model="NAV_ITEMS" class="app-nav__menu" aria-label="Main navigation menu">
+        <template #item="{ item, props }">
+          <RouterLink v-slot="{ href, navigate }" :to="item.route" custom>
+            <a
+              :href="href"
+              v-bind="props.action"
+              :data-testid="`nav-${item.key}`"
+              :aria-current="item.key === activeKey ? 'page' : undefined"
+              class="app-nav__link"
+              :class="{
+                'app-nav__link--active': item.key === activeKey,
+                'app-nav__link--sub': item.sub,
+              }"
+              @click="navigate"
+            >
+              <span :class="item.icon" aria-hidden="true" />
+              <span>{{ item.label }}</span>
+            </a>
+          </RouterLink>
+        </template>
+      </Menu>
+    </nav>
 
     <div class="app-nav__footer">
       <SelectButton

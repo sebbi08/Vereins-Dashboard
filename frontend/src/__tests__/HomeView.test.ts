@@ -45,4 +45,10 @@ describe('HomeView', () => {
     const link = wrapper.find(`a[href="${href}"]`);
     expect(link.text()).toContain(sectionName);
   });
+
+  it('renders each tile title as an h3', async () => {
+    const wrapper = await mountHome();
+    const titles = wrapper.findAll('h3.tile__title').map((h) => h.text());
+    expect(titles).toEqual(['Invoice', 'Donation Receipt', 'Instructor Rent', 'Settings']);
+  });
 });

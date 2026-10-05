@@ -75,12 +75,27 @@ describe('AppSidebar', () => {
     expect(active[0].attributes('data-testid')).toBe('nav-invoice-settings');
   });
 
-  it('navigates and emits navigate when a link is clicked', async () => {
+  it('navigates when a link is clicked', async () => {
     const { wrapper, router } = await mountAt('/');
     await wrapper.find('[data-testid="nav-instructor"]').trigger('click');
     await flushPromises();
     expect(router.currentRoute.value.path).toBe('/instructor');
-    expect(wrapper.emitted('navigate')).toHaveLength(1);
+    expect(wrapper.emitted('navigate')).toBeUndefined();
+  });
+
+  it('wraps the menu in a labelled nav landmark', async () => {
+    const { wrapper } = await mountAt('/');
+    const nav = wrapper.find('nav');
+    expect(nav.attributes('aria-label')).toBe('Main navigation');
+    expect(nav.find('[data-testid="nav-invoice"]').exists()).toBe(true);
+  });
+
+  it('marks exactly the active link with aria-current=page', async () => {
+    const { wrapper } = await mountAt('/invoice/settings');
+    const current = wrapper.findAll('[aria-current]');
+    expect(current).toHaveLength(1);
+    expect(current[0].attributes('data-testid')).toBe('nav-invoice-settings');
+    expect(current[0].attributes('aria-current')).toBe('page');
   });
 
   it('switches the color mode with the theme toggle', async () => {

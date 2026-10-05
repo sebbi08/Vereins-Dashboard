@@ -22,12 +22,12 @@ describe('App shell', () => {
     document.body.innerHTML = '';
   });
 
-  async function mountApp() {
+  async function mountApp(path = '/') {
     const router = createRouter({
       history: createMemoryHistory(),
       routes: NAV_ITEMS.map((item) => ({ path: item.route, component: Blank })),
     });
-    await router.push('/');
+    await router.push(path);
     await router.isReady();
     const wrapper = mount(App, {
       attachTo: document.body,
@@ -65,5 +65,58 @@ describe('App shell', () => {
 
     expect(router.currentRoute.value.path).toBe('/instructor');
     expect(document.querySelector('.app-shell__drawer [data-testid="nav-instructor"]')).toBeNull();
+  });
+
+  it('closes the drawer when the route changes by other means', async () => {
+    const { router } = await mountApp();
+    (document.querySelector('[data-testid="open-nav"]') as HTMLElement).click();
+    await flushPromises();
+    expect(document.querySelector('.app-shell__drawer')).not.toBeNull();
+
+    await router.push('/invoice');
+    await flushPromises();
+
+    expect(document.querySelector('.app-shell__drawer')).toBeNull();
+  });
+
+  it('closes the drawer when the viewport widens to desktop', async () => {
+    let listener: ((e: { matches: boolean }) => void) | null = null;
+    const removed = vi.fn();
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: false,
+      media: query,
+      addEventListener: (_: string, cb: (e: { matches: boolean }) => void) => (listener = cb),
+      removeEventListener: removed,
+    }));
+    const { wrapper } = await mountApp();
+    (document.querySelector('[data-testid="open-nav"]') as HTMLElement).click();
+    await flushPromises();
+    expect(document.querySelector('.app-shell__drawer')).not.toBeNull();
+
+    listener!({ matches: true });
+    await flushPromises();
+    expect(document.querySelector('.app-shell__drawer')).toBeNull();
+
+    wrapper.unmount();
+    expect(removed).toHaveBeenCalled();
+  });
+
+  it('exposes drawer state on the open button and labels the drawer', async () => {
+    await mountApp();
+    const button = document.querySelector('[data-testid="open-nav"]') as HTMLElement;
+    expect(button.getAttribute('aria-expanded')).toBe('false');
+    button.click();
+    await flushPromises();
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    expect(document.querySelector('.app-shell__drawer')!.getAttribute('aria-label')).toBe(
+      'Main navigation',
+    );
+  });
+
+  it('marks the active sidebar link with aria-current', async () => {
+    await mountApp('/instructor');
+    const current = document.querySelectorAll('aside.app-shell__sidebar [aria-current="page"]');
+    expect(current).toHaveLength(1);
+    expect(current[0].getAttribute('data-testid')).toBe('nav-instructor');
   });
 });

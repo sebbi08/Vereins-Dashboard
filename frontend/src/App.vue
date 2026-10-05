@@ -5,12 +5,32 @@ import Button from 'primevue/button';
 import ConfirmDialog from 'primevue/confirmdialog';
 import Drawer from 'primevue/drawer';
 import Toast from 'primevue/toast';
-import { onMounted, ref } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 
 const store = useAppStore();
 const drawerOpen = ref(false);
 
-onMounted(() => store.checkTemplates());
+const route = useRoute();
+
+// Close the drawer on any navigation, and when the viewport grows past the mobile layout.
+watch(
+  () => route.fullPath,
+  () => {
+    drawerOpen.value = false;
+  },
+);
+
+const desktopQuery = window.matchMedia('(min-width: 768px)');
+function onViewportChange(event: { matches: boolean }) {
+  if (event.matches) drawerOpen.value = false;
+}
+
+onMounted(() => {
+  store.checkTemplates();
+  desktopQuery.addEventListener('change', onViewportChange);
+});
+onUnmounted(() => desktopQuery.removeEventListener('change', onViewportChange));
 </script>
 
 <template>
@@ -25,6 +45,8 @@ onMounted(() => store.checkTemplates());
           icon="pi pi-bars"
           text
           aria-label="Open navigation"
+          aria-controls="app-nav-drawer"
+          :aria-expanded="drawerOpen"
           data-testid="open-nav"
           @click="drawerOpen = true"
         />
@@ -36,8 +58,14 @@ onMounted(() => store.checkTemplates());
       </main>
     </div>
 
-    <Drawer v-model:visible="drawerOpen" header="MV Dashboard" class="app-shell__drawer">
-      <AppSidebar :show-brand="false" @navigate="drawerOpen = false" />
+    <Drawer
+      id="app-nav-drawer"
+      v-model:visible="drawerOpen"
+      header="MV Dashboard"
+      class="app-shell__drawer"
+      aria-label="Main navigation"
+    >
+      <AppSidebar :show-brand="false" />
     </Drawer>
 
     <Toast />

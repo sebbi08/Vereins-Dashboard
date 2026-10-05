@@ -52,10 +52,10 @@ const tiles: Tile[] = [
     <div class="tiles">
       <Card v-for="tile in tiles" :key="tile.key" :data-testid="`tile-${tile.key}`" class="tile">
         <template #title>
-          <span class="tile__title">
+          <h3 class="tile__title">
             <span :class="tile.icon" aria-hidden="true" />
             {{ tile.title }}
-          </span>
+          </h3>
         </template>
         <template #content>
           <p class="muted tile__description">{{ tile.description }}</p>
@@ -78,6 +78,9 @@ const tiles: Tile[] = [
 }
 
 .tile__title {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
