@@ -37,6 +37,16 @@ describe('buildInvoiceDocx', () => {
     );
   });
 
+  it('strips XML-invalid control characters from line item texts', () => {
+    const xml = documentXml(
+      buildInvoiceDocx(fs.readFileSync(templatePath), {
+        ...baseInput,
+        lineItems: [{ text: 'A\u000BB\u0001C', priceInCents: 100 }],
+      }),
+    );
+    expect(xml).toContain('ABC');
+  });
+
   it('renders every line item text and price', () => {
     const xml = documentXml(
       buildInvoiceDocx(fs.readFileSync(templatePath), {

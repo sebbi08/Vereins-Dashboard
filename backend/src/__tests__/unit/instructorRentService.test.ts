@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE } from '../../../../shared/src/instructorInvoiceText';
 import {
   parseInstructorSaveBody,
   parseSettingsUpdate,
@@ -90,6 +91,18 @@ describe('parseSettingsUpdate', () => {
     expect(parseSettingsUpdate({ invoiceTemplate: 'Miete {name}\r\n{zeiten}' })).toEqual({
       invoiceTemplate: 'Miete {name}\n{zeiten}',
     });
+  });
+
+  it('trims trailing whitespace of the template', () => {
+    expect(parseSettingsUpdate({ invoiceTemplate: 'Miete {name}\r\n\r\n  ' })).toEqual({
+      invoiceTemplate: 'Miete {name}',
+    });
+  });
+
+  it('treats the default template as reset to default', () => {
+    expect(
+      parseSettingsUpdate({ invoiceTemplate: DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE + '\n' }),
+    ).toEqual({ invoiceTemplate: null });
   });
 
   it.each([null, '', '  \n '])('treats template %j as reset to default', (invoiceTemplate) => {

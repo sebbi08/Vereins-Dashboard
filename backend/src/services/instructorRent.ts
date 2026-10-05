@@ -10,6 +10,7 @@ import type {
 } from 'shared';
 import {
   buildInstructorInvoiceTextValues,
+  DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE,
   effectiveInstructorInvoiceTemplate,
   normalizeInstructorInvoiceTemplate,
   renderInstructorInvoiceText,
@@ -59,10 +60,12 @@ export function parseSettingsUpdate(body: unknown): SettingsUpdate | { error: st
     if (invoiceTemplate === null || invoiceTemplate.trim() === '') {
       update.invoiceTemplate = null;
     } else {
-      const normalized = normalizeInstructorInvoiceTemplate(invoiceTemplate);
+      const normalized = normalizeInstructorInvoiceTemplate(invoiceTemplate).trimEnd();
       const error = validateInstructorInvoiceTemplate(normalized);
       if (error) return { error };
-      update.invoiceTemplate = normalized;
+      // The default text is stored as "default" so future default changes still apply.
+      update.invoiceTemplate =
+        normalized === DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE ? null : normalized;
     }
   }
   return update;

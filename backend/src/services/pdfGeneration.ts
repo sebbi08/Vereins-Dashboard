@@ -500,7 +500,9 @@ export function buildInvoiceDocx(templateBuffer: Buffer, input: InvoiceDocxInput
   });
   const pass2Data: Record<string, string> = {};
   input.lineItems.forEach((item, idx) => {
-    pass2Data[`text${idx}`] = item.text;
+    // Drop XML-invalid control characters (keeps \t, \n, \r) so docxtemplater cannot throw.
+    // eslint-disable-next-line no-control-regex
+    pass2Data[`text${idx}`] = item.text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
     pass2Data[`price${idx}`] = (item.priceInCents / 100).toFixed(2);
   });
   doc2.render(pass2Data);

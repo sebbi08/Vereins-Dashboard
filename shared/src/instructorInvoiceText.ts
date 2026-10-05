@@ -132,11 +132,11 @@ export function renderInstructorInvoiceText(
   template: string,
   values: InstructorInvoiceTextValues,
 ): string {
-  return normalizeInstructorInvoiceTemplate(template).replace(
-    PLACEHOLDER_PATTERN,
-    (token, key: string) =>
+  return normalizeInstructorInvoiceTemplate(template)
+    .replace(PLACEHOLDER_PATTERN, (token, key: string) =>
       KNOWN_PLACEHOLDERS.has(key) ? values[key as InstructorInvoicePlaceholder] : token,
-  );
+    )
+    .trimEnd();
 }
 
 export function effectiveInstructorInvoiceTemplate(template: string | null | undefined): string {

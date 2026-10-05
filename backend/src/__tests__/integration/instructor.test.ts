@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../app';
 import { initializeApp } from '../../init';
 import { prisma } from '../../prismaClient';
+import { DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE } from '../../../../shared/src/instructorInvoiceText';
 import { cleanDatabase, useCleanDatabase } from './helpers';
 
 let request: ReturnType<typeof supertest>;
@@ -421,6 +422,20 @@ describe('instructor invoice template setting', () => {
       where: { key: 'instructorInvoiceTemplate' },
     });
     expect(row?.value).toBe('A {name}\nB');
+  });
+
+  it('stores the default text as "default" (no row)', async () => {
+    await request.put('/api/instructor/settings').send({ invoiceTemplate: custom });
+
+    const res = await request
+      .put('/api/instructor/settings')
+      .send({ invoiceTemplate: DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE });
+
+    expect(res.status).toBe(200);
+    expect(res.body.invoiceTemplate).toBeNull();
+    expect(
+      await prisma.systemSetting.findUnique({ where: { key: 'instructorInvoiceTemplate' } }),
+    ).toBeNull();
   });
 
   it.each([null, '', '   \n  '])('resets to the default with %j', async (invoiceTemplate) => {

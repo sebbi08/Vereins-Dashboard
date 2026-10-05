@@ -142,6 +142,18 @@ describe('renderInstructorInvoiceText', () => {
     );
   });
 
+  it('trims trailing whitespace of the rendered text', () => {
+    const emptySchedule = buildInstructorInvoiceTextValues(
+      'Anna Alt',
+      { ...example, timeBlocks: [] },
+      3.25,
+    );
+    expect(renderInstructorInvoiceText('Miete {name}\n{zeiten}\n', emptySchedule)).toBe(
+      'Miete Anna Alt',
+    );
+    expect(renderInstructorInvoiceText('A  \n\n', values)).toBe('A');
+  });
+
   it('replaces every placeholder, also repeated ones', () => {
     expect(
       renderInstructorInvoiceText(
