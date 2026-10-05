@@ -270,6 +270,7 @@ function validate(complete: boolean): boolean {
 }
 
 async function submit() {
+  if (loadError.value) return;
   if (!validate(true)) return;
   sending.value = true;
   try {
@@ -304,6 +305,7 @@ async function submit() {
 
 /** Creates or updates the draft. Returns the draft id, or null on error. */
 async function saveDraft(): Promise<number | null> {
+  if (loadError.value) return null;
   if (!validate(false)) return null;
   sending.value = true;
   try {
@@ -649,14 +651,14 @@ function onFormSubmit() {
           :label="isDraft ? 'Save Draft' : 'Save as Draft'"
           severity="secondary"
           outlined
-          :disabled="sending"
+          :disabled="sending || !!loadError"
           data-testid="save-draft"
           @click="!isDraft && onSaveDraft()"
         />
         <Button
           v-if="isDraft && draftLoaded"
           :label="sending ? 'Activating…' : 'Activate'"
-          :disabled="sending"
+          :disabled="sending || !!loadError"
           data-testid="activate-draft"
           @click="activateDraft"
         />
@@ -672,7 +674,7 @@ function onFormSubmit() {
                 ? 'Save Revision'
                 : 'Create Invoice'
           "
-          :disabled="sending"
+          :disabled="sending || !!loadError"
           data-testid="submit"
         />
       </div>

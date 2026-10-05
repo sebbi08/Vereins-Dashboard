@@ -310,6 +310,38 @@ describe('InvoiceFormView — copy and revision', () => {
     expect(wrapper.find('[data-testid="load-error"]').text()).toContain('could not be loaded');
   });
 
+  it('blocks submitting a revision after the source failed to load', async () => {
+    setRoute({ id: '3' });
+    replies['GET /api/invoice/3'] = { status: 500, body: {} };
+    replies['POST /api/invoice/3/revision'] = { status: 201, body: { pdfStatus: 'OK' } };
+    const wrapper = await mountForm();
+    vm(wrapper).inputs.name = 'Typed';
+    vm(wrapper).inputs.title = 'Typed';
+    vm(wrapper).inputs.lineItems[0].text = 'Typed';
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="submit"]').attributes('disabled')).toBeDefined();
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('blocks saving a draft of a copy whose source failed to load', async () => {
+    setRoute({}, { copyFrom: '3' });
+    replies['GET /api/invoice/3'] = { status: 404, body: {} };
+    replies['POST /api/invoice-draft'] = { status: 201, body: { draftId: 1 } };
+    const wrapper = await mountForm();
+    vm(wrapper).inputs.name = 'Typed';
+    await flushPromises();
+
+    const save = wrapper.find('[data-testid="save-draft"]');
+    expect(save.attributes('disabled')).toBeDefined();
+    (wrapper.vm as unknown as { onSaveDraft: () => Promise<void> }).onSaveDraft();
+    await flushPromises();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+  });
+
   it('creates a revision with the revision date and posts only the inputs', async () => {
     setRoute({ id: '3' });
     replies['GET /api/invoice/3'] = { status: 200, body: invoiceDto };
