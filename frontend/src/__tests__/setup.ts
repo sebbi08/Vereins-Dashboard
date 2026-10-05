@@ -22,3 +22,12 @@ if (typeof window.matchMedia !== 'function') {
       }) as MediaQueryList,
   });
 }
+
+// jsdom has no ResizeObserver; PrimeVue Textarea (autoResize) observes its element.
+if (typeof globalThis.ResizeObserver !== 'function') {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

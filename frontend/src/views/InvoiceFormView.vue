@@ -1,4 +1,16 @@
 <script setup lang="ts">
+import AutoComplete, {
+  type AutoCompleteCompleteEvent,
+  type AutoCompleteOptionSelectEvent,
+} from 'primevue/autocomplete';
+import Button from 'primevue/button';
+import DatePicker from 'primevue/datepicker';
+import InputNumber from 'primevue/inputnumber';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import Select from 'primevue/select';
+import Textarea from 'primevue/textarea';
+import ToggleSwitch from 'primevue/toggleswitch';
 import type {
   InstructorInvoicePrefillDto,
   InvoiceDraftDto,
@@ -7,12 +19,18 @@ import type {
 } from 'shared';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import FormSection from '../components/ui/FormSection.vue';
+import PageHeader from '../components/ui/PageHeader.vue';
+import { useConfirmAction } from '../composables/useConfirmAction';
+import { useNotify } from '../composables/useNotify';
 import { useAppStore } from '../stores/app';
-import { vAutogrow } from '../directives/autogrow';
+import { formatCents, fromIsoDate, toIsoDate } from '../utils/format';
 
 const router = useRouter();
 const route = useRoute();
 const store = useAppStore();
+const notify = useNotify();
+const { confirmAction } = useConfirmAction();
 
 const invoiceId = route.params.id ? parseInt(String(route.params.id)) : null;
 const copyFromId = route.query.copyFrom ? parseInt(String(route.query.copyFrom)) : null;
@@ -24,28 +42,21 @@ const draftLoaded = ref(false);
 const fromInstructorId = route.query.fromInstructor
   ? parseInt(String(route.query.fromInstructor))
   : null;
-const recipientFieldsLocked = computed(
-  () => !isNewRevision && !isDraft && !!recipient.value && !newRecipient.value,
-);
 
 const sending = ref(false);
-const error = ref('');
-const warning = ref('');
-const info = ref('');
-const success = ref('');
-
-function clearMessages() {
-  error.value = '';
-  warning.value = '';
-  info.value = '';
-  success.value = '';
-}
+const loadError = ref('');
+type FieldKey = 'name' | 'title' | 'lineItems';
+const fieldErrors = ref<Partial<Record<FieldKey, string>>>({});
 
 const recipient = ref<InvoiceRecipientDto | null>(null);
 const newRecipient = ref(false);
 const recipientSearch = ref('');
 const recipientSuggestions = ref<InvoiceRecipientDto[]>([]);
-const recipientLoading = ref(false);
+const recipientSearched = ref(false);
+
+const recipientFieldsLocked = computed(
+  () => !isNewRevision && !isDraft && !!recipient.value && !newRecipient.value,
+);
 
 const inputs = ref<InvoiceInputs>({
   salutation: '',
@@ -61,24 +72,51 @@ const inputs = ref<InvoiceInputs>({
   emailSalutation: 'Sehr geehrte Damen und Herren',
 });
 
-let debounceTimer: ReturnType<typeof setTimeout>;
-async function searchRecipient() {
-  clearTimeout(debounceTimer);
-  if (!recipientSearch.value.trim()) {
+const VAT_OPTIONS = [
+  { label: '7%', value: 7 },
+  { label: '19%', value: 19 },
+];
+
+const pageTitle = computed(() =>
+  isDraft
+    ? 'Edit Draft'
+    : isNewRevision
+      ? 'Create New Revision'
+      : isCopy
+        ? 'Duplicate Invoice'
+        : 'New Invoice',
+);
+
+const invoiceDateValue = computed<Date | null>({
+  get: () => fromIsoDate(inputs.value.invoiceDate),
+  set: (date) => {
+    inputs.value.invoiceDate = date ? toIsoDate(date) : '';
+  },
+});
+
+const grossCents = computed(() => {
+  const net = inputs.value.lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
+  return net + Math.round(net * (inputs.value.vat / 100));
+});
+
+async function searchRecipient(event: AutoCompleteCompleteEvent) {
+  const query = event.query.trim();
+  if (!query) {
     recipientSuggestions.value = [];
     return;
   }
-  debounceTimer = setTimeout(async () => {
-    recipientLoading.value = true;
-    try {
-      const res = await fetch(
-        `/api/invoice/recipient?search=${encodeURIComponent(recipientSearch.value)}`,
-      );
-      if (res.ok) recipientSuggestions.value = await res.json();
-    } finally {
-      recipientLoading.value = false;
-    }
-  }, 300);
+  try {
+    const res = await fetch(`/api/invoice/recipient?search=${encodeURIComponent(query)}`);
+    recipientSuggestions.value = res.ok ? await res.json() : [];
+  } catch {
+    recipientSuggestions.value = [];
+  } finally {
+    recipientSearched.value = true;
+  }
+}
+
+function onRecipientInput(value: string | InvoiceRecipientDto | null) {
+  recipientSearch.value = typeof value === 'string' ? value : (value?.name ?? '');
 }
 
 function selectRecipient(e: InvoiceRecipientDto) {
@@ -93,40 +131,27 @@ function selectRecipient(e: InvoiceRecipientDto) {
   inputs.value.salutation = e.salutation ?? '';
 }
 
+function onRecipientSelect(event: AutoCompleteOptionSelectEvent) {
+  selectRecipient(event.value as InvoiceRecipientDto);
+}
+
 function addLineItem() {
   inputs.value.lineItems.push({ text: '', priceInCents: 0 });
 }
 
 function removeLineItem(index: number) {
-  if (inputs.value.lineItems.length > 1) {
-    inputs.value.lineItems.splice(index, 1);
-  }
+  if (inputs.value.lineItems.length > 1) inputs.value.lineItems.splice(index, 1);
 }
 
-function priceToCentString(index: number): string {
-  const cents = inputs.value.lineItems[index].priceInCents;
-  return cents ? String(cents) : '';
+function setPrice(index: number, euros: number | null) {
+  inputs.value.lineItems[index].priceInCents = euros === null ? 0 : Math.round(euros * 100);
 }
 
-function priceFromCentString(index: number, value: string) {
-  const cleaned = value.replace(/[^0-9]/g, '');
-  inputs.value.lineItems[index].priceInCents = parseInt(cleaned || '0', 10);
-}
-
-const gross = ref('0,00');
-function updateGross() {
-  const net = inputs.value.lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
-  const tax = Math.round(net * (inputs.value.vat / 100));
-  const total = (net + tax) / 100;
-  gross.value = total.toFixed(2).replace('.', ',');
-}
-
-async function ladeRevision() {
+async function loadRevision() {
   if (!invoiceId) return;
   const res = await fetch(`/api/invoice/${invoiceId}`);
   if (!res.ok) return;
   const data = await res.json();
-
   if (data.activeRevision) {
     const e = data.activeRevision.inputs as InvoiceInputs;
     inputs.value = {
@@ -134,7 +159,6 @@ async function ladeRevision() {
       invoiceDate: e.invoiceDate.includes('T') ? e.invoiceDate.split('T')[0] : e.invoiceDate,
     };
   }
-
   if (data.recipient) {
     recipient.value = data.recipient;
     recipientSearch.value = data.recipient.name;
@@ -146,15 +170,10 @@ async function copyFromInvoice() {
   const res = await fetch(`/api/invoice/${copyFromId}`);
   if (!res.ok) return;
   const data = await res.json();
-
   if (data.activeRevision) {
     const e = data.activeRevision.inputs as InvoiceInputs;
-    inputs.value = {
-      ...e,
-      invoiceDate: new Date().toISOString().split('T')[0], // use today, not the old date
-    };
+    inputs.value = { ...e, invoiceDate: new Date().toISOString().split('T')[0] };
   }
-
   if (data.recipient) {
     recipient.value = data.recipient;
     recipientSearch.value = data.recipient.name;
@@ -166,7 +185,7 @@ async function loadDraft() {
   if (!draftId) return;
   const res = await fetch(`/api/invoice-draft/${draftId}`);
   if (!res.ok) {
-    error.value = 'Draft not found';
+    loadError.value = 'Draft not found';
     return;
   }
   const data = (await res.json()) as InvoiceDraftDto;
@@ -181,7 +200,7 @@ async function prefillFromInstructor() {
   if (!fromInstructorId) return;
   const res = await fetch(`/api/instructor/${fromInstructorId}/invoice-prefill`);
   if (!res.ok) {
-    error.value = 'Could not load instructor data';
+    notify.error('Could not load instructor data');
     return;
   }
   const data = (await res.json()) as InstructorInvoicePrefillDto;
@@ -204,16 +223,10 @@ onMounted(async () => {
     }
   }
 
-  if (isNewRevision) {
-    await ladeRevision();
-  } else if (isCopy) {
-    await copyFromInvoice();
-  } else if (isDraft) {
-    await loadDraft();
-  } else if (fromInstructorId) {
-    await prefillFromInstructor();
-  }
-  updateGross();
+  if (isNewRevision) await loadRevision();
+  else if (isCopy) await copyFromInvoice();
+  else if (isDraft) await loadDraft();
+  else if (fromInstructorId) await prefillFromInstructor();
 });
 
 function recipientRequestBody(): Record<string, unknown> {
@@ -232,70 +245,56 @@ function recipientRequestBody(): Record<string, unknown> {
   return body;
 }
 
-async function submit() {
-  clearMessages();
-
-  if (!inputs.value.name.trim()) {
-    error.value = 'Name is required';
-    return;
-  }
-  if (!inputs.value.title.trim()) {
-    error.value = 'Title is required';
-    return;
-  }
-  if (inputs.value.lineItems.some((p) => !p.text.trim())) {
-    error.value = 'All line items need text';
-    return;
-  }
-
-  sending.value = true;
-
-  try {
-    let res: Response;
-
-    if (isNewRevision) {
-      res = await fetch(`/api/invoice/${invoiceId}/revision`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inputs: inputs.value }),
-      });
-    } else {
-      res = await fetch('/api/invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(recipientRequestBody()),
-      });
+/** Drafts only need a name; invoices and revisions need title and line item texts too. */
+function validate(complete: boolean): boolean {
+  const errors: Partial<Record<FieldKey, string>> = {};
+  if (!inputs.value.name.trim()) errors.name = 'Name is required';
+  if (complete) {
+    if (!inputs.value.title.trim()) errors.title = 'Title is required';
+    if (inputs.value.lineItems.some((p) => !p.text.trim())) {
+      errors.lineItems = 'All line items need text';
     }
+  }
+  fieldErrors.value = errors;
+  return Object.keys(errors).length === 0;
+}
 
+async function submit() {
+  if (!validate(true)) return;
+  sending.value = true;
+  try {
+    const res = isNewRevision
+      ? await fetch(`/api/invoice/${invoiceId}/revision`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inputs: inputs.value }),
+        })
+      : await fetch('/api/invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(recipientRequestBody()),
+        });
     const result = await res.json();
-
     if (!res.ok) {
-      error.value = result.error || 'Unknown error';
+      notify.error(result.error || 'Unknown error');
       return;
     }
-
     if (result.pdfStatus === 'FAILED') {
-      warning.value = result.pdfError || 'PDF could not be generated.';
+      notify.warn(result.pdfError || 'PDF could not be generated.');
     } else {
-      success.value = 'Invoice saved successfully.';
+      notify.success('Invoice saved successfully.');
     }
-
-    const zielId = result.invoiceId ?? invoiceId;
-    setTimeout(() => router.push(`/invoice/${zielId}`), 1000);
+    router.push(`/invoice/${result.invoiceId ?? invoiceId}`);
   } catch {
-    error.value = 'Network error while saving';
+    notify.error('Network error while saving');
   } finally {
     sending.value = false;
   }
 }
+
 /** Creates or updates the draft. Returns the draft id, or null on error. */
 async function saveDraft(): Promise<number | null> {
-  clearMessages();
-  if (!inputs.value.name.trim()) {
-    error.value = 'Name is required';
-    return null;
-  }
-
+  if (!validate(false)) return null;
   sending.value = true;
   try {
     const res = await fetch(isDraft ? `/api/invoice-draft/${draftId}` : '/api/invoice-draft', {
@@ -305,12 +304,12 @@ async function saveDraft(): Promise<number | null> {
     });
     const result = await res.json();
     if (!res.ok) {
-      error.value = result.error || 'Unknown error';
+      notify.error(result.error || 'Unknown error');
       return null;
     }
     return result.draftId as number;
   } catch {
-    error.value = 'Network error while saving';
+    notify.error('Network error while saving');
     return null;
   } finally {
     sending.value = false;
@@ -320,18 +319,18 @@ async function saveDraft(): Promise<number | null> {
 async function onSaveDraft() {
   const id = await saveDraft();
   if (id === null) return;
-  if (isDraft) {
-    success.value = 'Draft saved.';
-  } else {
-    router.push('/invoice');
-  }
+  if (isDraft) notify.success('Draft saved.');
+  else router.push('/invoice');
 }
 
 async function activateDraft() {
   const today = new Intl.DateTimeFormat('de-DE').format(new Date());
-  if (!confirm(`Assigns the next invoice number and today's date (${today}). Continue?`)) {
-    return;
-  }
+  const confirmed = await confirmAction({
+    message: `Assigns the next invoice number and today's date (${today}). Continue?`,
+    header: 'Activate draft',
+    acceptLabel: 'Activate',
+  });
+  if (!confirmed) return;
 
   const id = await saveDraft();
   if (id === null) return;
@@ -341,31 +340,36 @@ async function activateDraft() {
     const res = await fetch(`/api/invoice-draft/${draftId}/activate`, { method: 'POST' });
     const result = await res.json();
     if (!res.ok) {
-      error.value = result.error || 'Unknown error';
+      notify.error(result.error || 'Unknown error');
       return;
     }
     router.push(`/invoice/${result.invoiceId}`);
   } catch {
-    error.value = 'Network error while activating';
+    notify.error('Network error while activating');
   } finally {
     sending.value = false;
   }
 }
 
 async function deleteDraft() {
-  if (!confirm('Delete this draft?')) return;
-  clearMessages();
+  const confirmed = await confirmAction({
+    message: 'Delete this draft?',
+    header: 'Delete draft',
+    acceptLabel: 'Delete',
+    danger: true,
+  });
+  if (!confirmed) return;
   sending.value = true;
   try {
     const res = await fetch(`/api/invoice-draft/${draftId}`, { method: 'DELETE' });
     if (!res.ok) {
-      const result = await res.json();
-      error.value = result.error || 'Unknown error';
+      const result = await res.json().catch(() => ({}));
+      notify.error(result.error || 'Unknown error');
       return;
     }
     router.push('/invoice');
   } catch {
-    error.value = 'Network error while deleting';
+    notify.error('Network error while deleting');
   } finally {
     sending.value = false;
   }
@@ -375,344 +379,279 @@ function onFormSubmit() {
   if (sending.value) return;
   if (isDraft) {
     // Enter in a draft must never create a real invoice; and never save a draft that failed to load
-    if (draftLoaded.value) onSaveDraft();
+    if (draftLoaded.value) void onSaveDraft();
   } else {
-    submit();
+    void submit();
   }
 }
 </script>
 
 <template>
-  <div>
-    <div class="flex items-center gap-3 mb-6">
-      <button class="text-gray-400 hover:text-gray-700" @click="router.back()">← Back</button>
-      <h2 class="text-2xl font-bold text-gray-800">
-        {{
-          isDraft
-            ? 'Edit Draft'
-            : isNewRevision
-              ? 'Create New Revision'
-              : isCopy
-                ? 'Duplicate Invoice'
-                : 'New Invoice'
-        }}
-      </h2>
-    </div>
+  <div class="page">
+    <PageHeader :title="pageTitle">
+      <template #actions>
+        <Button
+          label="Back"
+          icon="pi pi-arrow-left"
+          text
+          severity="secondary"
+          @click="router.back()"
+        />
+      </template>
+    </PageHeader>
 
-    <div
-      v-if="error"
-      class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm"
-    >
-      {{ error }}
-    </div>
-    <div
-      v-if="warning"
-      class="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-lg mb-4 text-sm"
-    >
-      {{ warning }}
-    </div>
-    <div
-      v-if="info"
-      class="bg-blue-50 border border-blue-200 text-blue-700 p-3 rounded-lg mb-4 text-sm"
-    >
-      {{ info }}
-    </div>
-    <div
-      v-if="success"
-      class="bg-green-50 border border-green-200 text-green-700 p-3 rounded-lg mb-4 text-sm"
-    >
-      {{ success }}
-    </div>
+    <Message v-if="loadError" severity="error" data-testid="load-error" class="load-error">
+      {{ loadError }}
+    </Message>
 
-    <form class="space-y-6" :novalidate="isDraft" @submit.prevent="onFormSubmit">
-      <!-- Recipient -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-4">Recipient</h3>
-
-        <div v-if="!isNewRevision" class="mb-3 relative">
-          <label class="block text-sm font-medium text-gray-700 mb-1"
-            >Search or create recipient</label
-          >
-          <input
-            v-model="recipientSearch"
-            type="text"
+    <form :novalidate="isDraft" @submit.prevent="onFormSubmit">
+      <FormSection title="Recipient">
+        <div v-if="!isNewRevision" class="field recipient-search">
+          <label for="recipient-search">Search or create recipient</label>
+          <AutoComplete
+            :model-value="recipientSearch"
+            input-id="recipient-search"
+            data-testid="recipient-search"
+            :suggestions="recipientSuggestions"
+            option-label="name"
             placeholder="Enter name…"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            @input="searchRecipient()"
-            @focus="searchRecipient()"
-          />
-          <div
-            v-if="recipientSuggestions.length > 0"
-            class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-40 overflow-auto"
+            :delay="300"
+            fluid
+            @complete="searchRecipient"
+            @option-select="onRecipientSelect"
+            @update:model-value="onRecipientInput"
           >
-            <button
-              v-for="e in recipientSuggestions"
-              :key="e.id"
-              type="button"
-              class="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
-              @click="selectRecipient(e)"
-            >
-              {{ e.name }} — {{ e.street }}, {{ e.city }}
-            </button>
-          </div>
-          <p
+            <template #option="{ option }">
+              {{ option.name }} — {{ option.street }}, {{ option.city }}
+            </template>
+          </AutoComplete>
+          <small
             v-if="
               recipientSearch &&
-              !recipientLoading &&
+              recipientSearched &&
               recipientSuggestions.length === 0 &&
               !recipient
             "
-            class="text-xs text-gray-500 mt-1"
+            class="muted"
           >
             No recipient found. Fill in the fields below to create a new one.
-          </p>
+          </small>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Salutation</label>
-            <input
+        <div class="grid-2">
+          <div class="field">
+            <label for="salutation">Salutation</label>
+            <InputText
+              id="salutation"
               v-model="inputs.salutation"
-              type="text"
               :disabled="recipientFieldsLocked"
-              :class="[
-                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                recipientFieldsLocked
-                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
-                  : 'border-gray-300 focus:ring-blue-500',
-              ]"
+              fluid
             />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-            <input
+          <div class="field">
+            <label for="name">Name</label>
+            <InputText
+              id="name"
               v-model="inputs.name"
-              type="text"
               required
               :disabled="recipientFieldsLocked"
-              :class="[
-                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                recipientFieldsLocked
-                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
-                  : 'border-gray-300 focus:ring-blue-500',
-              ]"
+              :invalid="!!fieldErrors.name"
+              fluid
             />
+            <Message
+              v-if="fieldErrors.name"
+              severity="error"
+              size="small"
+              variant="simple"
+              data-testid="error-name"
+            >
+              {{ fieldErrors.name }}
+            </Message>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Street</label>
-            <input
+          <div class="field">
+            <label for="street">Street</label>
+            <InputText
+              id="street"
               v-model="inputs.street"
-              type="text"
               required
               :disabled="recipientFieldsLocked"
-              :class="[
-                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                recipientFieldsLocked
-                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
-                  : 'border-gray-300 focus:ring-blue-500',
-              ]"
+              fluid
             />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">City</label>
-            <input
+          <div class="field">
+            <label for="city">City</label>
+            <InputText
+              id="city"
               v-model="inputs.city"
-              type="text"
               required
               :disabled="recipientFieldsLocked"
-              :class="[
-                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                recipientFieldsLocked
-                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
-                  : 'border-gray-300 focus:ring-blue-500',
-              ]"
+              fluid
             />
           </div>
         </div>
 
-        <p v-if="isNewRevision || isDraft" class="mt-3 text-xs text-gray-500">
+        <p v-if="isNewRevision || isDraft" class="muted hint">
           Editing these recipient fields updates the linked recipient record for this invoice.
         </p>
-      </div>
+      </FormSection>
 
-      <!-- Invoice Details -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-4">Invoice</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Title</label>
-            <input
+      <FormSection title="Invoice">
+        <div class="grid-2">
+          <div class="field">
+            <label for="title">Title</label>
+            <InputText
+              id="title"
               v-model="inputs.title"
-              type="text"
               required
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :invalid="!!fieldErrors.title"
+              fluid
+            />
+            <Message
+              v-if="fieldErrors.title"
+              severity="error"
+              size="small"
+              variant="simple"
+              data-testid="error-title"
+            >
+              {{ fieldErrors.title }}
+            </Message>
+          </div>
+          <div v-if="!isDraft" class="field">
+            <label for="invoice-date">Invoice Date</label>
+            <DatePicker
+              v-model="invoiceDateValue"
+              input-id="invoice-date"
+              data-testid="invoice-date"
+              date-format="dd.mm.yy"
+              show-icon
+              fluid
             />
           </div>
-          <div v-if="!isDraft">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Invoice Date</label>
-            <input
-              v-model="inputs.invoiceDate"
-              type="date"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div v-else>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Invoice Date</label>
-            <p data-testid="draft-date-hint" class="py-2 text-sm text-gray-500">
+          <div v-else class="field">
+            <label>Invoice Date</label>
+            <p data-testid="draft-date-hint" class="muted draft-date-hint">
               Invoice date is set on activation
             </p>
           </div>
         </div>
 
-        <div class="mb-4">
-          <label class="block text-sm font-medium text-gray-700 mb-2">Line Items</label>
-          <div class="space-y-2">
-            <div v-for="(pos, idx) in inputs.lineItems" :key="idx" class="flex gap-2 items-start">
-              <div class="flex-1">
-                <textarea
-                  v-model="pos.text"
-                  v-autogrow
-                  data-testid="line-item-text"
-                  rows="1"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none overflow-hidden focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  @input="updateGross"
-                ></textarea>
-              </div>
-              <div class="w-24">
-                <input
-                  :value="priceToCentString(idx)"
-                  type="text"
-                  placeholder=""
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-right"
-                  @input="
-                    priceFromCentString(idx, ($event.target as HTMLInputElement).value);
-                    updateGross();
-                  "
-                />
-              </div>
-              <button
-                v-if="inputs.lineItems.length > 1"
-                type="button"
-                class="text-red-400 hover:text-red-600 text-sm px-1 py-2"
-                @click="removeLineItem(idx)"
-              >
-                ×
-              </button>
-            </div>
+        <div class="field line-items">
+          <label>Line Items</label>
+          <div v-for="(pos, idx) in inputs.lineItems" :key="idx" class="line-item">
+            <Textarea
+              v-model="pos.text"
+              data-testid="line-item-text"
+              rows="1"
+              auto-resize
+              :aria-label="`Line item ${idx + 1} text`"
+              class="line-item__text"
+            />
+            <InputNumber
+              :model-value="pos.priceInCents / 100"
+              mode="currency"
+              currency="EUR"
+              locale="de-DE"
+              :aria-label="`Line item ${idx + 1} price`"
+              data-testid="line-item-price"
+              class="line-item__price"
+              @update:model-value="(value: number | null) => setPrice(idx, value)"
+            />
+            <Button
+              v-if="inputs.lineItems.length > 1"
+              icon="pi pi-times"
+              text
+              severity="danger"
+              :aria-label="`Remove line item ${idx + 1}`"
+              @click="removeLineItem(idx)"
+            />
           </div>
-          <button
-            type="button"
-            class="mt-2 text-blue-600 hover:underline text-sm"
-            @click="
-              addLineItem();
-              updateGross();
-            "
+          <Message
+            v-if="fieldErrors.lineItems"
+            severity="error"
+            size="small"
+            variant="simple"
+            data-testid="error-line-items"
           >
-            + Add Line Item
-          </button>
+            {{ fieldErrors.lineItems }}
+          </Message>
+          <div>
+            <Button label="Add Line Item" icon="pi pi-plus" text @click="addLineItem" />
+          </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">VAT</label>
-            <select
+        <div class="totals">
+          <div class="field">
+            <label for="vat">VAT</label>
+            <Select
               v-model="inputs.vat"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              @change="updateGross"
-            >
-              <option :value="7">7%</option>
-              <option :value="19">19%</option>
-            </select>
+              input-id="vat"
+              :options="VAT_OPTIONS"
+              option-label="label"
+              option-value="value"
+              fluid
+            />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-            <select
-              v-model="inputs.directDebit"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option :value="false">Bank Transfer</option>
-              <option :value="true">Direct Debit</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Gross Amount</label>
-            <div
-              class="w-full border border-gray-200 rounded-lg px-3 py-3 text-sm bg-gray-50 font-medium"
-            >
-              {{ gross }} €
+          <div class="field">
+            <label for="direct-debit">Payment Method</label>
+            <div class="row gap-sm">
+              <ToggleSwitch v-model="inputs.directDebit" input-id="direct-debit" />
+              <span>{{ inputs.directDebit ? 'Direct Debit' : 'Bank Transfer' }}</span>
             </div>
           </div>
-        </div>
-      </div>
-
-      <!-- Metadaten -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-4">Metadata</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">E-Mail</label>
-            <input
-              v-model="inputs.email"
-              type="email"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Email Salutation</label>
-            <input
-              v-model="inputs.emailSalutation"
-              type="text"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div class="field">
+            <label>Gross Amount</label>
+            <p data-testid="gross" class="gross">{{ formatCents(grossCents) }}</p>
           </div>
         </div>
-      </div>
+      </FormSection>
 
-      <div class="flex justify-end gap-3">
-        <button
+      <FormSection title="Email">
+        <div class="grid-2">
+          <div class="field">
+            <label for="email">E-Mail</label>
+            <InputText id="email" v-model="inputs.email" type="email" fluid />
+          </div>
+          <div class="field">
+            <label for="email-salutation">Email Salutation</label>
+            <InputText id="email-salutation" v-model="inputs.emailSalutation" fluid />
+          </div>
+        </div>
+      </FormSection>
+
+      <div class="form-actions">
+        <Button
           v-if="isDraft && draftLoaded"
-          type="button"
-          data-testid="delete-draft"
+          label="Delete Draft"
+          icon="pi pi-trash"
+          text
+          severity="danger"
           :disabled="sending"
-          class="mr-auto px-4 py-2 text-sm text-red-600 hover:text-red-800 disabled:opacity-50"
+          data-testid="delete-draft"
+          class="form-actions__delete"
           @click="deleteDraft"
-        >
-          Delete Draft
-        </button>
-        <button
-          type="button"
-          class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-          @click="router.back()"
-        >
-          Cancel
-        </button>
-        <button
+        />
+        <Button label="Cancel" text severity="secondary" @click="router.back()" />
+        <Button
           v-if="!isNewRevision && (!isDraft || draftLoaded)"
           :type="isDraft ? 'submit' : 'button'"
+          :label="isDraft ? 'Save Draft' : 'Save as Draft'"
+          severity="secondary"
+          outlined
+          :disabled="sending"
           data-testid="save-draft"
-          :disabled="sending"
-          class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
           @click="!isDraft && onSaveDraft()"
-        >
-          {{ isDraft ? 'Save Draft' : 'Save as Draft' }}
-        </button>
-        <button
+        />
+        <Button
           v-if="isDraft && draftLoaded"
-          type="button"
-          data-testid="activate-draft"
+          :label="sending ? 'Activating…' : 'Activate'"
           :disabled="sending"
-          class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          data-testid="activate-draft"
           @click="activateDraft"
-        >
-          {{ sending ? 'Activating…' : 'Activate' }}
-        </button>
-        <button
+        />
+        <Button
           v-if="!isDraft"
           type="submit"
-          :disabled="sending"
-          class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-        >
-          {{
+          :label="
             sending
               ? isNewRevision
                 ? 'Saving revision…'
@@ -720,9 +659,80 @@ function onFormSubmit() {
               : isNewRevision
                 ? 'Save Revision'
                 : 'Create Invoice'
-          }}
-        </button>
+          "
+          :disabled="sending"
+          data-testid="submit"
+        />
       </div>
     </form>
   </div>
 </template>
+
+<style scoped>
+.load-error {
+  margin-bottom: 1rem;
+}
+
+.recipient-search {
+  margin-bottom: 1rem;
+}
+
+.hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+}
+
+.draft-date-hint {
+  margin: 0.5rem 0 0;
+}
+
+.line-items {
+  margin: 1rem 0;
+}
+
+.line-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.line-item__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.line-item__price :deep(input) {
+  width: 8rem;
+  text-align: right;
+}
+
+.totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+@media (max-width: 767px) {
+  .totals {
+    grid-template-columns: 1fr;
+  }
+}
+
+.gross {
+  margin: 0;
+  padding: 0.5rem 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.form-actions__delete {
+  margin-right: auto;
+}
+</style>
