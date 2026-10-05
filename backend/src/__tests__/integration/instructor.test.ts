@@ -94,3 +94,239 @@ describe('PUT /api/instructor/settings', () => {
     expect(res.body).not.toHaveProperty('instructorWeeksPerMonth');
   });
 });
+
+const schedule = [
+  { weekday: 'MO', start: '14:00', end: '18:00', breaks: [{ start: '16:00', end: '16:30' }] },
+  { weekday: 'DO', start: '09:00', end: '13:00', breaks: [] },
+];
+
+function newInstructorBody(name = 'Anna Alt') {
+  return {
+    recipientData: { name, street: 'Hauptstr. 1', city: '12345 Berlin', email: 'anna@example.org' },
+    hourlyRateCents: 1200,
+    months: 6,
+    timeBlocks: schedule,
+  };
+}
+
+describe('POST /api/instructor', () => {
+  it('creates a new recipient from recipientData', async () => {
+    const res = await request.post('/api/instructor').send(newInstructorBody());
+
+    expect(res.status).toBe(201);
+    const instructor = await prisma.instructor.findUnique({
+      where: { id: res.body.id },
+      include: { recipient: true },
+    });
+    expect(instructor?.recipient.name).toBe('Anna Alt');
+    expect(instructor?.recipient.email).toBe('anna@example.org');
+    expect(JSON.parse(instructor!.timeBlocks)).toEqual(schedule);
+  });
+
+  it('links an existing recipient and updates it in place', async () => {
+    const recipient = await createRecipient('Old Name');
+
+    const res = await request.post('/api/instructor').send({
+      ...newInstructorBody('New Name'),
+      recipientId: recipient.id,
+    });
+
+    expect(res.status).toBe(201);
+    expect(await prisma.invoiceRecipient.count()).toBe(1);
+    const updated = await prisma.invoiceRecipient.findUnique({ where: { id: recipient.id } });
+    expect(updated?.name).toBe('New Name');
+  });
+
+  it('links an existing recipient without changes when recipientData is omitted', async () => {
+    const recipient = await createRecipient('Keep Me');
+    const body: Partial<ReturnType<typeof newInstructorBody>> = newInstructorBody();
+    delete body.recipientData;
+
+    const res = await request.post('/api/instructor').send({ ...body, recipientId: recipient.id });
+
+    expect(res.status).toBe(201);
+    const unchanged = await prisma.invoiceRecipient.findUnique({ where: { id: recipient.id } });
+    expect(unchanged?.name).toBe('Keep Me');
+  });
+
+  it('returns 409 for a recipient that already has an instructor', async () => {
+    const recipient = await createRecipient();
+    await request
+      .post('/api/instructor')
+      .send({ ...newInstructorBody(), recipientId: recipient.id });
+
+    const res = await request
+      .post('/api/instructor')
+      .send({ ...newInstructorBody(), recipientId: recipient.id });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: 'Recipient already has an instructor' });
+    expect(await prisma.instructor.count()).toBe(1);
+  });
+
+  it('returns 400 without any recipient', async () => {
+    const body: Partial<ReturnType<typeof newInstructorBody>> = newInstructorBody();
+    delete body.recipientData;
+    const res = await request.post('/api/instructor').send(body);
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Recipient is required' });
+  });
+
+  it('returns 400 for an unknown recipientId', async () => {
+    const res = await request
+      .post('/api/instructor')
+      .send({ ...newInstructorBody(), recipientId: 999 });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Recipient not found' });
+  });
+
+  it.each([
+    [
+      'overlapping blocks',
+      {
+        timeBlocks: [
+          { weekday: 'MO', start: '08:00', end: '12:00', breaks: [] },
+          { weekday: 'MO', start: '11:00', end: '13:00', breaks: [] },
+        ],
+      },
+      'Time blocks on the same day must not overlap',
+    ],
+    ['fractional months', { months: 1.5 }, 'Months must be a whole number of at least 1'],
+    ['zero rate', { hourlyRateCents: 0 }, 'Hourly rate must be greater than 0'],
+  ])('returns 400 for %s and writes nothing', async (_label, override, error) => {
+    const res = await request.post('/api/instructor').send({ ...newInstructorBody(), ...override });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error });
+    expect(await prisma.instructor.count()).toBe(0);
+    expect(await prisma.invoiceRecipient.count()).toBe(0);
+  });
+
+  it.each([
+    ['timeBlocks missing', { timeBlocks: undefined }],
+    ['timeBlocks not an array', { timeBlocks: 'Mo 8-12' }],
+    ['rate as string', { hourlyRateCents: '12' }],
+  ])('returns 400 Invalid request body for %s', async (_label, override) => {
+    const res = await request.post('/api/instructor').send({ ...newInstructorBody(), ...override });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Invalid request body' });
+  });
+});
+
+describe('GET /api/instructor', () => {
+  it('lists instructors sorted by name with calculation', async () => {
+    await request.post('/api/instructor').send(newInstructorBody('Zora Zeh'));
+    await request.post('/api/instructor').send(newInstructorBody('Anna Alt'));
+
+    const res = await request.get('/api/instructor');
+
+    expect(res.status).toBe(200);
+    expect(res.body.map((i: { name: string }) => i.name)).toEqual(['Anna Alt', 'Zora Zeh']);
+    expect(res.body[0]).toMatchObject({
+      hourlyRateCents: 1200,
+      months: 6,
+      calculation: { netMinutesPerWeek: 450, monthlyCents: 29250, totalCents: 175500 },
+    });
+  });
+
+  it('uses the current weeks-per-month setting', async () => {
+    await request.post('/api/instructor').send(newInstructorBody());
+    await request.put('/api/instructor/settings').send({ weeksPerMonth: 4 });
+
+    const res = await request.get('/api/instructor');
+
+    // 450 min × 1200 × 4 × 6 / 60
+    expect(res.body[0].calculation.totalCents).toBe(216000);
+  });
+});
+
+describe('GET /api/instructor/:id', () => {
+  it('returns the instructor with recipient, schedule and calculation', async () => {
+    const { body } = await request.post('/api/instructor').send(newInstructorBody());
+
+    const res = await request.get(`/api/instructor/${body.id}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      id: body.id,
+      recipient: { name: 'Anna Alt', street: 'Hauptstr. 1', city: '12345 Berlin' },
+      hourlyRateCents: 1200,
+      months: 6,
+      timeBlocks: schedule,
+      calculation: { totalCents: 175500 },
+    });
+  });
+
+  it.each(['999', 'abc'])('returns 404 for id %s', async (id) => {
+    const res = await request.get(`/api/instructor/${id}`);
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Instructor not found' });
+  });
+});
+
+describe('PUT /api/instructor/:id', () => {
+  it('updates schedule, rate, months and the recipient in place', async () => {
+    const { body } = await request.post('/api/instructor').send(newInstructorBody());
+    const instructor = await prisma.instructor.findUnique({ where: { id: body.id } });
+
+    const res = await request.put(`/api/instructor/${body.id}`).send({
+      ...newInstructorBody('Anna Neu'),
+      recipientId: instructor!.recipientId,
+      hourlyRateCents: 1500,
+      months: 3,
+      timeBlocks: [{ weekday: 'FR', start: '10:00', end: '11:00', breaks: [] }],
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ id: body.id });
+    const updated = await prisma.instructor.findUnique({
+      where: { id: body.id },
+      include: { recipient: true },
+    });
+    expect(updated).toMatchObject({ hourlyRateCents: 1500, months: 3 });
+    expect(updated?.recipient.name).toBe('Anna Neu');
+    expect(await prisma.invoiceRecipient.count()).toBe(1);
+  });
+
+  it('returns 409 and leaves the other recipient untouched when taking its recipient', async () => {
+    const first = await request.post('/api/instructor').send(newInstructorBody('Anna Alt'));
+    const second = await request.post('/api/instructor').send(newInstructorBody('Bernd Bach'));
+    const firstRow = await prisma.instructor.findUnique({ where: { id: first.body.id } });
+
+    const res = await request.put(`/api/instructor/${second.body.id}`).send({
+      ...newInstructorBody('Hijacked'),
+      recipientId: firstRow!.recipientId,
+    });
+
+    expect(res.status).toBe(409);
+    const firstRecipient = await prisma.invoiceRecipient.findUnique({
+      where: { id: firstRow!.recipientId },
+    });
+    expect(firstRecipient?.name).toBe('Anna Alt');
+  });
+
+  it.each(['999', 'abc'])('returns 404 for id %s', async (id) => {
+    const res = await request.put(`/api/instructor/${id}`).send(newInstructorBody());
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Instructor not found' });
+    expect(await prisma.invoiceRecipient.count()).toBe(0);
+  });
+});
+
+describe('DELETE /api/instructor/:id', () => {
+  it('deletes the instructor and keeps the recipient', async () => {
+    const { body } = await request.post('/api/instructor').send(newInstructorBody());
+
+    const res = await request.delete(`/api/instructor/${body.id}`);
+
+    expect(res.status).toBe(204);
+    expect(await prisma.instructor.count()).toBe(0);
+    expect(await prisma.invoiceRecipient.count()).toBe(1);
+  });
+
+  it.each(['999', 'abc'])('returns 404 for id %s', async (id) => {
+    const res = await request.delete(`/api/instructor/${id}`);
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Instructor not found' });
+  });
+});
