@@ -128,6 +128,25 @@ describe('InvoiceSettingsView', () => {
     expect(checkTemplates).toHaveBeenCalled();
   });
 
+  it('still refreshes the store when reloading the template fails after an upload', async () => {
+    const wrapper = await mountView();
+    const checkTemplates = vi.spyOn(useAppStore(), 'checkTemplates').mockResolvedValue();
+    delete replies['GET /api/templates'];
+    notify.error.mockReset();
+
+    wrapper.findComponent(TemplateCard).vm.$emit('uploaded');
+    await flushPromises();
+
+    expect(notify.error).toHaveBeenCalledWith('Error loading template');
+    expect(checkTemplates).toHaveBeenCalled();
+  });
+
+  it('reports a rejected template list', async () => {
+    replies['GET /api/templates'] = { status: 500, body: {} };
+    await mountView();
+    expect(notify.error).toHaveBeenCalledWith('Error loading template');
+  });
+
   it('loads and saves the email settings', async () => {
     replies['PUT /api/email-settings'] = { status: 200, body: {} };
     const wrapper = await mountView();
@@ -166,6 +185,15 @@ describe('InvoiceSettingsView', () => {
     await wrapper.find('[data-testid="test-email"]').trigger('click');
     await flushPromises();
     expect(notify[kind]).toHaveBeenCalledWith(message);
+  });
+
+  it('uses the singular for a single recipient', async () => {
+    replies['GET /api/invoice-recipient?all=true'] = { status: 200, body: [recipients[0]] };
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="recipient-count"]').text()).toBe('1 recipient');
+    expect(wrapper.find('[data-testid="recipient-search"]').attributes('placeholder')).toBe(
+      'Search recipients…',
+    );
   });
 
   it('lists and searches recipients', async () => {

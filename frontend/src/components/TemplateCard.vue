@@ -29,6 +29,7 @@ const previewError = ref('');
 const previewUrl = ref<string | null>(null);
 const pendingFile = ref<File | null>(null);
 const busy = ref(false);
+const uploading = ref(false);
 const fileUpload = ref<{ clear: () => void } | null>(null);
 let objectUrl: string | null = null;
 
@@ -99,6 +100,7 @@ async function saveTemplate() {
   const file = pendingFile.value;
   if (!file) return;
   busy.value = true;
+  uploading.value = true;
   try {
     const res = await fetch(`/api/templates/${props.type}/upload`, {
       method: 'POST',
@@ -116,6 +118,7 @@ async function saveTemplate() {
     notify.error('Network error uploading template');
   } finally {
     busy.value = false;
+    uploading.value = false;
   }
 }
 
@@ -167,10 +170,15 @@ async function showCurrentPreview() {
         mode="basic"
         :accept="accept"
         custom-upload
-        :choose-label="busy ? 'Uploading…' : 'Upload New Template'"
+        :choose-label="
+          busy ? (uploading ? 'Uploading…' : 'Generating preview…') : 'Upload New Template'
+        "
         :disabled="busy"
         @select="onFileSelect"
-      />
+      >
+        <!-- An empty slot would fall back to the default "No file chosen" label -->
+        <template #filelabel><span /></template>
+      </FileUpload>
       <Button
         label="Show Current Preview"
         icon="pi pi-eye"

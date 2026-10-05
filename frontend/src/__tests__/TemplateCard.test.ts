@@ -105,6 +105,26 @@ describe('TemplateCard', () => {
     await vi.waitFor(() => expect(dialogTitle()).toBeNull());
   });
 
+  it('labels the choose button by phase and hides the empty file label', async () => {
+    let resolvePreview: (value: unknown) => void = () => {};
+    fetchMock
+      .mockReturnValueOnce(new Promise((resolve) => (resolvePreview = resolve)))
+      .mockReturnValueOnce(new Promise(() => {}));
+    const wrapper = mountCard();
+    expect(wrapper.text()).not.toContain('No file chosen');
+
+    await chooseFile(wrapper);
+    expect(wrapper.text()).toContain('Generating preview…');
+    expect(wrapper.text()).not.toContain('Uploading…');
+
+    resolvePreview({ ok: true, json: () => Promise.resolve({ data: 'UERG' }) });
+    await flushPromises();
+    (document.querySelector('[data-testid="save-template"]') as HTMLElement).click();
+    await flushPromises();
+    expect(wrapper.text()).toContain('Uploading…');
+    expect(wrapper.text()).not.toContain('No file chosen');
+  });
+
   it('explains missing template fields', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: false,

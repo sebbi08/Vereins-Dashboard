@@ -29,16 +29,22 @@ const notify = useNotify();
 const template = ref<TemplateDto | null>(null);
 
 async function loadTemplate() {
-  const res = await fetch('/api/templates');
-  if (res.ok) {
+  try {
+    const res = await fetch('/api/templates');
+    if (!res.ok) throw new Error('load failed');
     const all = (await res.json()) as TemplateDto[];
     template.value = all.find((t) => t.type === 'RECHNUNG') ?? null;
+  } catch {
+    notify.error('Error loading template');
   }
 }
 
 async function onTemplateUploaded() {
-  await loadTemplate();
-  await store.checkTemplates();
+  try {
+    await loadTemplate();
+  } finally {
+    await store.checkTemplates();
+  }
 }
 
 // ── Email ─────────────────────────────
@@ -126,7 +132,7 @@ const filteredRecipients = computed(() => {
 const recipientCountText = computed(() =>
   recSearch.value.trim()
     ? `${filteredRecipients.value.length} of ${recipients.value.length} recipients`
-    : `${recipients.value.length} recipients`,
+    : `${recipients.value.length} ${recipients.value.length === 1 ? 'recipient' : 'recipients'}`,
 );
 
 async function loadRecipients() {
@@ -341,7 +347,7 @@ onMounted(() => {
                   <InputIcon class="pi pi-search" />
                   <InputText
                     v-model="recSearch"
-                    placeholder="Search recipients by name, street, or city…"
+                    placeholder="Search recipients…"
                     aria-label="Search recipients"
                     data-testid="recipient-search"
                   />
