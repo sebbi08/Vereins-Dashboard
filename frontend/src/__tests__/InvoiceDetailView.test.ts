@@ -248,4 +248,55 @@ describe('InvoiceDetailView', () => {
       'Invoice could not be loaded',
     );
   });
+
+  it('keeps the loaded invoice and toasts when a reload fails', async () => {
+    replies['PATCH /api/invoice/1/cancel'] = { status: 200, body: {} };
+    const wrapper = await mountView();
+    delete replies['GET /api/invoice/1']; // the reload now fails on the network
+
+    await wrapper.find('[data-testid="cancel-invoice"]').trigger('click');
+    await flushPromises();
+
+    expect(notify.error).toHaveBeenCalledWith('Network error');
+    expect(wrapper.find('[data-testid="load-error"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="invoice-status"]').exists()).toBe(true);
+  });
+
+  it('clears an earlier load error when a reload succeeds', async () => {
+    replies['GET /api/invoice/1'] = { status: 404, body: {} };
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="load-error"]').exists()).toBe(true);
+    replies['GET /api/invoice/1'] = { status: 200, body: makeInvoice() };
+    await (wrapper.vm as unknown as { loadData: () => Promise<void> }).loadData();
+    await flushPromises();
+    expect(wrapper.find('[data-testid="load-error"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="invoice-status"]').exists()).toBe(true);
+  });
+
+  it('shows the guard error of a rejected send and reloads the revision', async () => {
+    replies['POST /api/invoice/revision/11/send-email'] = {
+      status: 400,
+      body: { error: 'Email can only be sent for the latest revision' },
+    };
+    const wrapper = await mountView();
+    await wrapper.find('[data-testid="send-email"]').trigger('click');
+    await flushPromises();
+    expect(notify.error).toHaveBeenCalledWith('Email can only be sent for the latest revision');
+    expect(calls()).toEqual([
+      'GET /api/invoice/1',
+      'POST /api/invoice/revision/11/send-email',
+      'GET /api/invoice/1',
+    ]);
+  });
+
+  it('shows the guard error of a rejected test email', async () => {
+    replies['POST /api/invoice/revision/11/send-test-email'] = {
+      status: 400,
+      body: { error: 'Revision not found' },
+    };
+    const wrapper = await mountView();
+    await wrapper.find('[data-testid="send-test-email"]').trigger('click');
+    await flushPromises();
+    expect(notify.error).toHaveBeenCalledWith('Revision not found');
+  });
 });

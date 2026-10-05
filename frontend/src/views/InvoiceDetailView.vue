@@ -38,12 +38,19 @@ const techOpen = ref<Record<number, boolean>>({});
 const isActive = computed(() => invoice.value?.status === 'AKTIV');
 const title = computed(() => (invoice.value ? `Invoice ${invoice.value.number}` : 'Invoice'));
 
+/** A failed first load replaces the page; a failed reload keeps the loaded invoice and toasts. */
+function reportLoadFailure(message: string) {
+  if (invoice.value) notify.error(message);
+  else loadError.value = message;
+}
+
 async function loadData() {
   loading.value = invoice.value === null;
+  loadError.value = '';
   try {
     const res = await fetch(`/api/invoice/${id}`);
     if (!res.ok) {
-      loadError.value = 'Invoice could not be loaded';
+      reportLoadFailure('Invoice could not be loaded');
       return;
     }
     invoice.value = (await res.json()) as InvoiceDto;
@@ -51,7 +58,7 @@ async function loadData() {
       openPanels.value = [invoice.value.revisions[0].id];
     }
   } catch {
-    loadError.value = 'Network error';
+    reportLoadFailure('Network error');
   } finally {
     loading.value = false;
   }
@@ -68,7 +75,7 @@ function isLatest(rev: InvoiceRevisionDto): boolean {
   return invoice.value?.revisions[0]?.id === rev.id;
 }
 
-/** Runs one request per button with a busy flag; returns the parsed body on success. */
+/** Runs one request per button with a busy flag; returns whether the request succeeded. */
 async function run(
   key: string,
   request: () => Promise<Response>,
@@ -135,19 +142,18 @@ async function sendEmail(rev: InvoiceRevisionDto) {
   const ok = await run(
     `email-${rev.id}`,
     () => fetch(`/api/invoice/revision/${rev.id}/send-email`, { method: 'POST' }),
-    (body) => body.emailError || 'Error sending email',
+    (body) => body.emailError || body.error || 'Error sending email',
   );
-  if (ok) {
-    notify.success('Email sent successfully');
-    await loadData();
-  }
+  if (ok) notify.success('Email sent successfully');
+  // A failed send is persisted as FAILED on the revision, so reload either way
+  await loadData();
 }
 
 async function sendTestEmail(rev: InvoiceRevisionDto) {
   const ok = await run(
     `test-${rev.id}`,
     () => fetch(`/api/invoice/revision/${rev.id}/send-test-email`, { method: 'POST' }),
-    (body) => body.emailError || 'Error sending test email',
+    (body) => body.emailError || body.error || 'Error sending test email',
   );
   if (ok) {
     notify.success('Test email sent to configured test address');
