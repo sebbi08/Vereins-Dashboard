@@ -12,6 +12,11 @@ function documentXml(docx: Buffer): string {
   return new PizZip(docx).file('word/document.xml')!.asText();
 }
 
+/** Visible text of the document (tags removed, entities kept). */
+function textOf(xml: string): string {
+  return xml.replace(/<[^>]+>/g, '');
+}
+
 const baseInput = {
   salutation: 'Frau',
   name: 'Anna Alt',
@@ -61,6 +66,33 @@ describe('buildInvoiceDocx', () => {
     expect(xml).toContain('Zweite Position');
     expect(xml).toContain('25.50€');
     expect(xml).not.toContain('{text0}');
+  });
+
+  it.each([
+    ['name', { name: 'Firma {Nord}' }, 'Firma {Nord}'],
+    ['name equal to a line item tag', { name: '{text0}' }, '{text0}'],
+    ['title with an open brace', { title: 'Kurs {' }, 'Kurs {'],
+    ['street with a close brace', { street: 'Weg }' }, 'Weg }'],
+  ])('keeps braces in the %s literally', (_label, override, expected) => {
+    const xml = documentXml(
+      buildInvoiceDocx(fs.readFileSync(templatePath), {
+        ...baseInput,
+        ...override,
+        lineItems: [{ text: 'Position A', priceInCents: 1000 }],
+      }),
+    );
+    expect(textOf(xml)).toContain(expected);
+    expect(textOf(xml)).toContain('Position A');
+  });
+
+  it('keeps braces and XML special characters in line items literally', () => {
+    const xml = documentXml(
+      buildInvoiceDocx(fs.readFileSync(templatePath), {
+        ...baseInput,
+        lineItems: [{ text: 'Kurs {A} }{ <b> & Co', priceInCents: 1000 }],
+      }),
+    );
+    expect(xml).toContain('Kurs {A} }{ &lt;b&gt; &amp; Co');
   });
 
   it('does not warn about reusing a generated zip', () => {

@@ -65,25 +65,39 @@ export interface InvoiceData {
   TableWithServices: string;
 }
 
-function getDocxTableLineItems(
-  lineItems: Array<{ text: string; priceInCents: number }>,
-  resolved = false,
-): string {
+function escapeXml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * WordprocessingML runs for a line item text: XML-escaped, `\n` as line breaks, and
+ * XML-invalid control characters (everything below U+0020 except \t, \n, \r) removed.
+ */
+function lineItemTextRuns(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  const clean = text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+  return clean
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => `<w:r><w:t xml:space="preserve">${escapeXml(line)}</w:t></w:r>`)
+    .join('<w:r><w:br/></w:r>');
+}
+
+/**
+ * Raw XML for the `{@TableWithServices}` tag. Content is inserted already resolved: raw XML
+ * output is not parsed as a template, so braces in any text stay literal.
+ */
+function getDocxTableLineItems(lineItems: Array<{ text: string; priceInCents: number }>): string {
   let tableItems = '';
-  lineItems.forEach((item, index) => {
-    const textContent = resolved ? item.text : `{text${index}}`;
-    const priceContent = resolved ? (item.priceInCents / 100).toFixed(2) : `{price${index}}`;
+  lineItems.forEach((item) => {
+    const priceContent = (item.priceInCents / 100).toFixed(2);
     tableItems += `
         <w:tr>
             <w:tc>
                 <w:tcPr>
                     <w:tcW w:w="6912" w:type="dxa"/>
                 </w:tcPr>
-                <w:p>
-                    <w:r>
-                        <w:t>${textContent}</w:t>
-                    </w:r>
-                </w:p>
+                <w:p>${lineItemTextRuns(item.text)}</w:p>
             </w:tc>
             <w:tc>
                 <w:tcPr>
@@ -314,10 +328,7 @@ export function getDummyData(
       MailAnrede: 'Sehr geehrte Damen und Herren',
       PaymentDetails:
         'Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.',
-      TableWithServices: getDocxTableLineItems(
-        [{ text: 'Miete Musikheim', priceInCents: 8403 }],
-        true,
-      ),
+      TableWithServices: getDocxTableLineItems([{ text: 'Miete Musikheim', priceInCents: 8403 }]),
     } as InvoiceData;
   }
 
@@ -458,7 +469,10 @@ export interface InvoiceDocxInput {
   lineItems: Array<{ text: string; priceInCents: number }>;
 }
 
-/** Fills the invoice DOCX template (two passes). `\n` in line item texts becomes a line break. */
+/**
+ * Fills the invoice DOCX template in a single pass. `\n` in line item texts becomes a line
+ * break; braces in any value stay literal (values are never re-parsed as template syntax).
+ */
 export function buildInvoiceDocx(templateBuffer: Buffer, input: InvoiceDocxInput): Buffer {
   const net = input.lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
   const tax = Math.round(net * (input.vat / 100));
@@ -468,12 +482,11 @@ export function buildInvoiceDocx(templateBuffer: Buffer, input: InvoiceDocxInput
     ? `Der Betrag wird in den nächsten Tagen mit dem Vermerk "${input.invoiceNumber}" von Ihrem Konto eingezogen.`
     : 'Bitte Überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.';
 
-  // Pass 1: Template-level placeholders
-  const doc1 = new Docxtemplater(new PizZip(templateBuffer), {
+  const doc = new Docxtemplater(new PizZip(templateBuffer), {
     paragraphLoop: true,
     linebreaks: true,
   });
-  doc1.render({
+  doc.render({
     Anrede: input.salutation,
     Name: input.name,
     Strasse: input.street,
@@ -492,22 +505,7 @@ export function buildInvoiceDocx(templateBuffer: Buffer, input: InvoiceDocxInput
     MonthlyBruto: '',
   });
 
-  // Pass 2: Per-line-item placeholders (fresh zip from pass 1 output)
-  const pass1Buffer = doc1.getZip().generate({ type: 'nodebuffer' }) as Buffer;
-  const doc2 = new Docxtemplater(new PizZip(pass1Buffer), {
-    paragraphLoop: true,
-    linebreaks: true,
-  });
-  const pass2Data: Record<string, string> = {};
-  input.lineItems.forEach((item, idx) => {
-    // Drop XML-invalid control characters (keeps \t, \n, \r) so docxtemplater cannot throw.
-    // eslint-disable-next-line no-control-regex
-    pass2Data[`text${idx}`] = item.text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
-    pass2Data[`price${idx}`] = (item.priceInCents / 100).toFixed(2);
-  });
-  doc2.render(pass2Data);
-
-  return doc2.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
+  return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
 }
 
 export async function generateInvoicePdf(
