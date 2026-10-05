@@ -172,6 +172,7 @@ onMounted(async () => {
                   store.invoiceTemplateAvailable === false ? 'No active invoice template' : ''
                 "
                 class="px-3 py-1 border border-gray-300 rounded-lg text-xs font-medium hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                @keydown.enter.stop
                 @click.stop="createInvoice(i.id)"
               >
                 Create invoice

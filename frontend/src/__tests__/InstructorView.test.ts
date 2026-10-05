@@ -131,4 +131,13 @@ describe('InstructorView', () => {
 
     expect(mockPush).toHaveBeenCalledWith('/instructor/2');
   });
+
+  it('does not open the instructor when Enter is pressed on the create-invoice button', async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="create-invoice-1"]').trigger('keydown', { key: 'Enter' });
+
+    expect(mockPush).not.toHaveBeenCalledWith('/instructor/1');
+  });
 });
