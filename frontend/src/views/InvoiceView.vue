@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { InvoiceListItem } from 'shared';
+import type { InvoiceDraftListItem, InvoiceListItem } from 'shared';
 import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
@@ -7,6 +7,7 @@ import { useAppStore } from '../stores/app';
 const router = useRouter();
 const store = useAppStore();
 const invoices = ref<InvoiceListItem[]>([]);
+const drafts = ref<InvoiceDraftListItem[]>([]);
 const loading = ref(false);
 const error = ref('');
 
@@ -110,7 +111,19 @@ async function loadData() {
   }
 }
 
-onMounted(loadData);
+async function loadDrafts() {
+  try {
+    const res = await fetch('/api/invoice-draft');
+    if (res.ok) drafts.value = await res.json();
+  } catch {
+    error.value = 'Error loading drafts';
+  }
+}
+
+onMounted(() => {
+  loadData();
+  loadDrafts();
+});
 
 let debounce: ReturnType<typeof setTimeout>;
 function onSearchInput() {
@@ -128,6 +141,10 @@ function formatDate(iso: string) {
 
 function openInvoiceDetails(id: number) {
   router.push(`/invoice/${id}`);
+}
+
+function openDraft(id: number) {
+  router.push(`/invoice/draft/${id}`);
 }
 
 function emailStatusBadge(status: string) {
@@ -195,6 +212,53 @@ const totalCount = computed(() => invoices.value.length);
           Go to Settings →</router-link
         >
       </span>
+    </div>
+
+    <div
+      v-if="drafts.length > 0"
+      data-testid="drafts-section"
+      class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-4"
+    >
+      <h3 class="px-4 py-3 font-semibold text-gray-800 border-b border-gray-200 bg-gray-50">
+        Drafts ({{ drafts.length }})
+      </h3>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-200">
+            <th class="text-left px-4 py-3 font-medium text-gray-600">Recipient</th>
+            <th class="text-left px-4 py-3 font-medium text-gray-600">Title</th>
+            <th class="text-right px-4 py-3 font-medium text-gray-600">Amount</th>
+            <th class="text-left px-4 py-3 font-medium text-gray-600">Last edited</th>
+            <th class="text-left px-4 py-3 font-medium text-gray-600">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="d in drafts"
+            :key="d.id"
+            class="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
+            tabindex="0"
+            role="button"
+            @click="openDraft(d.id)"
+            @keydown.enter.prevent="openDraft(d.id)"
+            @keydown.space.prevent="openDraft(d.id)"
+          >
+            <td class="px-4 py-3 text-gray-700">{{ d.recipientName }}</td>
+            <td class="px-4 py-3 text-gray-700">{{ d.title || '—' }}</td>
+            <td class="px-4 py-3 text-right font-medium text-gray-800">
+              {{ formatAmount(d.amountCents) }}
+            </td>
+            <td class="px-4 py-3 text-gray-600">{{ formatDate(d.updatedAt) }}</td>
+            <td class="px-4 py-3">
+              <span
+                class="inline-block text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700"
+              >
+                DRAFT
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-4">
