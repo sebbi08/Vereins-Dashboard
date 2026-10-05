@@ -9,6 +9,23 @@
   --app-bg: var(--p-surface-950);
 }
 
+:root {
+  color-scheme: light;
+}
+
+.app-dark {
+  color-scheme: dark;
+}
+
+/* Fallback until PrimeVue's theme variables are injected. */
+html {
+  background: #f8fafc;
+}
+
+html.app-dark {
+  background: #09090b;
+}
+
 body {
   margin: 0;
   background: var(--app-bg);
