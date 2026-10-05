@@ -52,10 +52,16 @@ function update(index: 0 | 1, value: number | null) {
 .amount-range {
   display: flex;
   gap: 0.25rem;
-  min-width: 12rem;
+  width: 9.5rem;
+}
+
+.amount-range :deep(.p-inputnumber) {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
 .amount-range :deep(input) {
-  width: 6rem;
+  width: 100%;
+  min-width: 0;
 }
 </style>

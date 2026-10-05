@@ -5,6 +5,7 @@ import {
   formatDate,
   formatDateTime,
   formatHours,
+  formatTimestampDate,
   fromIsoDate,
   parseEuroToCents,
   toIsoDate,
@@ -44,6 +45,14 @@ describe('date helpers', () => {
   it('formats ISO strings as German dates', () => {
     expect(formatDate('2026-03-01T00:00:00.000Z')).toBe('01.03.2026');
     expect(formatDate('2026-12-24')).toBe('24.12.2026');
+  });
+
+  it('formats the local calendar date of a timestamp', () => {
+    expect(formatTimestampDate('2026-03-01T09:05:00')).toBe('01.03.2026');
+  });
+
+  it('returns unparseable input unchanged', () => {
+    expect(formatDate('n/a')).toBe('n/a');
   });
 
   it('formats date and time', () => {

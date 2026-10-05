@@ -13,6 +13,7 @@ import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
 import Message from 'primevue/message';
 import Select from 'primevue/select';
+import SelectButton from 'primevue/selectbutton';
 import Tag from 'primevue/tag';
 import type { InvoiceDraftListItem, InvoiceListItem } from 'shared';
 import { computed, onMounted, ref } from 'vue';
@@ -23,7 +24,7 @@ import StatusTag from '../components/ui/StatusTag.vue';
 import { useBatchDownload } from '../composables/useBatchDownload';
 import { useNotify } from '../composables/useNotify';
 import { useAppStore } from '../stores/app';
-import { formatCents, formatDate } from '../utils/format';
+import { formatCents, formatDate, formatTimestampDate } from '../utils/format';
 import {
   DOCUMENT_STATUS_OPTIONS,
   documentStatusTag,
@@ -62,6 +63,18 @@ const globalSearch = computed<string>({
     filters.value = {
       ...filters.value,
       global: { value: value || null, matchMode: FilterMatchMode.CONTAINS },
+    };
+  },
+});
+
+const STATUS_FILTER_OPTIONS = [...DOCUMENT_STATUS_OPTIONS, { label: 'All', value: null }];
+
+const statusFilter = computed<string | null>({
+  get: () => ((filters.value.status as DataTableFilterMetaData).value as string | null) ?? null,
+  set: (value) => {
+    filters.value = {
+      ...filters.value,
+      status: { value, matchMode: FilterMatchMode.EQUALS },
     };
   },
 });
@@ -112,7 +125,7 @@ onMounted(() => {
 /** Clicks on checkboxes, buttons, links and inputs belong to that control, not to the row. */
 function isControlClick(event: Event): boolean {
   const target = event.target as HTMLElement | null;
-  return !!target?.closest('.p-checkbox, button, a, input');
+  return !!target?.closest('.p-checkbox, button, a, input, td[data-p-selection-column="true"]');
 }
 
 function onInvoiceRowClick(event: DataTableRowClickEvent<InvoiceListItem>) {
@@ -182,7 +195,11 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
           :row-class="() => 'draft-row'"
           @row-click="onDraftRowClick"
         >
-          <Column field="recipientName" header="Recipient" sortable />
+          <Column field="recipientName" header="Recipient" sortable>
+            <template #body="{ data }">
+              <RouterLink :to="`/invoice/draft/${data.id}`">{{ data.recipientName }}</RouterLink>
+            </template>
+          </Column>
           <Column field="title" header="Title">
             <template #body="{ data }">{{ data.title || '—' }}</template>
           </Column>
@@ -190,7 +207,7 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
             <template #body="{ data }">{{ formatCents(data.amountCents) }}</template>
           </Column>
           <Column field="updatedAt" header="Last edited" sortable>
-            <template #body="{ data }">{{ formatDate(data.updatedAt) }}</template>
+            <template #body="{ data }">{{ formatTimestampDate(data.updatedAt) }}</template>
           </Column>
           <Column header="Status">
             <template #body><Tag value="Draft" severity="warn" /></template>
@@ -221,6 +238,15 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
                 data-testid="global-search"
               />
             </IconField>
+            <SelectButton
+              v-model="statusFilter"
+              :options="STATUS_FILTER_OPTIONS"
+              option-label="label"
+              option-value="value"
+              :allow-empty="false"
+              aria-label="Filter by status"
+              data-testid="status-filter"
+            />
             <Button
               label="Clear filters"
               icon="pi pi-filter-slash"
@@ -233,7 +259,13 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
         <template #empty>No invoices found.</template>
 
         <Column selection-mode="multiple" header-style="width: 3rem" />
-        <Column field="number" header="Number" sortable :show-filter-menu="false">
+        <Column
+          field="number"
+          header="Number"
+          sortable
+          :show-filter-menu="false"
+          class="col-number"
+        >
           <template #body="{ data }">
             <RouterLink :to="`/invoice/${data.id}`" class="mono">{{ data.number }}</RouterLink>
           </template>
@@ -242,17 +274,25 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
               v-model="filterModel.value"
               size="small"
               placeholder="Number"
+              fluid
               aria-label="Filter by number"
               @input="filterCallback()"
             />
           </template>
         </Column>
-        <Column field="recipientName" header="Recipient" sortable :show-filter-menu="false">
+        <Column
+          field="recipientName"
+          header="Recipient"
+          sortable
+          :show-filter-menu="false"
+          class="col-recipient"
+        >
           <template #filter="{ filterModel, filterCallback }">
             <InputText
               v-model="filterModel.value"
               size="small"
               placeholder="Recipient"
+              fluid
               aria-label="Filter by recipient"
               @input="filterCallback()"
             />
@@ -279,7 +319,13 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
             />
           </template>
         </Column>
-        <Column field="invoiceDate" header="Invoice Date" sortable :show-filter-menu="false">
+        <Column
+          field="invoiceDate"
+          header="Invoice Date"
+          sortable
+          :show-filter-menu="false"
+          class="col-date"
+        >
           <template #body="{ data }">{{ formatDate(data.invoiceDate) }}</template>
           <template #filter="{ filterModel, filterCallback }">
             <DatePicker
@@ -290,6 +336,7 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
               show-button-bar
               size="small"
               placeholder="Date range"
+              fluid
               aria-label="Filter by invoice date"
               @update:model-value="filterCallback()"
             />
@@ -298,7 +345,7 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
         <Column field="activeRevisionNumber" header="Rev.">
           <template #body="{ data }">R{{ data.activeRevisionNumber ?? '–' }}</template>
         </Column>
-        <Column field="emailStatus" header="Email" :show-filter-menu="false">
+        <Column field="emailStatus" header="Email" :show-filter-menu="false" class="col-email">
           <template #body="{ data }"
             ><StatusTag :tag="emailStatusTag(data.emailStatus)"
           /></template>
@@ -309,6 +356,7 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
               option-label="label"
               option-value="value"
               placeholder="Any"
+              fluid
               show-clear
               size="small"
               aria-label="Filter by email status"
@@ -316,21 +364,8 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
             />
           </template>
         </Column>
-        <Column field="status" header="Status" :show-filter-menu="false">
+        <Column field="status" header="Status">
           <template #body="{ data }"><StatusTag :tag="documentStatusTag(data.status)" /></template>
-          <template #filter="{ filterModel, filterCallback }">
-            <Select
-              v-model="filterModel.value"
-              :options="DOCUMENT_STATUS_OPTIONS"
-              option-label="label"
-              option-value="value"
-              placeholder="All"
-              show-clear
-              size="small"
-              aria-label="Filter by status"
-              @change="filterCallback()"
-            />
-          </template>
         </Column>
         <Column header-style="width: 6rem">
           <template #body="{ data }">
@@ -354,6 +389,22 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
   margin: 0;
   font-size: 1.125rem;
   font-weight: 600;
+}
+
+:deep(.col-number) {
+  width: 8rem;
+}
+
+:deep(.col-recipient) {
+  width: 11rem;
+}
+
+:deep(.col-date) {
+  width: 10rem;
+}
+
+:deep(.col-email) {
+  width: 9rem;
 }
 
 .mono {

@@ -141,6 +141,35 @@ describe('InvoiceView', () => {
     expect(wrapper.text()).toContain('Cancelled');
   });
 
+  it('switches the status filter with the toolbar buttons', async () => {
+    const wrapper = await mountView();
+    const buttons = () =>
+      wrapper.findAll(
+        '[data-testid="status-filter"] [role="button"], [data-testid="status-filter"] button',
+      );
+    expect(buttons().map((b) => b.text())).toEqual(['Active', 'Cancelled', 'All']);
+
+    await buttons()[2].trigger('click');
+    await flushPromises();
+    expect(rows(wrapper)).toHaveLength(3);
+
+    await buttons()[1].trigger('click');
+    await flushPromises();
+    expect(rows(wrapper)).toHaveLength(1);
+    expect(rows(wrapper)[0].text()).toContain('Clara Cord');
+
+    await wrapper.find('[data-testid="clear-filters"]').trigger('click');
+    await flushPromises();
+    expect(rows(wrapper)).toHaveLength(2);
+    expect(buttons()[0].attributes('aria-pressed')).toBe('true');
+  });
+
+  it('keeps the status filter out of the column filter row', async () => {
+    const wrapper = await mountView();
+    expect(wrapper.find('[aria-label="Filter by status"]').exists()).toBe(true);
+    expect(wrapper.findAll('thead [aria-label="Filter by status"]')).toHaveLength(0);
+  });
+
   it('searches by recipient or number', async () => {
     const wrapper = await mountView();
     await wrapper.find('[data-testid="global-search"]').setValue('bach');
@@ -201,6 +230,12 @@ describe('InvoiceView', () => {
     expect(vm(wrapper).selection.map((i) => i.id)).toEqual([1]);
   });
 
+  it('does not open the invoice when the selection cell is clicked', async () => {
+    const wrapper = await mountView();
+    await rows(wrapper)[0].find('td[data-p-selection-column="true"]').trigger('click');
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it('copies an invoice without opening it', async () => {
     const wrapper = await mountView();
     await wrapper.findAll('[data-testid="copy-invoice"]')[0].trigger('click');
@@ -246,6 +281,22 @@ describe('InvoiceView', () => {
     expect(section.text()).toContain('—');
     await wrapper.find('.draft-row').trigger('click');
     expect(push).toHaveBeenCalledWith('/invoice/draft/9');
+  });
+
+  it('links the draft recipient to the draft so it is keyboard-operable', async () => {
+    drafts = [
+      {
+        id: 9,
+        recipientName: 'Dora Drei',
+        title: '',
+        amountCents: 1000,
+        updatedAt: '2026-10-01T10:00:00Z',
+      },
+    ];
+    const wrapper = await mountView();
+    const link = wrapper.findComponent('[data-testid="drafts-section"] .draft-row a');
+    expect(link.exists()).toBe(true);
+    expect(link.text()).toBe('Dora Drei');
   });
 
   it('has no drafts section without drafts', async () => {

@@ -17,13 +17,24 @@ export function centsToEuroInput(cents: number): string {
   return (cents / 100).toFixed(2).replace('.', ',');
 }
 
-/** Calendar date of an ISO string, German format (e.g. 01.03.2026). */
+const GERMAN_DATE: Intl.DateTimeFormatOptions = {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+};
+
+/**
+ * Calendar date of an API date field ("YYYY-MM-DD" or an ISO string whose date part is the
+ * calendar day), German format (e.g. 01.03.2026). Never shifted by the browser time zone.
+ */
 export function formatDate(iso: string): string {
-  return new Intl.DateTimeFormat('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(new Date(iso));
+  const date = fromIsoDate(iso);
+  return date ? new Intl.DateTimeFormat('de-DE', GERMAN_DATE).format(date) : iso;
+}
+
+/** Local calendar date of a timestamp (instant), German format, e.g. for `updatedAt`. */
+export function formatTimestampDate(iso: string): string {
+  return new Intl.DateTimeFormat('de-DE', GERMAN_DATE).format(new Date(iso));
 }
 
 export function formatDateTime(iso: string): string {

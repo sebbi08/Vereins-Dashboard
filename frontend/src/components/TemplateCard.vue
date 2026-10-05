@@ -7,7 +7,7 @@ import ProgressSpinner from 'primevue/progressspinner';
 import type { TemplateDto, TemplateType } from 'shared';
 import { ref } from 'vue';
 import { useNotify } from '../composables/useNotify';
-import { formatDate } from '../utils/format';
+import { formatTimestampDate } from '../utils/format';
 
 const props = defineProps<{
   type: TemplateType;
@@ -147,7 +147,7 @@ async function showCurrentPreview() {
     <div class="template-card__info">
       <p class="template-card__label">{{ label }}</p>
       <p v-if="template" class="muted template-card__meta" data-testid="template-version">
-        Version {{ template.version }} · uploaded on {{ formatDate(template.uploadedAt) }}
+        Version {{ template.version }} · uploaded on {{ formatTimestampDate(template.uploadedAt) }}
       </p>
       <p v-else class="template-card__missing" data-testid="template-missing">
         No template uploaded
