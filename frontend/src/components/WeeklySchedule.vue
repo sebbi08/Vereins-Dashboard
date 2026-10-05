@@ -52,7 +52,6 @@ function cloneBlocks(): TimeBlock[] {
   return props.modelValue.map((b) => ({ ...b, breaks: b.breaks.map((br) => ({ ...br })) }));
 }
 
-// eslint-disable-next-line no-unused-vars
 function emitWith(change: (_blocks: TimeBlock[]) => void) {
   const blocks = cloneBlocks();
   change(blocks);

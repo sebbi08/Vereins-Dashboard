@@ -1,6 +1,8 @@
 import { FilterMatchMode } from '@primevue/core/api';
 import { mount } from '@vue/test-utils';
+import DataTable from 'primevue/datatable';
 import { describe, expect, it } from 'vitest';
+import { defineComponent, h } from 'vue';
 import FormSection from '../components/ui/FormSection.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
 import { globalFilter, TABLE_DEFAULTS } from '../utils/tableDefaults';
@@ -53,5 +55,20 @@ describe('tableDefaults', () => {
       global: { value: null, matchMode: FilterMatchMode.CONTAINS },
     });
     expect(globalFilter('Anna').global.value).toBe('Anna');
+    expect(globalFilter('Anna').global.matchMode).toBe(FilterMatchMode.CONTAINS);
+  });
+
+  it('binds to a DataTable (typechecked by vue-tsc)', () => {
+    const Host = defineComponent({
+      render: () =>
+        h(DataTable, {
+          ...TABLE_DEFAULTS,
+          value: [{ name: 'Anna' }],
+          globalFilterFields: ['name'],
+          filters: globalFilter('Anna'),
+        }),
+    });
+    const wrapper = mount(Host, { global: withPrimeVue() });
+    expect(wrapper.find('.p-datatable').exists()).toBe(true);
   });
 });

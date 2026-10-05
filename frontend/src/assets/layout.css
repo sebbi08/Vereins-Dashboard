@@ -54,19 +54,19 @@ body {
   }
 }
 
-.gap-1 {
+.gap-xs {
   gap: 0.25rem;
 }
 
-.gap-2 {
+.gap-sm {
   gap: 0.5rem;
 }
 
-.gap-3 {
+.gap-md {
   gap: 1rem;
 }
 
-.gap-4 {
+.gap-lg {
   gap: 1.5rem;
 }
 

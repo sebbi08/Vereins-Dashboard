@@ -59,7 +59,7 @@ const tiles: Tile[] = [
         </template>
         <template #content>
           <p class="muted tile__description">{{ tile.description }}</p>
-          <div class="row gap-2">
+          <div class="row gap-sm">
             <RouterLink v-for="link in tile.links" :key="link.to" :to="link.to" class="tile__link">
               {{ link.label }} <span class="pi pi-arrow-right" aria-hidden="true" />
             </RouterLink>

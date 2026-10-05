@@ -24,7 +24,6 @@ const themeOptions: { label: string; value: ThemeMode; icon: string }[] = [
 
 const appVersion = import.meta.env.VITE_APP_VERSION;
 
-// eslint-disable-next-line no-unused-vars -- parameter name in a function type
 function onNavigate(event: MouseEvent, navigate: (e?: MouseEvent) => unknown) {
   navigate(event);
   emit('navigate');
