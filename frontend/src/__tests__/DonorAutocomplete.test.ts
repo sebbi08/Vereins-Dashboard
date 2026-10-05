@@ -1,10 +1,11 @@
-import { mount } from '@vue/test-utils';
-import { createPinia } from 'pinia';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
+import AutoComplete from 'primevue/autocomplete';
 import type { DonorDto } from 'shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import DonorAutocomplete from '../components/DonorAutocomplete.vue';
+import { withPrimeVue } from './helpers/primeVue';
 
-const mockDonor: DonorDto[] = [
+const donors: DonorDto[] = [
   {
     id: 1,
     name: 'Hans Schmidt',
@@ -23,129 +24,110 @@ const mockDonor: DonorDto[] = [
   },
 ];
 
+function newDonorOption(name: string): DonorDto {
+  return { id: -1, name, street: '', city: '', letterSalutation: '' };
+}
+
+function mountPicker(modelValue: DonorDto | null = null) {
+  return mount(DonorAutocomplete, {
+    props: { modelValue, inputId: 'donor-input' },
+    global: withPrimeVue(),
+  });
+}
+
+function autocomplete(wrapper: VueWrapper) {
+  return wrapper.findComponent(AutoComplete);
+}
+
+function input(wrapper: VueWrapper): HTMLInputElement {
+  return wrapper.find('input#donor-input').element as HTMLInputElement;
+}
+
+async function complete(wrapper: VueWrapper, query: string) {
+  autocomplete(wrapper).vm.$emit('complete', { originalEvent: new Event('input'), query });
+  await flushPromises();
+}
+
+beforeEach(() => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve(donors) }),
+  );
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('DonorAutocomplete', () => {
-  beforeEach(() => {
-    global.fetch = vi.fn().mockResolvedValue({
-      json: vi.fn().mockResolvedValue(mockDonor),
-    } as unknown as Response);
-    vi.useFakeTimers();
+  it('renders a search input with the given id', () => {
+    const wrapper = mountPicker();
+    expect(input(wrapper).placeholder).toBe('Search donor…');
+    expect(wrapper.attributes('data-testid')).toBe('donor-search');
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-    vi.useRealTimers();
+  it('shows the selected donor name and follows the model', async () => {
+    const wrapper = mountPicker(donors[0]);
+    expect(input(wrapper).value).toBe('Hans Schmidt');
+    await wrapper.setProps({ modelValue: donors[1] });
+    expect(input(wrapper).value).toBe('Maria Müller');
   });
 
-  it('renders a text input', () => {
-    const wrapper = mount(DonorAutocomplete, {
-      props: { modelValue: null },
-      global: { plugins: [createPinia()] },
+  it('does not search below 2 characters', async () => {
+    const wrapper = mountPicker();
+    await complete(wrapper, 'H');
+    expect(fetch).not.toHaveBeenCalled();
+    expect(autocomplete(wrapper).props('suggestions')).toEqual([]);
+  });
+
+  it('searches donors and offers a new donor last', async () => {
+    const wrapper = mountPicker();
+    await complete(wrapper, 'Han');
+    expect(fetch).toHaveBeenCalledWith('/api/donor?q=Han');
+    expect(autocomplete(wrapper).props('suggestions')).toEqual([...donors, newDonorOption('Han')]);
+  });
+
+  it('trims and encodes the query', async () => {
+    const wrapper = mountPicker();
+    await complete(wrapper, ' Mü ller ');
+    expect(fetch).toHaveBeenCalledWith('/api/donor?q=M%C3%BC%20ller');
+  });
+
+  it('still offers a new donor when the search fails', async () => {
+    vi.mocked(fetch).mockRejectedValue(new Error('offline'));
+    const wrapper = mountPicker();
+    await complete(wrapper, 'Han');
+    expect(autocomplete(wrapper).props('suggestions')).toEqual([newDonorOption('Han')]);
+  });
+
+  it('clears the selection while the user types', async () => {
+    const wrapper = mountPicker(donors[0]);
+    autocomplete(wrapper).vm.$emit('update:modelValue', 'Hans S');
+    await flushPromises();
+    expect(wrapper.emitted('update:modelValue')).toEqual([[null]]);
+  });
+
+  it('emits the picked donor', async () => {
+    const wrapper = mountPicker();
+    autocomplete(wrapper).vm.$emit('update:modelValue', donors[0]);
+    autocomplete(wrapper).vm.$emit('option-select', {
+      originalEvent: new Event('click'),
+      value: donors[0],
     });
-    expect(wrapper.find('input[type="text"]').exists()).toBe(true);
+    await flushPromises();
+    expect(wrapper.emitted('update:modelValue')).toEqual([[donors[0]]]);
+    expect(input(wrapper).value).toBe('Hans Schmidt');
   });
 
-  it('shows modelValue name in the input when provided', () => {
-    const wrapper = mount(DonorAutocomplete, {
-      props: { modelValue: mockDonor[0] },
-      global: { plugins: [createPinia()] },
+  it('emits "neu" with the typed name for the new-donor option', async () => {
+    const wrapper = mountPicker();
+    await complete(wrapper, 'Neue Person');
+    autocomplete(wrapper).vm.$emit('option-select', {
+      originalEvent: new Event('click'),
+      value: newDonorOption('Neue Person'),
     });
-    const input = wrapper.find('input').element as HTMLInputElement;
-    expect(input.value).toBe('Hans Schmidt');
-  });
-
-  it('does not call fetch when query is shorter than 2 characters', async () => {
-    const wrapper = mount(DonorAutocomplete, {
-      props: { modelValue: null },
-      global: { plugins: [createPinia()] },
-    });
-    const input = wrapper.find('input');
-    await input.setValue('H');
-    await input.trigger('input');
-    vi.runAllTimers();
-    expect(global.fetch).not.toHaveBeenCalled();
-  });
-
-  it('calls fetch with the search query after debounce', async () => {
-    const wrapper = mount(DonorAutocomplete, {
-      props: { modelValue: null },
-      global: { plugins: [createPinia()] },
-    });
-    const input = wrapper.find('input');
-    await input.setValue('Han');
-    await input.trigger('input');
-    vi.runAllTimers();
-    expect(global.fetch).toHaveBeenCalledWith('/api/donor?q=Han');
-  });
-
-  it('emits update:modelValue with null when user types', async () => {
-    const wrapper = mount(DonorAutocomplete, {
-      props: { modelValue: mockDonor[0] },
-      global: { plugins: [createPinia()] },
-    });
-    const input = wrapper.find('input');
-    await input.setValue('Hans S');
-    await input.trigger('input');
-    expect(wrapper.emitted('update:modelValue')).toBeTruthy();
-    expect(wrapper.emitted('update:modelValue')![0]).toEqual([null]);
-  });
-
-  it('shows dropdown results after search', async () => {
-    const wrapper = mount(DonorAutocomplete, {
-      props: { modelValue: null },
-      global: { plugins: [createPinia()] },
-    });
-    const input = wrapper.find('input');
-    await input.setValue('Han');
-    await input.trigger('input');
-    vi.runAllTimers();
-    // Flush the fetch promise
-    await vi.runAllTimersAsync();
-    await wrapper.vm.$nextTick();
-
-    const items = wrapper.findAll('li');
-    expect(items.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it('emits update:modelValue with the selected spender', async () => {
-    const wrapper = mount(DonorAutocomplete, {
-      props: { modelValue: null },
-      global: { plugins: [createPinia()] },
-    });
-    const input = wrapper.find('input');
-    await input.setValue('Han');
-    await input.trigger('input');
-    vi.runAllTimers();
-    await vi.runAllTimersAsync();
-    await wrapper.vm.$nextTick();
-
-    const firstItem = wrapper.find('li');
-    if (firstItem.exists()) {
-      await firstItem.trigger('mousedown');
-      const emitted = wrapper.emitted('update:modelValue');
-      expect(emitted).toBeTruthy();
-      expect(emitted![emitted!.length - 1][0]).toMatchObject({
-        id: expect.any(Number),
-        name: expect.any(String),
-      });
-    }
-  });
-
-  it('emits "neu" event when new donor option is clicked', async () => {
-    const wrapper = mount(DonorAutocomplete, {
-      props: { modelValue: null },
-      global: { plugins: [createPinia()] },
-    });
-    const input = wrapper.find('input');
-    await input.setValue('Han');
-    await input.trigger('input');
-    vi.runAllTimers();
-    await vi.runAllTimersAsync();
-    await wrapper.vm.$nextTick();
-
-    const lastItem = wrapper.findAll('li').at(-1);
-    if (lastItem?.exists()) {
-      await lastItem.trigger('mousedown');
-      expect(wrapper.emitted('neu')).toBeTruthy();
-    }
+    await flushPromises();
+    expect(wrapper.emitted('neu')).toEqual([[{ name: 'Neue Person', street: '', city: '' }]]);
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
   });
 });

@@ -1,9 +1,14 @@
 <script setup lang="ts">
+import AutoComplete, {
+  type AutoCompleteCompleteEvent,
+  type AutoCompleteOptionSelectEvent,
+} from 'primevue/autocomplete';
 import type { DonorDto } from 'shared';
 import { ref, watch } from 'vue';
 
 const props = defineProps<{
   modelValue: DonorDto | null;
+  inputId?: string;
 }>();
 
 const emit = defineEmits<{
@@ -11,82 +16,98 @@ const emit = defineEmits<{
   neu: [daten: { name: string; street: string; city: string }];
 }>();
 
+/** Pseudo option at the end of the list: create a new donor from the typed name. */
+const NEW_DONOR_ID = -1;
+
 const query = ref(props.modelValue?.name ?? '');
-const results = ref<DonorDto[]>([]);
-const offen = ref(false);
-let debounceTimer: ReturnType<typeof setTimeout>;
+const suggestions = ref<DonorDto[]>([]);
 
 watch(
   () => props.modelValue,
-  (v) => {
-    if (v) query.value = v.name;
+  (donor) => {
+    if (donor) query.value = donor.name;
   },
 );
 
-function onBlur() {
-  window.setTimeout(() => (offen.value = false), 150);
+function newDonorOption(name: string): DonorDto {
+  return { id: NEW_DONOR_ID, name, street: '', city: '', letterSalutation: '' };
 }
 
-async function search(q: string) {
+async function search(event: AutoCompleteCompleteEvent) {
+  const q = event.query.trim();
   if (q.length < 2) {
-    results.value = [];
-    offen.value = false;
+    suggestions.value = [];
     return;
   }
-  const res = await fetch(`/api/donor?q=${encodeURIComponent(q)}`);
-  results.value = await res.json();
-  offen.value = true;
+  let donors: DonorDto[] = [];
+  try {
+    const res = await fetch(`/api/donor?q=${encodeURIComponent(q)}`);
+    if (res.ok) donors = await res.json();
+  } catch {
+    // offer "new donor" only
+  }
+  suggestions.value = [...donors, newDonorOption(q)];
 }
 
-function onInput() {
-  clearTimeout(debounceTimer);
-  emit('update:modelValue', null);
-  debounceTimer = setTimeout(() => search(query.value), 250);
+function onInput(value: string | DonorDto | null) {
+  // Picking an option also emits the object here; onSelect handles that case
+  if (typeof value === 'string' || value === null) {
+    query.value = value ?? '';
+    emit('update:modelValue', null);
+  }
 }
 
-function select(spender: DonorDto) {
-  emit('update:modelValue', spender);
-  query.value = spender.name;
-  offen.value = false;
-}
-
-function neu() {
-  offen.value = false;
-  emit('neu', { name: query.value, street: '', city: '' });
+function onSelect(event: AutoCompleteOptionSelectEvent) {
+  const donor = event.value as DonorDto;
+  query.value = donor.name;
+  if (donor.id === NEW_DONOR_ID) {
+    emit('neu', { name: donor.name, street: '', city: '' });
+  } else {
+    emit('update:modelValue', donor);
+  }
 }
 </script>
 
 <template>
-  <div class="relative">
-    <input
-      v-model="query"
-      type="text"
-      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-      placeholder="Search donor..."
-      @input="onInput"
-      @blur="onBlur"
-      @focus="results.length ? (offen = true) : null"
-    />
-    <ul
-      v-if="offen"
-      class="absolute z-10 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto"
-    >
-      <li
-        v-for="s in results"
-        :key="s.id"
-        class="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50"
-        @mousedown.prevent="select(s)"
-      >
-        <span class="font-medium">{{ s.name }}</span>
-        <span class="text-gray-400 ml-2 text-xs">{{ s.city }}</span>
-      </li>
-      <li
-        v-if="query.length >= 2"
-        class="px-3 py-2 text-sm cursor-pointer text-blue-600 hover:bg-blue-50 border-t border-gray-100"
-        @mousedown.prevent="neu"
-      >
-        + „{{ query }}" als new donor
-      </li>
-    </ul>
-  </div>
+  <AutoComplete
+    :model-value="query"
+    :input-id="inputId"
+    :suggestions="suggestions"
+    option-label="name"
+    placeholder="Search donor…"
+    :min-length="2"
+    :delay="250"
+    fluid
+    data-testid="donor-search"
+    @complete="search"
+    @option-select="onSelect"
+    @update:model-value="onInput"
+  >
+    <template #option="{ option }">
+      <span v-if="option.id === NEW_DONOR_ID" class="donor-option donor-option--new">
+        <i class="pi pi-plus" aria-hidden="true"></i>
+        Create “{{ option.name }}” as new donor
+      </span>
+      <span v-else class="donor-option">
+        <span class="donor-option__name">{{ option.name }}</span>
+        <span class="muted">{{ option.city }}</span>
+      </span>
+    </template>
+  </AutoComplete>
 </template>
+
+<style scoped>
+.donor-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.donor-option__name {
+  font-weight: 500;
+}
+
+.donor-option--new {
+  color: var(--p-primary-color);
+}
+</style>
