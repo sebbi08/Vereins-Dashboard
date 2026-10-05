@@ -40,6 +40,11 @@ const router = createRouter({
       component: InvoiceFormView,
     },
     {
+      path: '/invoice/draft/:draftId',
+      name: 'invoice-draft',
+      component: InvoiceFormView,
+    },
+    {
       path: '/invoice/:id',
       name: 'invoice-detail',
       component: InvoiceDetailView,

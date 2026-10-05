@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { InvoiceInputs, InvoiceRecipientDto } from 'shared';
+import type { InvoiceDraftDto, InvoiceInputs, InvoiceRecipientDto } from 'shared';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
@@ -12,6 +12,9 @@ const invoiceId = route.params.id ? parseInt(String(route.params.id)) : null;
 const copyFromId = route.query.copyFrom ? parseInt(String(route.query.copyFrom)) : null;
 const isNewRevision = !!invoiceId;
 const isCopy = !!copyFromId;
+const draftId = route.params.draftId ? parseInt(String(route.params.draftId)) : null;
+const isDraft = !!draftId;
+const draftLoaded = ref(false);
 const recipientFieldsLocked = computed(
   () => !isNewRevision && !!recipient.value && !newRecipient.value,
 );
@@ -21,6 +24,13 @@ const error = ref('');
 const warning = ref('');
 const info = ref('');
 const success = ref('');
+
+function clearMessages() {
+  error.value = '';
+  warning.value = '';
+  info.value = '';
+  success.value = '';
+}
 
 const recipient = ref<InvoiceRecipientDto | null>(null);
 const newRecipient = ref(false);
@@ -143,6 +153,21 @@ async function copyFromInvoice() {
   }
 }
 
+async function loadDraft() {
+  if (!draftId) return;
+  const res = await fetch(`/api/invoice-draft/${draftId}`);
+  if (!res.ok) {
+    error.value = 'Draft not found';
+    return;
+  }
+  const data = (await res.json()) as InvoiceDraftDto;
+  inputs.value = { ...data.inputs, invoiceDate: inputs.value.invoiceDate };
+  recipient.value = data.recipient;
+  recipientSearch.value = data.recipient.name;
+  newRecipient.value = false;
+  draftLoaded.value = true;
+}
+
 onMounted(async () => {
   if (store.invoiceTemplateAvailable === false) {
     router.replace('/invoice');
@@ -160,15 +185,30 @@ onMounted(async () => {
     await ladeRevision();
   } else if (isCopy) {
     await copyFromInvoice();
+  } else if (isDraft) {
+    await loadDraft();
   }
   updateGross();
 });
 
+function recipientRequestBody(): Record<string, unknown> {
+  const body: Record<string, unknown> = { inputs: inputs.value };
+  if (recipient.value && !newRecipient.value) {
+    body.recipientId = recipient.value.id;
+  } else {
+    body.recipientData = {
+      name: inputs.value.name,
+      street: inputs.value.street,
+      city: inputs.value.city,
+      email: inputs.value.email,
+      salutation: inputs.value.salutation,
+    };
+  }
+  return body;
+}
+
 async function submit() {
-  error.value = '';
-  warning.value = '';
-  info.value = '';
-  success.value = '';
+  clearMessages();
 
   if (!inputs.value.name.trim()) {
     error.value = 'Name is required';
@@ -195,22 +235,10 @@ async function submit() {
         body: JSON.stringify({ inputs: inputs.value }),
       });
     } else {
-      const body: Record<string, unknown> = { inputs: inputs.value };
-      if (recipient.value && !newRecipient.value) {
-        body.recipientId = recipient.value.id;
-      } else {
-        body.recipientData = {
-          name: inputs.value.name,
-          street: inputs.value.street,
-          city: inputs.value.city,
-          email: inputs.value.email,
-          salutation: inputs.value.salutation,
-        };
-      }
       res = await fetch('/api/invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify(recipientRequestBody()),
       });
     }
 
@@ -235,6 +263,94 @@ async function submit() {
     sending.value = false;
   }
 }
+/** Creates or updates the draft. Returns the draft id, or null on error. */
+async function saveDraft(): Promise<number | null> {
+  clearMessages();
+  if (!inputs.value.name.trim()) {
+    error.value = 'Name is required';
+    return null;
+  }
+
+  sending.value = true;
+  try {
+    const res = await fetch(isDraft ? `/api/invoice-draft/${draftId}` : '/api/invoice-draft', {
+      method: isDraft ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(recipientRequestBody()),
+    });
+    const result = await res.json();
+    if (!res.ok) {
+      error.value = result.error || 'Unknown error';
+      return null;
+    }
+    return result.draftId as number;
+  } catch {
+    error.value = 'Network error while saving';
+    return null;
+  } finally {
+    sending.value = false;
+  }
+}
+
+async function onSaveDraft() {
+  const id = await saveDraft();
+  if (id === null) return;
+  if (isDraft) {
+    success.value = 'Draft saved.';
+  } else {
+    router.push('/invoice');
+  }
+}
+
+async function activateDraft() {
+  const today = new Intl.DateTimeFormat('de-DE').format(new Date());
+  if (!confirm(`Assigns the next invoice number and today's date (${today}). Continue?`)) {
+    return;
+  }
+
+  const id = await saveDraft();
+  if (id === null) return;
+
+  sending.value = true;
+  try {
+    const res = await fetch(`/api/invoice-draft/${draftId}/activate`, { method: 'POST' });
+    const result = await res.json();
+    if (!res.ok) {
+      error.value = result.error || 'Unknown error';
+      return;
+    }
+    router.push(`/invoice/${result.invoiceId}`);
+  } catch {
+    error.value = 'Network error while activating';
+  } finally {
+    sending.value = false;
+  }
+}
+
+async function deleteDraft() {
+  if (!confirm('Delete this draft?')) return;
+  clearMessages();
+  try {
+    const res = await fetch(`/api/invoice-draft/${draftId}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const result = await res.json();
+      error.value = result.error || 'Unknown error';
+      return;
+    }
+    router.push('/invoice');
+  } catch {
+    error.value = 'Network error while deleting';
+  }
+}
+
+function onFormSubmit() {
+  if (isDraft) {
+    // Enter in a draft must never create a real invoice; and never save a draft that failed to load
+    if (draftLoaded.value) onSaveDraft();
+  } else {
+    submit();
+  }
+}
 </script>
 
 <template>
@@ -242,7 +358,15 @@ async function submit() {
     <div class="flex items-center gap-3 mb-6">
       <button class="text-gray-400 hover:text-gray-700" @click="router.back()">← Back</button>
       <h2 class="text-2xl font-bold text-gray-800">
-        {{ isNewRevision ? 'Create New Revision' : isCopy ? 'Duplicate Invoice' : 'New Invoice' }}
+        {{
+          isDraft
+            ? 'Edit Draft'
+            : isNewRevision
+              ? 'Create New Revision'
+              : isCopy
+                ? 'Duplicate Invoice'
+                : 'New Invoice'
+        }}
       </h2>
     </div>
 
@@ -271,7 +395,7 @@ async function submit() {
       {{ success }}
     </div>
 
-    <form class="space-y-6" @submit.prevent="submit">
+    <form class="space-y-6" @submit.prevent="onFormSubmit">
       <!-- Recipient -->
       <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h3 class="font-semibold text-gray-800 mb-4">Recipient</h3>
@@ -395,13 +519,19 @@ async function submit() {
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          <div>
+          <div v-if="!isDraft">
             <label class="block text-sm font-medium text-gray-700 mb-1">Invoice Date</label>
             <input
               v-model="inputs.invoiceDate"
               type="date"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
+          </div>
+          <div v-else>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Invoice Date</label>
+            <p data-testid="draft-date-hint" class="py-2 text-sm text-gray-500">
+              Invoice date is set on activation
+            </p>
           </div>
         </div>
 
@@ -509,6 +639,16 @@ async function submit() {
 
       <div class="flex justify-end gap-3">
         <button
+          v-if="isDraft && draftLoaded"
+          type="button"
+          data-testid="delete-draft"
+          :disabled="sending"
+          class="mr-auto px-4 py-2 text-sm text-red-600 hover:text-red-800 disabled:opacity-50"
+          @click="deleteDraft"
+        >
+          Delete Draft
+        </button>
+        <button
           type="button"
           class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
           @click="router.back()"
@@ -516,6 +656,27 @@ async function submit() {
           Cancel
         </button>
         <button
+          v-if="!isNewRevision && (!isDraft || draftLoaded)"
+          type="button"
+          data-testid="save-draft"
+          :disabled="sending"
+          class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
+          @click="onSaveDraft"
+        >
+          {{ isDraft ? 'Save Draft' : 'Save as Draft' }}
+        </button>
+        <button
+          v-if="isDraft && draftLoaded"
+          type="button"
+          data-testid="activate-draft"
+          :disabled="sending"
+          class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          @click="activateDraft"
+        >
+          {{ sending ? 'Activating…' : 'Activate' }}
+        </button>
+        <button
+          v-if="!isDraft"
           type="submit"
           :disabled="sending"
           class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
