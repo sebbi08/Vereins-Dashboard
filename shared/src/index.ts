@@ -172,3 +172,5 @@ export interface EmailSettings {
   emailBody: string;
   emailTestAddress: string;
 }
+
+export * from './instructorRent.js';
