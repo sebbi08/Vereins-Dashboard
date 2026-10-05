@@ -1,34 +1,132 @@
 <script setup lang="ts">
-import { RouterLink } from 'vue-router';
+import Menu from 'primevue/menu';
+import SelectButton from 'primevue/selectbutton';
+import { computed } from 'vue';
+import { RouterLink, useRoute } from 'vue-router';
+import { type ThemeMode, useThemeMode } from '../composables/useThemeMode';
+import { activeNavKey, NAV_ITEMS } from './navItems';
 
-const navItems = [
-  { name: 'Dashboard', to: '/' },
-  { name: 'Donation Receipt', to: '/donation-receipt' },
-  { name: 'Invoice', to: '/invoice' },
-  { name: 'Instructor Rent', to: '/instructor' },
+withDefaults(defineProps<{ showBrand?: boolean }>(), { showBrand: true });
+
+const emit = defineEmits<{
+  navigate: [];
+}>();
+
+const route = useRoute();
+const activeKey = computed(() => activeNavKey(route.path));
+
+const { mode, setMode } = useThemeMode();
+const themeOptions: { label: string; value: ThemeMode; icon: string }[] = [
+  { label: 'System', value: 'system', icon: 'pi pi-desktop' },
+  { label: 'Light', value: 'light', icon: 'pi pi-sun' },
+  { label: 'Dark', value: 'dark', icon: 'pi pi-moon' },
 ];
 
 const appVersion = import.meta.env.VITE_APP_VERSION;
+
+// eslint-disable-next-line no-unused-vars -- parameter name in a function type
+function onNavigate(event: MouseEvent, navigate: (e?: MouseEvent) => unknown) {
+  navigate(event);
+  emit('navigate');
+}
 </script>
 
 <template>
-  <aside class="w-64 min-h-screen bg-white shadow-md flex flex-col">
-    <div class="px-6 py-5 border-b border-gray-200">
-      <h1 class="text-xl font-bold text-gray-800">MV Dashboard</h1>
-    </div>
-    <nav class="flex-1 px-4 py-6 space-y-1">
-      <RouterLink
-        v-for="item in navItems"
-        :key="item.to"
-        :to="item.to"
-        class="block px-4 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-        active-class="bg-blue-50 text-blue-700 hover:bg-blue-50 hover:text-blue-700"
+  <div class="app-nav">
+    <h1 v-if="showBrand" class="app-nav__brand">MV Dashboard</h1>
+
+    <Menu :model="NAV_ITEMS" class="app-nav__menu">
+      <template #item="{ item, props }">
+        <RouterLink v-slot="{ href, navigate }" :to="item.route" custom>
+          <a
+            :href="href"
+            v-bind="props.action"
+            :data-testid="`nav-${item.key}`"
+            class="app-nav__link"
+            :class="{
+              'app-nav__link--active': item.key === activeKey,
+              'app-nav__link--sub': item.sub,
+            }"
+            @click="onNavigate($event, navigate)"
+          >
+            <span :class="item.icon" aria-hidden="true" />
+            <span>{{ item.label }}</span>
+          </a>
+        </RouterLink>
+      </template>
+    </Menu>
+
+    <div class="app-nav__footer">
+      <SelectButton
+        :model-value="mode"
+        :options="themeOptions"
+        option-label="label"
+        option-value="value"
+        :allow-empty="false"
+        data-testid="theme-toggle"
+        aria-label="Color mode"
+        size="small"
+        @update:model-value="setMode"
       >
-        {{ item.name }}
-      </RouterLink>
-    </nav>
-    <footer class="px-4 py-3 border-t border-gray-200">
-      <p class="text-xs text-gray-400 text-center">Version {{ appVersion }}</p>
-    </footer>
-  </aside>
+        <template #option="{ option }">
+          <span :class="option.icon" aria-hidden="true" />
+          <span>{{ option.label }}</span>
+        </template>
+      </SelectButton>
+      <p class="app-nav__version">Version {{ appVersion }}</p>
+    </div>
+  </div>
 </template>
+
+<style scoped>
+.app-nav {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 1rem;
+}
+
+.app-nav__brand {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.app-nav__menu {
+  width: 100%;
+  border: none;
+  background: transparent;
+}
+
+.app-nav__link {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  text-decoration: none;
+}
+
+.app-nav__link--sub {
+  padding-left: 2.25rem;
+  font-size: 0.875rem;
+}
+
+.app-nav__link--active {
+  color: var(--p-primary-color);
+  font-weight: 600;
+}
+
+.app-nav__footer {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0 0.75rem;
+}
+
+.app-nav__version {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--p-text-muted-color);
+}
+</style>

@@ -1,17 +1,104 @@
 <script setup lang="ts">
 import AppSidebar from '@/components/AppSidebar.vue';
 import { useAppStore } from '@/stores/app';
-import { onMounted } from 'vue';
+import Button from 'primevue/button';
+import ConfirmDialog from 'primevue/confirmdialog';
+import Drawer from 'primevue/drawer';
+import Toast from 'primevue/toast';
+import { onMounted, ref } from 'vue';
 
 const store = useAppStore();
+const drawerOpen = ref(false);
+
 onMounted(() => store.checkTemplates());
 </script>
 
 <template>
-  <div class="flex min-h-screen bg-gray-100">
-    <AppSidebar />
-    <main class="flex-1 p-8">
-      <RouterView />
-    </main>
+  <div class="app-shell">
+    <aside class="app-shell__sidebar">
+      <AppSidebar />
+    </aside>
+
+    <div class="app-shell__main">
+      <header class="app-shell__topbar">
+        <Button
+          icon="pi pi-bars"
+          text
+          aria-label="Open navigation"
+          data-testid="open-nav"
+          @click="drawerOpen = true"
+        />
+        <span class="app-shell__topbar-brand">MV Dashboard</span>
+      </header>
+
+      <main class="app-shell__content">
+        <RouterView />
+      </main>
+    </div>
+
+    <Drawer v-model:visible="drawerOpen" header="MV Dashboard" class="app-shell__drawer">
+      <AppSidebar :show-brand="false" @navigate="drawerOpen = false" />
+    </Drawer>
+
+    <Toast />
+    <ConfirmDialog />
   </div>
 </template>
+
+<style scoped>
+.app-shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+.app-shell__sidebar {
+  width: var(--app-sidebar-width);
+  flex-shrink: 0;
+  padding: 1rem 0.5rem;
+  background: var(--p-content-background);
+  border-right: 1px solid var(--p-content-border-color);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+.app-shell__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell__topbar {
+  display: none;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--p-content-background);
+  border-bottom: 1px solid var(--p-content-border-color);
+}
+
+.app-shell__topbar-brand {
+  font-weight: 700;
+}
+
+.app-shell__content {
+  flex: 1;
+  padding: 2rem;
+}
+
+@media (max-width: 767px) {
+  .app-shell__sidebar {
+    display: none;
+  }
+
+  .app-shell__topbar {
+    display: flex;
+  }
+
+  .app-shell__content {
+    padding: 1rem;
+  }
+}
+</style>
