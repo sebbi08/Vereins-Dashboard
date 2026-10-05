@@ -6,12 +6,18 @@ import type { Prisma } from '../../prisma/generated/client.js';
 import { toAbsolutePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
 import { sendInvoiceEmail } from '../services/emailService.js';
-import { generateInvoiceNumber } from '../services/invoiceNumber.js';
-import { generateInvoicePdf } from '../services/pdfGeneration.js';
+import {
+  calculateGross,
+  createInvoiceWithFirstRevision,
+  RecipientError,
+  saveRecipient,
+  validateRequiredFields,
+  type RecipientSelection,
+} from '../services/invoiceCreation.js';
+import { attemptInvoicePdfGeneration } from '../services/invoicePdf.js';
 
 export const invoiceRouter = Router();
 
-const PDF_ERROR_MESSAGE = 'PDF could not be generated. Please try retry.';
 const runningRetries = new Set<number>();
 
 function revisionToDto(rev: {
@@ -62,99 +68,6 @@ function revisionToDto(rev: {
     emailError: rev.emailError,
     createdAt: rev.createdAt.toISOString(),
   };
-}
-
-function validateRequiredFields(inputs: InvoiceInputs): string | null {
-  if (!inputs.name.trim()) return 'Name is required';
-  if (!inputs.street.trim()) return 'Street is required';
-  if (!inputs.city.trim()) return 'City is required';
-  if (!inputs.title.trim()) return 'Title is required';
-  if (!inputs.lineItems || inputs.lineItems.length === 0) {
-    return 'At least one line item is required';
-  }
-  for (let i = 0; i < inputs.lineItems.length; i++) {
-    if (!inputs.lineItems[i].text.trim()) {
-      return `Line item ${i + 1}: Text is required`;
-    }
-    if (inputs.lineItems[i].priceInCents <= 0) {
-      return `Line item ${i + 1}: Price must be greater than 0`;
-    }
-  }
-  if (inputs.vat !== 7 && inputs.vat !== 19) {
-    return 'VAT must be 7% or 19%';
-  }
-  return null;
-}
-
-function calculateGross(positionsJson: string, vat: number): number {
-  const lineItems: InvoiceLineItem[] = JSON.parse(positionsJson);
-  const net = lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
-  const tax = Math.round(net * (vat / 100));
-  return net + tax;
-}
-
-async function updateRevisionPdfStatus(
-  revisionId: number,
-  update: {
-    pdfStatus: PdfStatus;
-    filePath?: string | null;
-    pdfError?: string | null;
-    pdfTechError?: string | null;
-  },
-) {
-  await prisma.invoiceRevision.update({
-    where: { id: revisionId },
-    data: {
-      pdfStatus: update.pdfStatus,
-      ...(update.filePath !== undefined && { filePath: update.filePath }),
-      ...(update.pdfError !== undefined && { pdfError: update.pdfError }),
-      ...(update.pdfTechError !== undefined && { pdfTechError: update.pdfTechError }),
-    },
-  });
-}
-
-function serializeTechnicalError(error: unknown): string {
-  if (error instanceof Error) {
-    return error.stack || `${error.name}: ${error.message}`;
-  }
-  return String(error);
-}
-
-async function attemptPdfGeneration(revisionId: number) {
-  try {
-    const filePath = await generateInvoicePdf(prisma, revisionId);
-    await updateRevisionPdfStatus(revisionId, {
-      pdfStatus: 'OK',
-      filePath,
-      pdfError: null,
-      pdfTechError: null,
-    });
-    return {
-      pdfStatus: 'OK' as const,
-      pdfError: null,
-      pdfTechError: null,
-      filePath,
-    };
-  } catch (error) {
-    await updateRevisionPdfStatus(revisionId, {
-      pdfStatus: 'FAILED',
-      filePath: null,
-      pdfError: PDF_ERROR_MESSAGE,
-      pdfTechError: serializeTechnicalError(error),
-    });
-
-    const failed = await prisma.invoiceRevision.findUniqueOrThrow({
-      where: { id: revisionId },
-      select: { pdfError: true, pdfTechError: true },
-    });
-
-    return {
-      pdfStatus: 'FAILED' as const,
-      pdfError: failed.pdfError,
-      pdfTechError: failed.pdfTechError,
-      filePath: null,
-    };
-  }
 }
 
 // GET /api/invoice/recipient
@@ -363,7 +276,7 @@ invoiceRouter.post('/revision/:revisionId/retry-pdf', async (req, res) => {
 
   runningRetries.add(id);
   try {
-    const pdf = await attemptPdfGeneration(id);
+    const pdf = await attemptInvoicePdfGeneration(id);
     res.json({
       revisionId: id,
       pdfStatus: pdf.pdfStatus,
@@ -487,17 +400,7 @@ invoiceRouter.get('/:id', async (req, res) => {
 
 // POST /api/invoice
 invoiceRouter.post('/', async (req, res) => {
-  const body = req.body as {
-    recipientId?: number;
-    recipientData?: {
-      name: string;
-      street: string;
-      city: string;
-      email?: string;
-      salutation?: string;
-    };
-    inputs: InvoiceInputs;
-  };
+  const body = req.body as RecipientSelection & { inputs: InvoiceInputs };
 
   const validationError = validateRequiredFields(body.inputs);
   if (validationError) {
@@ -513,95 +416,41 @@ invoiceRouter.post('/', async (req, res) => {
     return;
   }
 
-  const { number, year, runningNumber } = await generateInvoiceNumber(prisma);
   const invoiceDate = body.inputs.invoiceDate ? new Date(body.inputs.invoiceDate) : new Date();
 
-  const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    let recipientUpdated = false;
-    let recipientId = body.recipientId;
-
-    if (recipientId) {
-      const existing = await tx.invoiceRecipient.findUnique({ where: { id: recipientId } });
-      if (!existing) {
-        throw new Error('Recipient not found');
-      }
-
-      await tx.invoiceRecipient.update({
-        where: { id: recipientId },
-        data: {
-          name: body.inputs.name,
-          street: body.inputs.street,
-          city: body.inputs.city,
-          email: body.inputs.email || null,
-          salutation: body.inputs.salutation || null,
-        },
-      });
-      recipientUpdated = true;
-    } else {
-      if (!body.recipientData) {
-        throw new Error('No recipient specified');
-      }
-
-      const newRecipient = await tx.invoiceRecipient.create({
-        data: {
-          name: body.recipientData.name,
-          street: body.recipientData.street,
-          city: body.recipientData.city,
-          email: body.recipientData.email || null,
-          salutation: body.recipientData.salutation || null,
-        },
-      });
-      recipientId = newRecipient.id;
-      recipientUpdated = true;
-    }
-
-    const invoice = await tx.invoice.create({
-      data: {
-        number,
-        year,
-        runningNumber,
-        recipientId: recipientId!,
+  const result = await prisma
+    .$transaction(async (tx: Prisma.TransactionClient) => {
+      const recipientId = await saveRecipient(tx, body, body.inputs);
+      const { invoice, revision } = await createInvoiceWithFirstRevision(tx, {
+        recipientId,
+        inputs: body.inputs,
         invoiceDate,
-      },
-    });
-
-    const revision = await tx.invoiceRevision.create({
-      data: {
-        invoiceId: invoice.id,
-        revisionNumber: 1,
-        salutation: body.inputs.salutation,
-        name: body.inputs.name,
-        street: body.inputs.street,
-        city: body.inputs.city,
-        invoiceDate,
-        title: body.inputs.title,
-        positions: JSON.stringify(body.inputs.lineItems),
-        vat: body.inputs.vat,
-        directDebit: body.inputs.directDebit,
-        email: body.inputs.email,
-        emailSalutation: body.inputs.emailSalutation,
         templateId: invoiceTemplate.id,
-        pdfStatus: 'PENDING',
-      },
+      });
+      const recipient = await tx.invoiceRecipient.findUniqueOrThrow({
+        where: { id: recipientId },
+      });
+      return { invoice, revision, recipient };
+    })
+    .catch((err: unknown) => {
+      if (err instanceof RecipientError) return err;
+      throw err;
     });
-
-    const recipient = await tx.invoiceRecipient.findUniqueOrThrow({
-      where: { id: recipientId! },
-    });
-
-    return { invoice, revision, recipient, recipientUpdated };
-  });
+  if (result instanceof RecipientError) {
+    res.status(400).json({ error: result.message });
+    return;
+  }
 
   // Start PDF generation in background – do NOT await, as libreoffice can be slow
-  attemptPdfGeneration(result.revision.id).catch(() => {
-    // PDF generation errors are already persisted to the DB inside attemptPdfGeneration
+  attemptInvoicePdfGeneration(result.revision.id).catch(() => {
+    // PDF generation errors are already persisted to the DB inside attemptInvoicePdfGeneration
   });
 
   res.status(201).json({
     invoiceId: result.invoice.id,
     revisionId: result.revision.id,
     recipient: result.recipient,
-    recipientUpdated: result.recipientUpdated,
+    recipientUpdated: true,
     pdfStatus: 'PENDING' as const,
     pdfError: null,
     pdfTechError: null,
@@ -696,7 +545,7 @@ invoiceRouter.post('/:id/revision', async (req, res) => {
   });
 
   // Start PDF generation in background
-  attemptPdfGeneration(result.newRevision.id).catch(() => {});
+  attemptInvoicePdfGeneration(result.newRevision.id).catch(() => {});
 
   res.status(201).json({
     invoiceId: id,

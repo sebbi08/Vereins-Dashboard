@@ -15,6 +15,7 @@ export default [
       "**/.git/**",
       "**/backend/prisma/migrations/**",
       "**/.browser-cache/**",
+      "**/.claude/**",
     ],
   },
   js.configs.recommended,

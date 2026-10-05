@@ -55,6 +55,7 @@ const recipientFieldsLocked = computed(() => {
 
 - Creating a new invoice (path: `/invoice/new`)
 - Creating a new revision (path: `/invoice/:id/revision`)
+- Editing an invoice draft (path: `/invoice/draft/:draftId`) — every draft save (`POST`/`PUT /api/invoice-draft`) updates the linked `InvoiceRecipient` in place, like revisions
 
 **When fields are locked:**
 
@@ -225,6 +226,7 @@ See `backend/src/routes/donationReceipt.ts` and `frontend/src/views/DonationRece
 | New invoice                   | Create new `InvoiceRecipient`, save revision with that data                  |
 | New revision (edit recipient) | Update existing `InvoiceRecipient`, save new revision with updated data      |
 | New revision (same recipient) | Keep existing `InvoiceRecipient` unchanged, save new revision with same data |
+| Save invoice draft            | Update the linked `InvoiceRecipient` in place (draft fields stay editable)   |
 | Edit old revision             | Cannot edit; only the latest revision can be edited (enforced by UI)         |
 
 **Golden Rule**: One linked recipient per invoice/receipt, multiple revisions per invoice/receipt. Edits to the latest revision's form update the linked recipient in place.

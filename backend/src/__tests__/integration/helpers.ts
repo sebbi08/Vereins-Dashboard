@@ -7,6 +7,7 @@ import { prisma } from '../../prismaClient';
  */
 export async function cleanDatabase() {
   await prisma.instructor.deleteMany();
+  await prisma.invoiceDraft.deleteMany();
   await prisma.invoiceRevision.deleteMany();
   await prisma.invoice.deleteMany();
   await prisma.invoiceRecipient.deleteMany();

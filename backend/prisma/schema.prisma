@@ -8,75 +8,75 @@ datasource db {
 }
 
 model Donor {
-  id              Int                   @id @default(autoincrement())
-  name            String
-  street          String
-  city            String
-  letterSalutation String
+  id                Int               @id @default(autoincrement())
+  name              String
+  street            String
+  city              String
+  letterSalutation  String
   addressSalutation String?
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
-  donationReceipts DonationReceipt[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  donationReceipts  DonationReceipt[]
 }
 
 model Template {
-  id                    Int                        @id @default(autoincrement())
-  type                  String
-  version               Int
-  fileName              String
-  filePath              String
-  active                Boolean                    @default(false)
-  uploadedAt            DateTime                   @default(now())
-  coverLetterRevisions  DonationReceiptRevision[]  @relation("CoverLetterTemplate")
-  receiptRevisions      DonationReceiptRevision[]  @relation("ReceiptTemplate")
-  invoiceRevisions      InvoiceRevision[]
+  id                   Int                       @id @default(autoincrement())
+  type                 String
+  version              Int
+  fileName             String
+  filePath             String
+  active               Boolean                   @default(false)
+  uploadedAt           DateTime                  @default(now())
+  coverLetterRevisions DonationReceiptRevision[] @relation("CoverLetterTemplate")
+  receiptRevisions     DonationReceiptRevision[] @relation("ReceiptTemplate")
+  invoiceRevisions     InvoiceRevision[]
 }
 
 model DonationReceipt {
-  id              Int                        @id @default(autoincrement())
-  number          String                     @unique
-  year            Int
-  runningNumber   Int
-  status          String                     @default("AKTIV")
-  donorId         Int
-  donor           Donor                      @relation(fields: [donorId], references: [id])
-  donationDate    DateTime
-  createdAt       DateTime                   @default(now())
-  revisions       DonationReceiptRevision[]
+  id            Int                       @id @default(autoincrement())
+  number        String                    @unique
+  year          Int
+  runningNumber Int
+  status        String                    @default("AKTIV")
+  donorId       Int
+  donor         Donor                     @relation(fields: [donorId], references: [id])
+  donationDate  DateTime
+  createdAt     DateTime                  @default(now())
+  revisions     DonationReceiptRevision[]
 }
 
 model DonationReceiptRevision {
-  id                    Int        @id @default(autoincrement())
-  donationReceiptId     Int
-  donationReceipt       DonationReceipt @relation(fields: [donationReceiptId], references: [id])
-  revisionNumber        Int
-  status                String     @default("AKTIV")
+  id                Int             @id @default(autoincrement())
+  donationReceiptId Int
+  donationReceipt   DonationReceipt @relation(fields: [donationReceiptId], references: [id])
+  revisionNumber    Int
+  status            String          @default("AKTIV")
 
-  name                  String
-  street                String
-  city                  String
-  letterSalutation      String
-  addressSalutation     String?
-  donationAmountCents   Int
-  donationDate          DateTime
-  withCoverLetter       Boolean
-  treasurer             String
-  charitablePurpose     String
-  taxOfficeName         String
-  taxNumber             String
-  exemptionDate         String
-  assessmentPeriod      String
+  name                String
+  street              String
+  city                String
+  letterSalutation    String
+  addressSalutation   String?
+  donationAmountCents Int
+  donationDate        DateTime
+  withCoverLetter     Boolean
+  treasurer           String
+  charitablePurpose   String
+  taxOfficeName       String
+  taxNumber           String
+  exemptionDate       String
+  assessmentPeriod    String
 
   coverLetterTemplateId Int?
-  coverLetterTemplate   Template?   @relation("CoverLetterTemplate", fields: [coverLetterTemplateId], references: [id])
+  coverLetterTemplate   Template? @relation("CoverLetterTemplate", fields: [coverLetterTemplateId], references: [id])
   receiptTemplateId     Int
-  receiptTemplate       Template    @relation("ReceiptTemplate", fields: [receiptTemplateId], references: [id])
+  receiptTemplate       Template  @relation("ReceiptTemplate", fields: [receiptTemplateId], references: [id])
 
-  pdfStatus             String     @default("PENDING")
-  pdfError              String?
-  pdfTechError          String?
-  filePath              String?
-  createdAt             DateTime   @default(now())
+  pdfStatus    String   @default("PENDING")
+  pdfError     String?
+  pdfTechError String?
+  filePath     String?
+  createdAt    DateTime @default(now())
 }
 
 model SystemSetting {
@@ -86,57 +86,76 @@ model SystemSetting {
 }
 
 model InvoiceRecipient {
-  id        Int       @id @default(autoincrement())
-  name      String
-  street    String
-  city      String
-  email     String?
-  salutation String?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  invoices  Invoice[]
-  instructor Instructor?
+  id            Int            @id @default(autoincrement())
+  name          String
+  street        String
+  city          String
+  email         String?
+  salutation    String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  invoices      Invoice[]
+  invoiceDrafts InvoiceDraft[]
+  instructor    Instructor?
 }
 
 model Invoice {
-  id             Int               @id @default(autoincrement())
-  number         String            @unique
-  year           Int
-  runningNumber  Int
-  status         String            @default("AKTIV")
-  recipientId    Int
-  recipient      InvoiceRecipient  @relation(fields: [recipientId], references: [id])
-  invoiceDate    DateTime
-  createdAt      DateTime          @default(now())
-  revisions      InvoiceRevision[]
+  id            Int               @id @default(autoincrement())
+  number        String            @unique
+  year          Int
+  runningNumber Int
+  status        String            @default("AKTIV")
+  recipientId   Int
+  recipient     InvoiceRecipient  @relation(fields: [recipientId], references: [id])
+  invoiceDate   DateTime
+  createdAt     DateTime          @default(now())
+  revisions     InvoiceRevision[]
 }
 
 model InvoiceRevision {
-  id             Int      @id @default(autoincrement())
-  invoiceId      Int
-  invoice        Invoice  @relation(fields: [invoiceId], references: [id])
-  revisionNumber Int
-  status         String   @default("AKTIV")
-  salutation     String
-  name           String
-  street         String
-  city           String
-  invoiceDate    DateTime
-  title          String
-  positions      String
-  vat            Int
-  directDebit    Boolean
-  email          String
+  id              Int      @id @default(autoincrement())
+  invoiceId       Int
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id])
+  revisionNumber  Int
+  status          String   @default("AKTIV")
+  salutation      String
+  name            String
+  street          String
+  city            String
+  invoiceDate     DateTime
+  title           String
+  positions       String
+  vat             Int
+  directDebit     Boolean
+  email           String
   emailSalutation String
-  templateId     Int
-  template       Template @relation(fields: [templateId], references: [id])
-  pdfStatus      String   @default("PENDING")
-  pdfError       String?
-  pdfTechError   String?
-  filePath       String?
-  emailStatus    String   @default("NOT_SENT")
-  emailError     String?
-  createdAt      DateTime @default(now())
+  templateId      Int
+  template        Template @relation(fields: [templateId], references: [id])
+  pdfStatus       String   @default("PENDING")
+  pdfError        String?
+  pdfTechError    String?
+  filePath        String?
+  emailStatus     String   @default("NOT_SENT")
+  emailError      String?
+  createdAt       DateTime @default(now())
+}
+
+model InvoiceDraft {
+  id              Int              @id @default(autoincrement())
+  recipientId     Int
+  recipient       InvoiceRecipient @relation(fields: [recipientId], references: [id])
+  salutation      String
+  name            String
+  street          String
+  city            String
+  title           String
+  positions       String
+  vat             Int
+  directDebit     Boolean
+  email           String
+  emailSalutation String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 }
 
 model Instructor {
@@ -145,7 +164,7 @@ model Instructor {
   recipient       InvoiceRecipient @relation(fields: [recipientId], references: [id])
   hourlyRateCents Int
   months          Int
-  timeBlocks      String           // JSON: TimeBlock[]
+  timeBlocks      String // JSON: TimeBlock[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 }

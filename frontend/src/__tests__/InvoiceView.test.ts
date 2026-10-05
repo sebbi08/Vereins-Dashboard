@@ -1,6 +1,6 @@
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import type { InvoiceListItem } from 'shared';
+import type { InvoiceDraftListItem, InvoiceListItem } from 'shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nextTick } from 'vue';
 import { useRouter } from 'vue-router';
@@ -47,6 +47,16 @@ const mockInvoices: InvoiceListItem[] = [
   makeInvoice({ id: 3, number: 'INV-003' }),
 ];
 
+function mountInvoiceView() {
+  return mount(InvoiceView, {
+    global: {
+      stubs: {
+        'router-link': { template: '<a><slot /></a>' },
+      },
+    },
+  });
+}
+
 describe('InvoiceView — selection & download', () => {
   beforeEach(() => {
     vi.stubGlobal(
@@ -60,16 +70,6 @@ describe('InvoiceView — selection & download', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
-
-  function mountInvoiceView() {
-    return mount(InvoiceView, {
-      global: {
-        stubs: {
-          'router-link': { template: '<a><slot /></a>' },
-        },
-      },
-    });
-  }
 
   describe('toggleSelect', () => {
     it('adds an ID to the Set when not present', async () => {
@@ -467,5 +467,90 @@ describe('InvoiceView — selection & download', () => {
         expect(alertSpy).toHaveBeenCalledWith('Download failed. Please try again.');
       });
     });
+  });
+});
+
+describe('InvoiceView — drafts section', () => {
+  const mockDrafts: InvoiceDraftListItem[] = [
+    {
+      id: 7,
+      recipientName: 'Draft Recipient',
+      title: 'Draft Title',
+      amountCents: 11900,
+      updatedAt: '2026-10-01T10:00:00Z',
+    },
+  ];
+
+  function stubFetch(drafts: InvoiceDraftListItem[]) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation((url: string) => {
+        if (url === '/api/invoice-draft') {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(drafts) } as Response);
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockInvoices),
+        } as Response);
+      }),
+    );
+  }
+
+  beforeEach(() => {
+    mockPush.mockClear();
+    (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({ push: mockPush });
+    setActivePinia(createPinia());
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('renders drafts above the filter bar and the invoice table', async () => {
+    stubFetch(mockDrafts);
+    const wrapper = mountInvoiceView();
+    await flushPromises();
+
+    const section = wrapper.find('[data-testid="drafts-section"]');
+    expect(section.exists()).toBe(true);
+    expect(section.text()).toContain('Draft Recipient');
+    expect(section.text()).toContain('Draft Title');
+    expect(section.text()).toContain('119,00');
+
+    const html = wrapper.html();
+    const draftsAt = html.indexOf('data-testid="drafts-section"');
+    expect(draftsAt).toBeLessThan(html.indexOf('Search by name or number'));
+    expect(draftsAt).toBeLessThan(html.indexOf('INV-001'));
+  });
+
+  it('hides the drafts section when there are no drafts', async () => {
+    stubFetch([]);
+    const wrapper = mountInvoiceView();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="drafts-section"]').exists()).toBe(false);
+  });
+
+  it('opens the draft form when a draft row is clicked', async () => {
+    stubFetch(mockDrafts);
+    const wrapper = mountInvoiceView();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="drafts-section"] tbody tr').trigger('click');
+
+    expect(mockPush).toHaveBeenCalledWith('/invoice/draft/7');
+  });
+
+  it('select all ignores drafts', async () => {
+    stubFetch(mockDrafts);
+    const wrapper = mountInvoiceView();
+    await flushPromises();
+
+    vm(wrapper).toggleSelectAll();
+
+    expect([...vm(wrapper).selectedIds].sort()).toEqual([1, 2, 3]);
+    expect(
+      wrapper.find('[data-testid="drafts-section"]').findAll('input[type="checkbox"]'),
+    ).toHaveLength(0);
   });
 });

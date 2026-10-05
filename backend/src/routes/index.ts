@@ -8,6 +8,7 @@ import { donorRouter } from './donor.js';
 import { emailSettingsRouter } from './emailSettings.js';
 import { instructorRouter } from './instructor.js';
 import { invoiceRouter } from './invoice.js';
+import { invoiceDraftRouter } from './invoiceDraft.js';
 import { invoiceRecipientRouter } from './invoiceRecipient.js';
 import { settingsRouter } from './settings.js';
 import { templatesRouter } from './templates.js';
@@ -16,6 +17,7 @@ export const router = Router();
 
 router.use('/donation-receipt', donationReceiptRouter);
 router.use('/invoice', invoiceRouter);
+router.use('/invoice-draft', invoiceDraftRouter);
 router.use('/invoice-recipient', invoiceRecipientRouter);
 router.use('/instructor', instructorRouter);
 router.use('/donor', donorRouter);
@@ -35,6 +37,7 @@ router.post('/e2e/reset', async (_req, res) => {
     await prisma.donationReceipt.deleteMany();
     await prisma.invoiceRevision.deleteMany();
     await prisma.invoice.deleteMany();
+    await prisma.invoiceDraft.deleteMany();
     await prisma.invoiceRecipient.deleteMany();
     await prisma.donor.deleteMany();
     await prisma.template.deleteMany();

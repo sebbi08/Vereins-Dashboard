@@ -36,6 +36,9 @@ export interface InvoiceInputs {
   emailSalutation: string;
 }
 
+/** Invoice fields without the invoice date (drafts get their date on activation). */
+export type InvoiceContent = Omit<InvoiceInputs, 'invoiceDate'>;
+
 export interface InvoiceRecipientDto {
   id: number;
   name: string;
@@ -80,6 +83,22 @@ export interface InvoiceDto {
   createdAt: string;
   activeRevision: InvoiceRevisionDto | null;
   revisions: InvoiceRevisionDto[];
+}
+
+export interface InvoiceDraftDto {
+  id: number;
+  recipient: InvoiceRecipientDto;
+  inputs: InvoiceContent;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvoiceDraftListItem {
+  id: number;
+  recipientName: string;
+  title: string;
+  amountCents: number;
+  updatedAt: string;
 }
 
 export type TemplateType = 'ANSCHREIBEN' | 'QUITTUNG' | 'RECHNUNG';
