@@ -1,7 +1,7 @@
-import type { PrismaClient } from '../../prisma/generated/client.js';
+import type { Prisma } from '../../prisma/generated/client.js';
 
 export async function generateInvoiceNumber(
-  prisma: PrismaClient,
+  prisma: Prisma.TransactionClient,
 ): Promise<{ number: string; year: number; runningNumber: number }> {
   const year = new Date().getFullYear();
 

@@ -36,6 +36,9 @@ export interface InvoiceInputs {
   emailSalutation: string;
 }
 
+/** Invoice fields without the invoice date (drafts get their date on activation). */
+export type InvoiceContent = Omit<InvoiceInputs, 'invoiceDate'>;
+
 export interface InvoiceRecipientDto {
   id: number;
   name: string;

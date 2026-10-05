@@ -191,6 +191,57 @@ describe('POST /api/invoice', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it('creates an invoice with a new recipient, number and revision 1', async () => {
+    await seedTemplate();
+    const year = new Date().getFullYear();
+
+    const res = await request.post('/api/invoice').send({
+      recipientData: { name: 'Neue Firma', street: 'Weg 1', city: 'Stadt', email: 'n@example.com' },
+      inputs: { ...gInputs, name: 'Neue Firma', street: 'Weg 1', city: 'Stadt' },
+    });
+
+    expect(res.status).toBe(201);
+    const invoice = await prisma.invoice.findUniqueOrThrow({
+      where: { id: res.body.invoiceId },
+      include: { revisions: true, recipient: true },
+    });
+    expect(invoice.number).toBe(`1 / ${year}`);
+    expect(invoice.recipient.name).toBe('Neue Firma');
+    expect(invoice.revisions).toHaveLength(1);
+    expect(invoice.revisions[0]).toMatchObject({
+      revisionNumber: 1,
+      title: 'Test Rechnung',
+      name: 'Neue Firma',
+    });
+  });
+
+  it('updates an existing recipient in place when recipientId is given', async () => {
+    await seedTemplate();
+    const recipient = await prisma.invoiceRecipient.create({
+      data: { name: 'Alt', street: 'Alt 1', city: 'Altstadt' },
+    });
+
+    const res = await request.post('/api/invoice').send({
+      recipientId: recipient.id,
+      inputs: { ...gInputs, name: 'Neu', street: 'Neu 2', city: 'Neustadt' },
+    });
+
+    expect(res.status).toBe(201);
+    expect(await prisma.invoiceRecipient.count()).toBe(1);
+    const updated = await prisma.invoiceRecipient.findUniqueOrThrow({
+      where: { id: recipient.id },
+    });
+    expect(updated).toMatchObject({ name: 'Neu', street: 'Neu 2', city: 'Neustadt' });
+  });
+
+  it('returns 400 for an unknown recipientId', async () => {
+    await seedTemplate();
+    const res = await request.post('/api/invoice').send({ recipientId: 99999, inputs: gInputs });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Recipient not found');
+    expect(await prisma.invoice.count()).toBe(0);
+  });
 });
 
 describe('PATCH /api/invoice/:id/cancel', () => {
