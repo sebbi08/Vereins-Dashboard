@@ -173,6 +173,41 @@ describe('InvoiceSettingsView', () => {
   });
 
   it.each([
+    ['a failed response', { status: 500, body: {} }],
+    ['a network error', undefined],
+  ] as const)('blocks saving email settings after %s on load', async (_name, reply) => {
+    if (reply) replies['GET /api/email-settings'] = reply;
+    else delete replies['GET /api/email-settings'];
+    replies['PUT /api/email-settings'] = { status: 200, body: {} };
+    replies['POST /api/email-settings/test'] = { status: 200, body: { message: 'Sent' } };
+    const wrapper = await mountView();
+
+    expect(notify.error).toHaveBeenCalledWith('Error loading email settings');
+    expect(wrapper.find('[data-testid="email-load-error"]').text()).toContain(
+      'Email settings could not be loaded. Reload the page to try again.',
+    );
+    const save = wrapper.find('[data-testid="save-email"]');
+    expect(save.attributes('disabled')).toBeDefined();
+    await save.trigger('click');
+    await wrapper.vm.$nextTick();
+    (wrapper.vm as unknown as { saveEmailSettings: () => Promise<void> }).saveEmailSettings();
+    await flushPromises();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+
+    const test = wrapper.find('[data-testid="test-email"]');
+    expect(test.attributes('disabled')).toBeUndefined();
+    await test.trigger('click');
+    await flushPromises();
+    expect(notify.success).toHaveBeenCalledWith('Sent');
+  });
+
+  it('shows no email load error after a successful load', async () => {
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="email-load-error"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="save-email"]').attributes('disabled')).toBeUndefined();
+  });
+
+  it.each([
     [
       { status: 200, body: { message: 'Sent to test@example.org' } },
       'success',

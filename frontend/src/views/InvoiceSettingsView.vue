@@ -5,6 +5,7 @@ import DataTable, { type DataTableRowEditSaveEvent } from 'primevue/datatable';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
 import Tab from 'primevue/tab';
 import TabList from 'primevue/tablist';
 import TabPanel from 'primevue/tabpanel';
@@ -59,15 +60,20 @@ const emailSettings = ref<EmailSettings>({
   emailTestAddress: '',
 });
 const envMode = ref('');
+const emailLoaded = ref(false);
+const emailLoadFailed = ref(false);
 const emailSaving = ref(false);
 const emailTesting = ref(false);
 
 async function loadEmailSettings() {
   try {
     const res = await fetch('/api/email-settings');
-    if (res.ok) Object.assign(emailSettings.value, await res.json());
+    if (!res.ok) throw new Error('load failed');
+    Object.assign(emailSettings.value, await res.json());
+    emailLoaded.value = true;
   } catch {
-    // keep defaults
+    emailLoadFailed.value = true;
+    notify.error('Error loading email settings');
   }
 }
 
@@ -81,6 +87,7 @@ async function loadEnvMode() {
 }
 
 async function saveEmailSettings() {
+  if (!emailLoaded.value) return;
   emailSaving.value = true;
   try {
     const res = await fetch('/api/email-settings', {
@@ -222,6 +229,9 @@ onMounted(() => {
                 data-testid="env-mode"
               />
             </div>
+            <Message v-if="emailLoadFailed" severity="error" data-testid="email-load-error">
+              Email settings could not be loaded. Reload the page to try again.
+            </Message>
             <div class="grid-2">
               <div class="field">
                 <label for="smtp-host">SMTP Host</label>
@@ -313,6 +323,7 @@ onMounted(() => {
                 label="Save Email Settings"
                 icon="pi pi-check"
                 :loading="emailSaving"
+                :disabled="!emailLoaded"
                 data-testid="save-email"
                 @click="saveEmailSettings"
               />

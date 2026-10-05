@@ -170,12 +170,30 @@ describe('SettingsView', () => {
     expect(bodyOf('PUT /api/settings').exemptionDate).toBe('');
   });
 
-  it('reports load and save errors', async () => {
+  it('blocks saving after a failed settings load', async () => {
     replies['GET /api/settings'] = { status: 500, body: {} };
-    replies['PUT /api/settings'] = { status: 500, body: {} };
+    replies['PUT /api/settings'] = { status: 200, body: {} };
     const wrapper = await mountView();
     expect(notify.error).toHaveBeenCalledWith('Error loading settings');
+    expect(wrapper.find('[data-testid="settings-load-error"]').text()).toContain(
+      'Association data could not be loaded. Reload the page to try again.',
+    );
+    expect(wrapper.find('[data-testid="save-settings"]').attributes('disabled')).toBeDefined();
 
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+  });
+
+  it('shows no load error after a successful load', async () => {
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="settings-load-error"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="save-settings"]').attributes('disabled')).toBeUndefined();
+  });
+
+  it('reports save errors', async () => {
+    replies['PUT /api/settings'] = { status: 500, body: {} };
+    const wrapper = await mountView();
     await wrapper.find('form').trigger('submit');
     await flushPromises();
     expect(notify.error).toHaveBeenCalledWith('Error saving settings');

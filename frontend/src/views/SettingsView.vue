@@ -6,6 +6,7 @@ import DatePicker from 'primevue/datepicker';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
 import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
 import Tab from 'primevue/tab';
 import TabList from 'primevue/tablist';
 import TabPanel from 'primevue/tabpanel';
@@ -34,6 +35,8 @@ const settings = ref<SystemSettings>({
   assessmentPeriod: '',
 });
 const saving = ref(false);
+const settingsLoaded = ref(false);
+const loadFailed = ref(false);
 
 const exemptionDateValue = computed<Date | null>({
   get: () => fromIsoDate(settings.value.exemptionDate),
@@ -47,12 +50,15 @@ async function loadSettings() {
     const res = await fetch('/api/settings');
     if (!res.ok) throw new Error('load failed');
     Object.assign(settings.value, await res.json());
+    settingsLoaded.value = true;
   } catch {
+    loadFailed.value = true;
     notify.error('Error loading settings');
   }
 }
 
 async function saveSettings() {
+  if (!settingsLoaded.value) return;
   saving.value = true;
   try {
     const res = await fetch('/api/settings', {
@@ -204,6 +210,9 @@ onMounted(() => {
         <TabPanel value="association">
           <form class="stack" @submit.prevent="saveSettings">
             <h3 class="section-title">Association Data (Pre-fill)</h3>
+            <Message v-if="loadFailed" severity="error" data-testid="settings-load-error">
+              Association data could not be loaded. Reload the page to try again.
+            </Message>
             <div class="grid-2">
               <div class="field">
                 <label for="treasurer">Treasurer</label>
@@ -244,6 +253,7 @@ onMounted(() => {
                 label="Save"
                 icon="pi pi-check"
                 :loading="saving"
+                :disabled="!settingsLoaded"
                 data-testid="save-settings"
               />
             </div>
