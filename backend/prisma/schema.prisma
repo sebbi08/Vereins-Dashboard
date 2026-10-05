@@ -95,6 +95,7 @@ model InvoiceRecipient {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   invoices  Invoice[]
+  instructor Instructor?
 }
 
 model Invoice {
@@ -136,4 +137,15 @@ model InvoiceRevision {
   emailStatus    String   @default("NOT_SENT")
   emailError     String?
   createdAt      DateTime @default(now())
+}
+
+model Instructor {
+  id              Int              @id @default(autoincrement())
+  recipientId     Int              @unique
+  recipient       InvoiceRecipient @relation(fields: [recipientId], references: [id])
+  hourlyRateCents Int
+  months          Int
+  timeBlocks      String           // JSON: TimeBlock[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 }

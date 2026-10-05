@@ -174,3 +174,34 @@ export interface EmailSettings {
 }
 
 export * from './instructorRent.js';
+
+import type { InstructorRentResult, TimeBlock } from './instructorRent.js';
+
+export interface InstructorDto {
+  id: number;
+  recipient: InvoiceRecipientDto;
+  hourlyRateCents: number;
+  months: number;
+  timeBlocks: TimeBlock[];
+  calculation: InstructorRentResult;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InstructorListItemDto {
+  id: number;
+  name: string;
+  hourlyRateCents: number;
+  months: number;
+  calculation: InstructorRentResult;
+}
+
+export interface InstructorSettingsDto {
+  weeksPerMonth: number;
+}
+
+export interface InstructorInvoicePrefillDto {
+  recipient: InvoiceRecipientDto;
+  title: string;
+  lineItems: InvoiceLineItem[];
+}
