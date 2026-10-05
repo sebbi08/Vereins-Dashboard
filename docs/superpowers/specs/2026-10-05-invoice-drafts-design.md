@@ -130,7 +130,7 @@ Add `/invoice/draft/:draftId` (name `invoice-draft`) → `InvoiceFormView`.
   - **Activate** — confirm dialog ("Assigns the next invoice number and today's date (DD.MM.YYYY). Continue?"), then `PUT` the current form state, then `POST /activate`, then navigate to `/invoice/:invoiceId`. Errors appear in the existing error banner.
   - **Delete** — confirm, `DELETE`, navigate to `/invoice`
 - In draft mode the invoice date field is hidden and replaced by the hint "Invoice date is set on activation".
-- Recipient search / new recipient / field locking behave as in new invoice mode.
+- Recipient search and new recipient behave as in new invoice mode; recipient fields stay editable in draft mode and edits update the linked recipient in place.
 - Submitting the form (e.g. pressing Enter) in draft mode saves the draft; it never creates an invoice.
 - If the draft cannot be loaded (deleted / already activated), show "Draft not found" and hide Save / Activate / Delete.
 

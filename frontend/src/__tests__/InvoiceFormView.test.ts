@@ -82,7 +82,7 @@ function setRoute(params: Record<string, string>) {
 }
 
 async function mountForm() {
-  const wrapper = mount(InvoiceFormView);
+  const wrapper = mount(InvoiceFormView, { attachTo: document.body });
   await flushPromises();
   return wrapper;
 }
@@ -107,6 +107,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  document.body.innerHTML = '';
   vi.unstubAllGlobals();
 });
 
@@ -136,6 +137,11 @@ describe('InvoiceFormView — new invoice', () => {
     expect(vm(wrapper).error).toBe('Name is required');
   });
 
+  it('save-draft is a plain button in new mode', async () => {
+    const wrapper = await mountForm();
+    expect(wrapper.find('[data-testid="save-draft"]').attributes('type')).toBe('button');
+  });
+
   it('still shows the invoice date field and Create Invoice button', async () => {
     const wrapper = await mountForm();
     expect(wrapper.find('input[type="date"]').exists()).toBe(true);
@@ -163,6 +169,23 @@ describe('InvoiceFormView — draft mode', () => {
     expect(wrapper.find('[data-testid="activate-draft"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="delete-draft"]').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('Create Invoice');
+  });
+
+  it('keeps recipient fields editable', async () => {
+    const wrapper = await mountForm();
+    expect(wrapper.findAll('input[disabled]')).toHaveLength(0);
+  });
+
+  it('save-draft is the submit button in draft mode and saves exactly once', async () => {
+    replies['PUT /api/invoice-draft/42'] = { status: 200, body: { draftId: 42 } };
+    const wrapper = await mountForm();
+    const button = wrapper.find('[data-testid="save-draft"]');
+    expect(button.attributes('type')).toBe('submit');
+
+    await button.trigger('click');
+    await flushPromises();
+
+    expect(calls().filter((c) => c.startsWith('PUT'))).toHaveLength(1);
   });
 
   it('shows an error when the draft does not exist', async () => {

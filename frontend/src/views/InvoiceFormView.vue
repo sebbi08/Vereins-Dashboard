@@ -16,7 +16,7 @@ const draftId = route.params.draftId ? parseInt(String(route.params.draftId)) : 
 const isDraft = !!draftId;
 const draftLoaded = ref(false);
 const recipientFieldsLocked = computed(
-  () => !isNewRevision && !!recipient.value && !newRecipient.value,
+  () => !isNewRevision && !isDraft && !!recipient.value && !newRecipient.value,
 );
 
 const sending = ref(false);
@@ -344,6 +344,7 @@ async function deleteDraft() {
 }
 
 function onFormSubmit() {
+  if (sending.value) return;
   if (isDraft) {
     // Enter in a draft must never create a real invoice; and never save a draft that failed to load
     if (draftLoaded.value) onSaveDraft();
@@ -501,7 +502,7 @@ function onFormSubmit() {
           </div>
         </div>
 
-        <p v-if="isNewRevision" class="mt-3 text-xs text-gray-500">
+        <p v-if="isNewRevision || isDraft" class="mt-3 text-xs text-gray-500">
           Editing these recipient fields updates the linked recipient record for this invoice.
         </p>
       </div>
@@ -657,11 +658,11 @@ function onFormSubmit() {
         </button>
         <button
           v-if="!isNewRevision && (!isDraft || draftLoaded)"
-          type="button"
+          :type="isDraft ? 'submit' : 'button'"
           data-testid="save-draft"
           :disabled="sending"
           class="border border-gray-300 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
-          @click="onSaveDraft"
+          @click="!isDraft && onSaveDraft()"
         >
           {{ isDraft ? 'Save Draft' : 'Save as Draft' }}
         </button>
