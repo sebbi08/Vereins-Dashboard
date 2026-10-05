@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildInvoiceLineText,
-  formatDecimal,
   parseInstructorSaveBody,
+  parseSettingsUpdate,
   parseWeeksPerMonth,
+  storedInvoiceTemplate,
 } from '../../services/instructorRent';
 
 describe('parseWeeksPerMonth', () => {
@@ -81,47 +81,71 @@ describe('parseInstructorSaveBody', () => {
   });
 });
 
-describe('formatDecimal', () => {
-  it.each([
-    [7.5, 2, true, '7,5'],
-    [3.25, 2, true, '3,25'],
-    [8, 2, true, '8'],
-    [10, 2, true, '10'],
-    [1 / 3, 2, true, '0,33'],
-    [12, 2, false, '12,00'],
-    [12.5, 2, false, '12,50'],
-  ])('formats %s', (value, digits, trim, expected) => {
-    expect(formatDecimal(value, digits, trim)).toBe(expected);
+describe('parseSettingsUpdate', () => {
+  it('accepts weeksPerMonth alone', () => {
+    expect(parseSettingsUpdate({ weeksPerMonth: 4 })).toEqual({ weeksPerMonth: 4 });
+  });
+
+  it('accepts a template alone and normalizes line endings', () => {
+    expect(parseSettingsUpdate({ invoiceTemplate: 'Miete {name}\r\n{zeiten}' })).toEqual({
+      invoiceTemplate: 'Miete {name}\n{zeiten}',
+    });
+  });
+
+  it.each([null, '', '  \n '])('treats template %j as reset to default', (invoiceTemplate) => {
+    expect(parseSettingsUpdate({ invoiceTemplate })).toEqual({ invoiceTemplate: null });
+  });
+
+  it('accepts both keys together', () => {
+    expect(parseSettingsUpdate({ weeksPerMonth: 4, invoiceTemplate: '{name}' })).toEqual({
+      weeksPerMonth: 4,
+      invoiceTemplate: '{name}',
+    });
+  });
+
+  it.each([{}, { other: 1 }])('rejects %j as nothing to update', (body) => {
+    expect(parseSettingsUpdate(body)).toEqual({ error: 'Nothing to update' });
+  });
+
+  it.each([null, 'x', [1]])('rejects non-object body %j', (body) => {
+    expect(parseSettingsUpdate(body)).toEqual({ error: 'Invalid request body' });
+  });
+
+  it('rejects a non-string template', () => {
+    expect(parseSettingsUpdate({ invoiceTemplate: 5 })).toEqual({ error: 'Invalid request body' });
+  });
+
+  it('rejects an invalid template with the validator message', () => {
+    expect(parseSettingsUpdate({ invoiceTemplate: '{monat}' })).toEqual({
+      error: 'Unknown placeholders: {monat}',
+    });
+  });
+
+  it.each([null, '4'])('rejects weeksPerMonth %j', (weeksPerMonth) => {
+    expect(parseSettingsUpdate({ weeksPerMonth })).toEqual({
+      error: 'Weeks per month must be greater than 0',
+    });
+  });
+
+  it('rejects weeksPerMonth with more than 2 decimals', () => {
+    expect(parseSettingsUpdate({ weeksPerMonth: 4.333 })).toEqual({
+      error: 'Weeks per month may have at most 2 decimals',
+    });
+  });
+
+  it('validates both keys before accepting either', () => {
+    expect(parseSettingsUpdate({ weeksPerMonth: 4, invoiceTemplate: '{monat}' })).toEqual({
+      error: 'Unknown placeholders: {monat}',
+    });
   });
 });
 
-describe('buildInvoiceLineText', () => {
-  const timeBlocks = [{ weekday: 'MO' as const, start: '08:00', end: '15:30', breaks: [] }];
-
-  it('describes the calculation in German', () => {
-    expect(buildInvoiceLineText({ hourlyRateCents: 1200, months: 6, timeBlocks }, 3.25)).toBe(
-      'Raummiete 6 Monate (7,5 h/Woche × 3,25 Wochen × 6 Monate × 12,00 €)',
-    );
+describe('storedInvoiceTemplate', () => {
+  it.each([undefined, '', '  \n'])('maps %j to null', (value) => {
+    expect(storedInvoiceTemplate(value)).toBeNull();
   });
 
-  it('uses the singular for one month', () => {
-    expect(buildInvoiceLineText({ hourlyRateCents: 1250, months: 1, timeBlocks }, 4)).toBe(
-      'Raummiete 1 Monat (7,5 h/Woche × 4 Wochen × 1 Monat × 12,50 €)',
-    );
-  });
-
-  it('prints hours and minutes when the hours are not exact with 2 decimals', () => {
-    const blocks = [
-      {
-        weekday: 'MO' as const,
-        start: '14:00',
-        end: '18:00',
-        breaks: [{ start: '16:00', end: '16:10' }],
-      },
-      { weekday: 'DO' as const, start: '09:00', end: '13:00', breaks: [] },
-    ];
-    expect(
-      buildInvoiceLineText({ hourlyRateCents: 1250, months: 6, timeBlocks: blocks }, 3.25),
-    ).toBe('Raummiete 6 Monate (7 h 50 min/Woche × 3,25 Wochen × 6 Monate × 12,50 €)');
+  it('keeps a stored template', () => {
+    expect(storedInvoiceTemplate('Miete {name}')).toBe('Miete {name}');
   });
 });

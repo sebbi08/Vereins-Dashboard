@@ -9,11 +9,64 @@ import type {
   Weekday,
 } from 'shared';
 import {
+  buildInstructorInvoiceTextValues,
+  effectiveInstructorInvoiceTemplate,
+  normalizeInstructorInvoiceTemplate,
+  renderInstructorInvoiceText,
+  validateInstructorInvoiceTemplate,
+} from '../../../shared/src/instructorInvoiceText.js';
+import {
   calculateInstructorRent,
   DEFAULT_WEEKS_PER_MONTH,
+  validateWeeksPerMonth,
 } from '../../../shared/src/instructorRent.js';
 
 export const WEEKS_PER_MONTH_KEY = 'instructorWeeksPerMonth';
+export const INVOICE_TEMPLATE_KEY = 'instructorInvoiceTemplate';
+
+/** Stored setting value → template, or null when the default is in use. */
+export function storedInvoiceTemplate(value: string | undefined): string | null {
+  return value !== undefined && value.trim() !== '' ? value : null;
+}
+
+export interface SettingsUpdate {
+  weeksPerMonth?: number;
+  invoiceTemplate?: string | null; // null = reset to default
+}
+
+/** Validates the whole body before anything is written. */
+export function parseSettingsUpdate(body: unknown): SettingsUpdate | { error: string } {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    return { error: 'Invalid request body' };
+  }
+  const { weeksPerMonth, invoiceTemplate } = body as Record<string, unknown>;
+  if (weeksPerMonth === undefined && invoiceTemplate === undefined) {
+    return { error: 'Nothing to update' };
+  }
+  const update: SettingsUpdate = {};
+  if (weeksPerMonth !== undefined) {
+    if (typeof weeksPerMonth !== 'number') {
+      return { error: 'Weeks per month must be greater than 0' };
+    }
+    const error = validateWeeksPerMonth(weeksPerMonth);
+    if (error) return { error };
+    update.weeksPerMonth = weeksPerMonth;
+  }
+  if (invoiceTemplate !== undefined) {
+    if (invoiceTemplate !== null && typeof invoiceTemplate !== 'string') {
+      return { error: 'Invalid request body' };
+    }
+    if (invoiceTemplate === null || invoiceTemplate.trim() === '') {
+      update.invoiceTemplate = null;
+    } else {
+      const normalized = normalizeInstructorInvoiceTemplate(invoiceTemplate);
+      const error = validateInstructorInvoiceTemplate(normalized);
+      if (error) return { error };
+      update.invoiceTemplate = normalized;
+    }
+  }
+  return update;
+}
 
 export function parseWeeksPerMonth(value: string | undefined): number {
   const parsed = value === undefined || value.trim() === '' ? Number.NaN : Number(value);
@@ -179,46 +232,22 @@ export function toListItem(row: InstructorRow, weeksPerMonth: number): Instructo
   };
 }
 
-/** German decimal formatting without thousands separators (deterministic, no ICU dependency). */
-export function formatDecimal(value: number, fractionDigits: number, trimZeros: boolean): string {
-  let text = value.toFixed(fractionDigits);
-  if (trimZeros && text.includes('.')) text = text.replace(/\.?0+$/, '');
-  return text.replace('.', ',');
-}
-
-function monthsLabel(months: number): string {
-  return months === 1 ? '1 Monat' : `${months} Monate`;
-}
-
-/**
- * Weekly hours, printed exactly so the line text reproduces the billed amount:
- * a trimmed decimal when it is exact with 2 decimals, otherwise hours and minutes.
- */
-function formatWeeklyHours(netMinutesPerWeek: number): string {
-  if (netMinutesPerWeek % 3 === 0) return `${formatDecimal(netMinutesPerWeek / 60, 2, true)} h`;
-  return `${Math.floor(netMinutesPerWeek / 60)} h ${netMinutesPerWeek % 60} min`;
-}
-
-export function buildInvoiceLineText(inputs: InstructorRentInputs, weeksPerMonth: number): string {
-  const { netMinutesPerWeek } = calculateInstructorRent(inputs, weeksPerMonth);
-  const hours = formatWeeklyHours(netMinutesPerWeek);
-  const weeks = formatDecimal(weeksPerMonth, 2, true);
-  const rate = formatDecimal(inputs.hourlyRateCents / 100, 2, false);
-  const label = monthsLabel(inputs.months);
-  return `Raummiete ${label} (${hours}/Woche × ${weeks} Wochen × ${label} × ${rate} €)`;
-}
-
 export function buildInvoicePrefill(
   row: InstructorRow,
   weeksPerMonth: number,
+  invoiceTemplate: string | null,
 ): InstructorInvoicePrefillDto {
   const inputs = toInputs(row);
+  const values = buildInstructorInvoiceTextValues(row.recipient.name, inputs, weeksPerMonth);
   return {
     recipient: toRecipientDto(row.recipient),
     title: 'Raummiete',
     lineItems: [
       {
-        text: buildInvoiceLineText(inputs, weeksPerMonth),
+        text: renderInstructorInvoiceText(
+          effectiveInstructorInvoiceTemplate(invoiceTemplate),
+          values,
+        ),
         priceInCents: calculateInstructorRent(inputs, weeksPerMonth).totalCents,
       },
     ],

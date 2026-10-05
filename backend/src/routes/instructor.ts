@@ -1,17 +1,17 @@
 import { Router, type Response } from 'express';
 import type { InstructorSettingsDto } from 'shared';
 import type { Prisma } from '../../prisma/generated/client.js';
-import {
-  validateInstructorRent,
-  validateWeeksPerMonth,
-} from '../../../shared/src/instructorRent.js';
+import { validateInstructorRent } from '../../../shared/src/instructorRent.js';
 import { prisma } from '../prismaClient.js';
 import {
   buildInvoicePrefill,
+  INVOICE_TEMPLATE_KEY,
   parseInstructorSaveBody,
+  parseSettingsUpdate,
   parseWeeksPerMonth,
   type RecipientData,
   toInstructorDto,
+  storedInvoiceTemplate,
   toListItem,
   WEEKS_PER_MONTH_KEY,
 } from '../services/instructorRent.js';
@@ -23,31 +23,51 @@ async function getWeeksPerMonth(): Promise<number> {
   return parseWeeksPerMonth(row?.value);
 }
 
+async function getInvoiceTemplate(): Promise<string | null> {
+  const row = await prisma.systemSetting.findUnique({ where: { key: INVOICE_TEMPLATE_KEY } });
+  return storedInvoiceTemplate(row?.value);
+}
+
+async function getSettings(): Promise<InstructorSettingsDto> {
+  const [weeksPerMonth, invoiceTemplate] = await Promise.all([
+    getWeeksPerMonth(),
+    getInvoiceTemplate(),
+  ]);
+  return { weeksPerMonth, invoiceTemplate };
+}
+
 // GET /api/instructor/settings
 instructorRouter.get('/settings', async (_req, res) => {
-  const dto: InstructorSettingsDto = { weeksPerMonth: await getWeeksPerMonth() };
-  res.json(dto);
+  res.json(await getSettings());
 });
 
 // PUT /api/instructor/settings
 instructorRouter.put('/settings', async (req, res) => {
-  const { weeksPerMonth } = req.body as { weeksPerMonth?: unknown };
-  if (typeof weeksPerMonth !== 'number') {
-    res.status(400).json({ error: 'Weeks per month must be greater than 0' });
+  const update = parseSettingsUpdate(req.body);
+  if ('error' in update) {
+    res.status(400).json({ error: update.error });
     return;
   }
-  const error = validateWeeksPerMonth(weeksPerMonth);
-  if (error) {
-    res.status(400).json({ error });
-    return;
-  }
-  await prisma.systemSetting.upsert({
-    where: { key: WEEKS_PER_MONTH_KEY },
-    update: { value: String(weeksPerMonth) },
-    create: { key: WEEKS_PER_MONTH_KEY, value: String(weeksPerMonth) },
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    if (update.weeksPerMonth !== undefined) {
+      const value = String(update.weeksPerMonth);
+      await tx.systemSetting.upsert({
+        where: { key: WEEKS_PER_MONTH_KEY },
+        update: { value },
+        create: { key: WEEKS_PER_MONTH_KEY, value },
+      });
+    }
+    if (update.invoiceTemplate === null) {
+      await tx.systemSetting.deleteMany({ where: { key: INVOICE_TEMPLATE_KEY } });
+    } else if (update.invoiceTemplate !== undefined) {
+      await tx.systemSetting.upsert({
+        where: { key: INVOICE_TEMPLATE_KEY },
+        update: { value: update.invoiceTemplate },
+        create: { key: INVOICE_TEMPLATE_KEY, value: update.invoiceTemplate },
+      });
+    }
   });
-  const dto: InstructorSettingsDto = { weeksPerMonth };
-  res.json(dto);
+  res.json(await getSettings());
 });
 
 class HttpError extends Error {
@@ -210,5 +230,6 @@ instructorRouter.get('/:id/invoice-prefill', async (req, res) => {
     res.status(404).json({ error: 'Instructor not found' });
     return;
   }
-  res.json(buildInvoicePrefill(row, await getWeeksPerMonth()));
+  const { weeksPerMonth, invoiceTemplate } = await getSettings();
+  res.json(buildInvoicePrefill(row, weeksPerMonth, invoiceTemplate));
 });

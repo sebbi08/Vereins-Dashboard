@@ -59,13 +59,13 @@ describe('GET /api/instructor/settings', () => {
   it('returns the default of 3.25 when nothing is stored', async () => {
     const res = await request.get('/api/instructor/settings');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ weeksPerMonth: 3.25 });
+    expect(res.body).toEqual({ weeksPerMonth: 3.25, invoiceTemplate: null });
   });
 
   it.each(['', 'abc'])('falls back to 3.25 for a corrupt stored value %j', async (value) => {
     await prisma.systemSetting.create({ data: { key: 'instructorWeeksPerMonth', value } });
     const res = await request.get('/api/instructor/settings');
-    expect(res.body).toEqual({ weeksPerMonth: 3.25 });
+    expect(res.body).toEqual({ weeksPerMonth: 3.25, invoiceTemplate: null });
   });
 });
 
@@ -74,12 +74,15 @@ describe('PUT /api/instructor/settings', () => {
     const res = await request.put('/api/instructor/settings').send({ weeksPerMonth: 4.33 });
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ weeksPerMonth: 4.33 });
+    expect(res.body).toEqual({ weeksPerMonth: 4.33, invoiceTemplate: null });
     const row = await prisma.systemSetting.findUnique({
       where: { key: 'instructorWeeksPerMonth' },
     });
     expect(row?.value).toBe('4.33');
-    expect((await request.get('/api/instructor/settings')).body).toEqual({ weeksPerMonth: 4.33 });
+    expect((await request.get('/api/instructor/settings')).body).toEqual({
+      weeksPerMonth: 4.33,
+      invoiceTemplate: null,
+    });
   });
 
   it.each([0, -1, '3.25', null])('rejects %j', async (weeksPerMonth) => {
@@ -349,7 +352,7 @@ describe('GET /api/instructor/:id/invoice-prefill', () => {
       title: 'Raummiete',
       lineItems: [
         {
-          text: 'Raummiete 6 Monate (7,5 h/Woche × 3,25 Wochen × 6 Monate × 12,00 €)',
+          text: 'Raummiete 6 Monate\n7,5 h/Woche × 3,25 Wochen × 6 Monate × 12,00 €',
           priceInCents: 175500,
         },
       ],
@@ -364,7 +367,7 @@ describe('GET /api/instructor/:id/invoice-prefill', () => {
     const res = await request.get(`/api/instructor/${body.id}/invoice-prefill`);
 
     expect(res.body.lineItems[0].text).toBe(
-      'Raummiete 1 Monat (7,5 h/Woche × 3,25 Wochen × 1 Monat × 12,00 €)',
+      'Raummiete 1 Monat\n7,5 h/Woche × 3,25 Wochen × 1 Monat × 12,00 €',
     );
     expect(res.body.lineItems[0].priceInCents).toBe(29250);
   });
@@ -391,5 +394,101 @@ describe('GET /api/instructor/:id/invoice-prefill', () => {
     const res = await request.get(`/api/instructor/${id}/invoice-prefill`);
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'Instructor not found' });
+  });
+});
+
+describe('instructor invoice template setting', () => {
+  const custom = 'Raummiete für {name}\n{zeiten}\nGesamt: {betrag_gesamt}';
+
+  it('stores a custom template, returns it and uses it for the prefill', async () => {
+    const put = await request.put('/api/instructor/settings').send({ invoiceTemplate: custom });
+    expect(put.status).toBe(200);
+    expect(put.body).toEqual({ weeksPerMonth: 3.25, invoiceTemplate: custom });
+    expect((await request.get('/api/instructor/settings')).body.invoiceTemplate).toBe(custom);
+
+    const { body } = await request.post('/api/instructor').send(newInstructorBody());
+    const res = await request.get(`/api/instructor/${body.id}/invoice-prefill`);
+
+    expect(res.body.lineItems[0]).toEqual({
+      text: 'Raummiete für Anna Alt\nMo 14:00–18:00 (Pause 16:00–16:30)\nDo 09:00–13:00\nGesamt: 1.755,00 €',
+      priceInCents: 175500,
+    });
+  });
+
+  it('stores Windows line endings as \\n', async () => {
+    await request.put('/api/instructor/settings').send({ invoiceTemplate: 'A {name}\r\nB' });
+    const row = await prisma.systemSetting.findUnique({
+      where: { key: 'instructorInvoiceTemplate' },
+    });
+    expect(row?.value).toBe('A {name}\nB');
+  });
+
+  it.each([null, '', '   \n  '])('resets to the default with %j', async (invoiceTemplate) => {
+    await request.put('/api/instructor/settings').send({ invoiceTemplate: custom });
+
+    const res = await request.put('/api/instructor/settings').send({ invoiceTemplate });
+
+    expect(res.status).toBe(200);
+    expect(res.body.invoiceTemplate).toBeNull();
+    expect(
+      await prisma.systemSetting.findUnique({ where: { key: 'instructorInvoiceTemplate' } }),
+    ).toBeNull();
+    const { body } = await request.post('/api/instructor').send(newInstructorBody());
+    const prefill = await request.get(`/api/instructor/${body.id}/invoice-prefill`);
+    expect(prefill.body.lineItems[0].text).toBe(
+      'Raummiete 6 Monate\n7,5 h/Woche × 3,25 Wochen × 6 Monate × 12,00 €',
+    );
+  });
+
+  it('rejects unknown placeholders and stores nothing', async () => {
+    const res = await request
+      .put('/api/instructor/settings')
+      .send({ invoiceTemplate: 'Raummiete {monat} {xyz}' });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Unknown placeholders: {monat}, {xyz}' });
+    expect(
+      await prisma.systemSetting.findUnique({ where: { key: 'instructorInvoiceTemplate' } }),
+    ).toBeNull();
+  });
+
+  it('rejects templates longer than 2000 characters', async () => {
+    const res = await request
+      .put('/api/instructor/settings')
+      .send({ invoiceTemplate: 'a'.repeat(2001) });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Invoice text must be at most 2000 characters' });
+  });
+
+  it('keeps the template when only weeksPerMonth is saved, and vice versa', async () => {
+    await request.put('/api/instructor/settings').send({ invoiceTemplate: custom });
+    await request.put('/api/instructor/settings').send({ weeksPerMonth: 4 });
+    expect((await request.get('/api/instructor/settings')).body).toEqual({
+      weeksPerMonth: 4,
+      invoiceTemplate: custom,
+    });
+
+    await request.put('/api/instructor/settings').send({ invoiceTemplate: '{name}' });
+    expect((await request.get('/api/instructor/settings')).body).toEqual({
+      weeksPerMonth: 4,
+      invoiceTemplate: '{name}',
+    });
+  });
+
+  it('writes nothing when one of two keys is invalid', async () => {
+    const res = await request
+      .put('/api/instructor/settings')
+      .send({ weeksPerMonth: 4, invoiceTemplate: '{monat}' });
+    expect(res.status).toBe(400);
+    expect((await request.get('/api/instructor/settings')).body).toEqual({
+      weeksPerMonth: 3.25,
+      invoiceTemplate: null,
+    });
+  });
+
+  it('rejects an empty body', async () => {
+    const res = await request.put('/api/instructor/settings').send({});
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Nothing to update' });
   });
 });

@@ -218,6 +218,7 @@ export interface InstructorListItemDto {
 
 export interface InstructorSettingsDto {
   weeksPerMonth: number;
+  invoiceTemplate: string | null; // null = built-in default in use
 }
 
 export interface InstructorInvoicePrefillDto {
