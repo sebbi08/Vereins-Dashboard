@@ -45,7 +45,8 @@ describe('InvoiceTextSettings', () => {
     fetchMock = vi.fn((url: string, init?: RequestInit) => {
       if (url === '/api/instructor/settings' && init?.method === 'PUT') {
         const body = JSON.parse(String(init.body)) as { invoiceTemplate: string | null };
-        storedTemplate = body.invoiceTemplate;
+        // Like the server: a blank template means "default".
+        storedTemplate = body.invoiceTemplate?.trim() ? body.invoiceTemplate : null;
         return Promise.resolve(
           jsonResponse({ weeksPerMonth: 3.25, invoiceTemplate: storedTemplate }),
         );
@@ -116,6 +117,30 @@ describe('InvoiceTextSettings', () => {
     expect(wrapper.find('[data-testid="invoice-template-preview"]').element.textContent).toBe(
       'Für Bernd Bach\nMo 08:00–15:30',
     );
+  });
+
+  it('previews the default text when the textarea is blank', async () => {
+    const wrapper = mountCard();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="invoice-template"]').setValue('   ');
+
+    expect(wrapper.find('[data-testid="invoice-template-preview"]').element.textContent).toBe(
+      'Raummiete 6 Monate\n7,5 h/Woche × 3,25 Wochen × 6 Monate × 12,00 €',
+    );
+  });
+
+  it('shows the default text after saving a blank template', async () => {
+    storedTemplate = 'Miete {name}';
+    const wrapper = mountCard();
+    await flushPromises();
+    await wrapper.find('[data-testid="invoice-template"]').setValue('   ');
+
+    await wrapper.find('[data-testid="save-invoice-template"]').trigger('click');
+    await flushPromises();
+
+    expect(textarea(wrapper).value).toBe(DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE);
+    expect(wrapper.find('[data-testid="invoice-template-default-hint"]').exists()).toBe(true);
   });
 
   it('flags unknown placeholders and disables save', async () => {
@@ -192,6 +217,21 @@ describe('InvoiceTextSettings', () => {
     fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({}, false)));
     const wrapper = mountCard();
     await flushPromises();
+
+    expect(wrapper.find('[data-testid="invoice-template-error"]').text()).toBe(
+      'Could not load invoice text',
+    );
+    expect(
+      wrapper.find('[data-testid="save-invoice-template"]').attributes('disabled'),
+    ).toBeDefined();
+  });
+
+  it('keeps the load error and the disabled save after typing', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(jsonResponse({}, false)));
+    const wrapper = mountCard();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="invoice-template"]').setValue('Miete {name}');
 
     expect(wrapper.find('[data-testid="invoice-template-error"]').text()).toBe(
       'Could not load invoice text',

@@ -3,6 +3,7 @@ import {
   buildInstructorInvoiceTextValues,
   DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE,
   DEFAULT_WEEKS_PER_MONTH,
+  effectiveInstructorInvoiceTemplate,
   INSTRUCTOR_INVOICE_PLACEHOLDERS,
   type InstructorDto,
   type InstructorRentInputs,
@@ -38,12 +39,13 @@ const template = ref(DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE);
 const usingDefault = ref(true);
 const loaded = ref(false);
 const serverError = ref('');
+const loadError = ref('');
 const saved = ref(false);
 const textarea = ref<HTMLTextAreaElement | null>(null);
 const previewSource = ref<PreviewSource | null>(null);
 
 const validationError = computed(() => validateInstructorInvoiceTemplate(template.value));
-const shownError = computed(() => validationError.value ?? serverError.value);
+const shownError = computed(() => validationError.value ?? (serverError.value || loadError.value));
 const canSave = computed(() => loaded.value && !validationError.value);
 
 const preview = computed(() => {
@@ -53,7 +55,7 @@ const preview = computed(() => {
       ? props.weeksPerMonth
       : DEFAULT_WEEKS_PER_MONTH;
   return renderInstructorInvoiceText(
-    template.value,
+    effectiveInstructorInvoiceTemplate(template.value),
     buildInstructorInvoiceTextValues(source.name, source.inputs, weeks),
   );
 });
@@ -72,7 +74,7 @@ async function loadTemplate() {
     usingDefault.value = dto.invoiceTemplate === null;
     loaded.value = true;
   } catch {
-    serverError.value = 'Could not load invoice text';
+    loadError.value = 'Could not load invoice text';
   }
 }
 
@@ -123,6 +125,7 @@ async function save() {
   const dto = await put(template.value);
   if (!dto) return;
   usingDefault.value = dto.invoiceTemplate === null;
+  if (dto.invoiceTemplate === null) template.value = DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE;
   saved.value = true;
 }
 
@@ -169,6 +172,7 @@ onMounted(async () => {
           data-testid="invoice-template"
           rows="6"
           aria-label="Invoice text"
+          :readonly="!loaded"
           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           @input="edited"
         ></textarea>
