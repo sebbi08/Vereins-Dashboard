@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { parseInstructorSaveBody, parseWeeksPerMonth } from '../../services/instructorRent';
+import {
+  buildInvoiceLineText,
+  formatDecimal,
+  parseInstructorSaveBody,
+  parseWeeksPerMonth,
+} from '../../services/instructorRent';
 
 describe('parseWeeksPerMonth', () => {
   it('parses a stored positive number', () => {
@@ -73,5 +78,35 @@ describe('parseInstructorSaveBody', () => {
         recipientData: { ...validBody.recipientData, name: '  ' },
       }),
     ).toEqual({ error: 'Recipient name is required' });
+  });
+});
+
+describe('formatDecimal', () => {
+  it.each([
+    [7.5, 2, true, '7,5'],
+    [3.25, 2, true, '3,25'],
+    [8, 2, true, '8'],
+    [10, 2, true, '10'],
+    [1 / 3, 2, true, '0,33'],
+    [12, 2, false, '12,00'],
+    [12.5, 2, false, '12,50'],
+  ])('formats %s', (value, digits, trim, expected) => {
+    expect(formatDecimal(value, digits, trim)).toBe(expected);
+  });
+});
+
+describe('buildInvoiceLineText', () => {
+  const timeBlocks = [{ weekday: 'MO' as const, start: '08:00', end: '15:30', breaks: [] }];
+
+  it('describes the calculation in German', () => {
+    expect(buildInvoiceLineText({ hourlyRateCents: 1200, months: 6, timeBlocks }, 3.25)).toBe(
+      'Raummiete 6 Monate (7,5 h/Woche × 3,25 Wochen × 6 Monate × 12,00 €)',
+    );
+  });
+
+  it('uses the singular for one month', () => {
+    expect(buildInvoiceLineText({ hourlyRateCents: 1250, months: 1, timeBlocks }, 4)).toBe(
+      'Raummiete 1 Monat (7,5 h/Woche × 4 Wochen × 1 Monat × 12,50 €)',
+    );
   });
 });

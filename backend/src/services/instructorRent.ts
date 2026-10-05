@@ -1,5 +1,6 @@
 import type {
   InstructorDto,
+  InstructorInvoicePrefillDto,
   InstructorListItemDto,
   InstructorRentInputs,
   InvoiceRecipientDto,
@@ -175,5 +176,42 @@ export function toListItem(row: InstructorRow, weeksPerMonth: number): Instructo
     hourlyRateCents: row.hourlyRateCents,
     months: row.months,
     calculation: calculateInstructorRent(inputs, weeksPerMonth),
+  };
+}
+
+/** German decimal formatting without thousands separators (deterministic, no ICU dependency). */
+export function formatDecimal(value: number, fractionDigits: number, trimZeros: boolean): string {
+  let text = value.toFixed(fractionDigits);
+  if (trimZeros && text.includes('.')) text = text.replace(/\.?0+$/, '');
+  return text.replace('.', ',');
+}
+
+function monthsLabel(months: number): string {
+  return months === 1 ? '1 Monat' : `${months} Monate`;
+}
+
+export function buildInvoiceLineText(inputs: InstructorRentInputs, weeksPerMonth: number): string {
+  const { netMinutesPerWeek } = calculateInstructorRent(inputs, weeksPerMonth);
+  const hours = formatDecimal(netMinutesPerWeek / 60, 2, true);
+  const weeks = formatDecimal(weeksPerMonth, 2, true);
+  const rate = formatDecimal(inputs.hourlyRateCents / 100, 2, false);
+  const label = monthsLabel(inputs.months);
+  return `Raummiete ${label} (${hours} h/Woche × ${weeks} Wochen × ${label} × ${rate} €)`;
+}
+
+export function buildInvoicePrefill(
+  row: InstructorRow,
+  weeksPerMonth: number,
+): InstructorInvoicePrefillDto {
+  const inputs = toInputs(row);
+  return {
+    recipient: toRecipientDto(row.recipient),
+    title: 'Raummiete',
+    lineItems: [
+      {
+        text: buildInvoiceLineText(inputs, weeksPerMonth),
+        priceInCents: calculateInstructorRent(inputs, weeksPerMonth).totalCents,
+      },
+    ],
   };
 }

@@ -330,3 +330,42 @@ describe('DELETE /api/instructor/:id', () => {
     expect(res.body).toEqual({ error: 'Instructor not found' });
   });
 });
+
+describe('GET /api/instructor/:id/invoice-prefill', () => {
+  it('returns recipient, title and one line item with the total', async () => {
+    const { body } = await request.post('/api/instructor').send(newInstructorBody());
+
+    const res = await request.get(`/api/instructor/${body.id}/invoice-prefill`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      recipient: expect.objectContaining({ name: 'Anna Alt', email: 'anna@example.org' }),
+      title: 'Raummiete',
+      lineItems: [
+        {
+          text: 'Raummiete 6 Monate (7,5 h/Woche × 3,25 Wochen × 6 Monate × 12,00 €)',
+          priceInCents: 175500,
+        },
+      ],
+    });
+  });
+
+  it('uses the singular for one month', async () => {
+    const { body } = await request
+      .post('/api/instructor')
+      .send({ ...newInstructorBody(), months: 1 });
+
+    const res = await request.get(`/api/instructor/${body.id}/invoice-prefill`);
+
+    expect(res.body.lineItems[0].text).toBe(
+      'Raummiete 1 Monat (7,5 h/Woche × 3,25 Wochen × 1 Monat × 12,00 €)',
+    );
+    expect(res.body.lineItems[0].priceInCents).toBe(29250);
+  });
+
+  it.each(['999', 'abc'])('returns 404 for id %s', async (id) => {
+    const res = await request.get(`/api/instructor/${id}/invoice-prefill`);
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'Instructor not found' });
+  });
+});

@@ -7,6 +7,7 @@ import {
 } from '../../../shared/src/instructorRent.js';
 import { prisma } from '../prismaClient.js';
 import {
+  buildInvoicePrefill,
   parseInstructorSaveBody,
   parseWeeksPerMonth,
   type RecipientData,
@@ -191,4 +192,18 @@ instructorRouter.delete('/:id', async (req, res) => {
   }
   await prisma.instructor.delete({ where: { id: existing.id } });
   res.status(204).end();
+});
+
+// GET /api/instructor/:id/invoice-prefill
+instructorRouter.get('/:id/invoice-prefill', async (req, res) => {
+  const id = parseId(req.params.id);
+  const row =
+    id === null
+      ? null
+      : await prisma.instructor.findUnique({ where: { id }, include: { recipient: true } });
+  if (!row) {
+    res.status(404).json({ error: 'Instructor not found' });
+    return;
+  }
+  res.json(buildInvoicePrefill(row, await getWeeksPerMonth()));
 });
