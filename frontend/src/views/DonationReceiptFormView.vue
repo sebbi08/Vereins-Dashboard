@@ -1,29 +1,50 @@
 <script setup lang="ts">
-import type { DonorDto, ReceiptInputs, SystemSettings } from 'shared';
+import Button from 'primevue/button';
+import DatePicker from 'primevue/datepicker';
+import InputNumber from 'primevue/inputnumber';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import ToggleSwitch from 'primevue/toggleswitch';
+import type { DonationReceiptDto, DonorDto, ReceiptInputs, SystemSettings } from 'shared';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import DonorAutocomplete from '../components/DonorAutocomplete.vue';
+import FormSection from '../components/ui/FormSection.vue';
+import PageHeader from '../components/ui/PageHeader.vue';
+import { useNotify } from '../composables/useNotify';
 import { useAppStore } from '../stores/app';
+import { fromIsoDate, toIsoDate } from '../utils/format';
 
 const router = useRouter();
 const route = useRoute();
 const store = useAppStore();
+const notify = useNotify();
 
 const receiptId = route.params.id ? parseInt(String(route.params.id)) : null;
 const copyFromId = route.query.copyFrom ? parseInt(String(route.query.copyFrom)) : null;
 const isNewRevision = !!receiptId;
 const isCopy = !!copyFromId;
 
+const DEFAULT_LETTER_SALUTATION = 'Sehr geehrte Damen und Herren';
+const SETTINGS_KEYS = [
+  'treasurer',
+  'charitablePurpose',
+  'taxOfficeName',
+  'taxNumber',
+  'exemptionDate',
+  'assessmentPeriod',
+] as const;
+
 const sending = ref(false);
-const error = ref('');
-const success = ref('');
-const warning = ref('');
-const info = ref('');
+const loadError = ref('');
 const defaultsHint = ref(false);
+const validationAttempted = ref(false);
 
 const donor = ref<DonorDto | null>(null);
 const newDonor = ref(false);
-const validationAttempted = ref(false);
+
+/** Revisions edit the linked donor in place; a donor picked from the search stays locked. */
+const donorFieldsLocked = computed(() => !isNewRevision && !!donor.value && !newDonor.value);
 
 const inputs = ref<ReceiptInputs>({
   name: '',
@@ -32,7 +53,7 @@ const inputs = ref<ReceiptInputs>({
   letterSalutation: '',
   addressSalutation: '',
   donationAmountCents: 0,
-  donationDate: new Date().toISOString().split('T')[0],
+  donationDate: toIsoDate(new Date()),
   withCoverLetter: true,
   treasurer: '',
   charitablePurpose: '',
@@ -42,104 +63,97 @@ const inputs = ref<ReceiptInputs>({
   assessmentPeriod: '',
 });
 
-const amountEuro = ref('');
+const pageTitle = isNewRevision
+  ? 'Create New Revision'
+  : isCopy
+    ? 'Duplicate Receipt'
+    : 'New Donation Receipt';
 
-const letterSalutationMissing = computed(
-  () => inputs.value.withCoverLetter && !inputs.value.letterSalutation.trim(),
-);
-const showLetterSalutationError = computed(
-  () => letterSalutationMissing.value && validationAttempted.value,
-);
+type FieldKey = 'letterSalutation' | 'amount';
 
-function amountFromEuro(val: string): number {
-  const cleaned = val.replace(',', '.').replace(/[^0-9.]/g, '');
-  return Math.round(parseFloat(cleaned || '0') * 100);
+/** Shown after the first submit attempt and kept up to date while the user fixes them. */
+const fieldErrors = computed<Partial<Record<FieldKey, string>>>(() => {
+  if (!validationAttempted.value) return {};
+  const errors: Partial<Record<FieldKey, string>> = {};
+  if (inputs.value.withCoverLetter && !inputs.value.letterSalutation.trim()) {
+    errors.letterSalutation = 'Letter Salutation is required when creating a cover letter.';
+  }
+  if (inputs.value.donationAmountCents <= 0) errors.amount = 'Amount is required';
+  return errors;
+});
+
+const amountEuros = computed<number | null>({
+  get: () => (inputs.value.donationAmountCents > 0 ? inputs.value.donationAmountCents / 100 : null),
+  set: (euros) => {
+    inputs.value.donationAmountCents = euros === null ? 0 : Math.round(euros * 100);
+  },
+});
+
+function dateModel(key: 'donationDate' | 'exemptionDate') {
+  return computed<Date | null>({
+    get: () => fromIsoDate(inputs.value[key]),
+    set: (date) => {
+      inputs.value[key] = date ? toIsoDate(date) : '';
+    },
+  });
 }
 
-function amountToEuro(cents: number): string {
-  return (cents / 100).toFixed(2).replace('.', ',');
+const donationDateValue = dateModel('donationDate');
+const exemptionDateValue = dateModel('exemptionDate');
+
+function fillDonorFields(d: DonorDto) {
+  inputs.value.name = d.name;
+  inputs.value.street = d.street;
+  inputs.value.city = d.city;
+  inputs.value.letterSalutation = d.letterSalutation;
+  inputs.value.addressSalutation = d.addressSalutation ?? '';
 }
 
-function normalizeDateInputValue(value: string): string {
-  return value.includes('T') ? value.split('T')[0] : value;
+function donorFieldsOf(i: ReceiptInputs): string[] {
+  return [i.name, i.street, i.city, i.letterSalutation, i.addressSalutation ?? ''];
 }
 
-async function ladeSettings() {
+async function loadSettings() {
   const res = await fetch('/api/settings');
   if (!res.ok) return;
-  const data: Partial<SystemSettings> = await res.json();
-  if (data.treasurer) inputs.value.treasurer = data.treasurer;
-  if (data.charitablePurpose) inputs.value.charitablePurpose = data.charitablePurpose;
-  if (data.taxOfficeName) inputs.value.taxOfficeName = data.taxOfficeName;
-  if (data.taxNumber) inputs.value.taxNumber = data.taxNumber;
-  if (data.exemptionDate) inputs.value.exemptionDate = data.exemptionDate;
-  if (data.assessmentPeriod) inputs.value.assessmentPeriod = data.assessmentPeriod;
-}
-
-async function loadRevisionAndDefaults() {
-  if (!receiptId) return;
-  const res = await fetch(`/api/donation-receipt/${receiptId}`);
-  if (!res.ok) return;
-  const data = await res.json();
-
-  if (data.activeRevision) {
-    const e = data.activeRevision.inputs as ReceiptInputs;
-    inputs.value = {
-      ...e,
-      donationDate: normalizeDateInputValue(e.donationDate),
-    };
-    amountEuro.value = amountToEuro(e.donationAmountCents);
-  }
-
-  if (data.donor) {
-    donor.value = data.donor;
-    const vorher = {
-      name: inputs.value.name,
-      street: inputs.value.street,
-      city: inputs.value.city,
-      letterSalutation: inputs.value.letterSalutation,
-      addressSalutation: inputs.value.addressSalutation ?? '',
-    };
-
-    inputs.value.name = data.donor.name;
-    inputs.value.street = data.donor.street;
-    inputs.value.city = data.donor.city;
-    inputs.value.letterSalutation = data.donor.letterSalutation;
-    inputs.value.addressSalutation = data.donor.addressSalutation ?? '';
-
-    defaultsHint.value =
-      vorher.name !== inputs.value.name ||
-      vorher.street !== inputs.value.street ||
-      vorher.city !== inputs.value.city ||
-      vorher.letterSalutation !== inputs.value.letterSalutation ||
-      vorher.addressSalutation !== (inputs.value.addressSalutation ?? '');
+  const data = (await res.json()) as Partial<SystemSettings>;
+  for (const key of SETTINGS_KEYS) {
+    const value = data[key];
+    if (value) inputs.value[key] = value;
   }
 }
 
-async function copyFromReceipt() {
-  if (!copyFromId) return;
-  const res = await fetch(`/api/donation-receipt/${copyFromId}`);
-  if (!res.ok) return;
-  const data = await res.json();
+async function fetchReceipt(id: number): Promise<DonationReceiptDto | null> {
+  const res = await fetch(`/api/donation-receipt/${id}`);
+  if (!res.ok) {
+    loadError.value = 'Receipt could not be loaded';
+    return null;
+  }
+  return (await res.json()) as DonationReceiptDto;
+}
 
+async function loadRevision(id: number) {
+  const data = await fetchReceipt(id);
+  if (!data) return;
   if (data.activeRevision) {
-    const e = data.activeRevision.inputs as ReceiptInputs;
-    inputs.value = {
-      ...e,
-      donationDate: new Date().toISOString().split('T')[0], // use today
-    };
-    amountEuro.value = amountToEuro(e.donationAmountCents);
+    const e = data.activeRevision.inputs;
+    inputs.value = { ...e, donationDate: e.donationDate.slice(0, 10) };
   }
+  donor.value = data.donor;
+  const before = donorFieldsOf(inputs.value).join('\n');
+  fillDonorFields(data.donor);
+  defaultsHint.value = before !== donorFieldsOf(inputs.value).join('\n');
+}
 
-  if (data.donor) {
-    donor.value = data.donor;
-    newDonor.value = false;
-    inputs.value.name = data.donor.name;
-    inputs.value.street = data.donor.street;
-    inputs.value.city = data.donor.city;
-    inputs.value.letterSalutation = data.donor.letterSalutation;
-    inputs.value.addressSalutation = data.donor.addressSalutation ?? '';
+async function copyFromReceipt(id: number) {
+  const data = await fetchReceipt(id);
+  if (!data) return;
+  if (data.activeRevision) {
+    inputs.value = { ...data.activeRevision.inputs, donationDate: toIsoDate(new Date()) };
   }
+  donor.value = data.donor;
+  newDonor.value = false;
+  fillDonorFields(data.donor);
 }
 
 onMounted(async () => {
@@ -155,104 +169,79 @@ onMounted(async () => {
     }
   }
 
-  await ladeSettings();
-  if (isNewRevision) {
-    await loadRevisionAndDefaults();
-  } else if (isCopy) {
-    await copyFromReceipt();
+  try {
+    await loadSettings();
+    if (receiptId) await loadRevision(receiptId);
+    else if (copyFromId) await copyFromReceipt(copyFromId);
+  } catch {
+    loadError.value = 'Network error while loading';
   }
 });
 
-function onDonorAusgewaehlt(s: DonorDto | null) {
-  donor.value = s;
-  if (s) {
+function onDonorSelected(d: DonorDto | null) {
+  donor.value = d;
+  if (d) {
     newDonor.value = false;
-    inputs.value.name = s.name;
-    inputs.value.street = s.street;
-    inputs.value.city = s.city;
-    inputs.value.letterSalutation = s.letterSalutation;
-    inputs.value.addressSalutation = s.addressSalutation ?? '';
+    fillDonorFields(d);
   }
 }
 
-function onNeuerDonor(daten: { name: string; street: string; city: string }) {
+function onNewDonor(data: { name: string; street: string; city: string }) {
   newDonor.value = true;
   donor.value = null;
-  inputs.value.name = daten.name;
-  inputs.value.street = daten.street;
-  inputs.value.city = daten.city;
-  if (!inputs.value.letterSalutation) {
-    inputs.value.letterSalutation = 'Sehr geehrte Damen und Herren';
+  inputs.value.name = data.name;
+  inputs.value.street = data.street;
+  inputs.value.city = data.city;
+  if (!inputs.value.letterSalutation) inputs.value.letterSalutation = DEFAULT_LETTER_SALUTATION;
+}
+
+function donorRequestBody(): Record<string, unknown> {
+  const body: Record<string, unknown> = { inputs: inputs.value };
+  if (donor.value && !newDonor.value) {
+    body.donorId = donor.value.id;
+  } else {
+    body.donorData = {
+      name: inputs.value.name,
+      street: inputs.value.street,
+      city: inputs.value.city,
+      letterSalutation: inputs.value.letterSalutation,
+      addressSalutation: inputs.value.addressSalutation,
+    };
   }
+  return body;
 }
 
 async function submit() {
   validationAttempted.value = true;
-  error.value = '';
-  warning.value = '';
-  info.value = '';
-  success.value = '';
-
-  if (letterSalutationMissing.value) {
-    error.value = 'Please fill in Letter Salutation when creating a cover letter.';
-    return;
-  }
+  if (Object.keys(fieldErrors.value).length > 0) return;
 
   sending.value = true;
-  inputs.value.donationAmountCents = amountFromEuro(amountEuro.value);
-
   try {
-    let res: Response;
-
-    if (isNewRevision) {
-      res = await fetch(`/api/donation-receipt/${receiptId}/revision`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inputs: inputs.value }),
-      });
-    } else {
-      const body: Record<string, unknown> = { inputs: inputs.value };
-      if (donor.value && !newDonor.value) {
-        body.donorId = donor.value.id;
-      } else {
-        body.donorData = {
-          name: inputs.value.name,
-          street: inputs.value.street,
-          city: inputs.value.city,
-          letterSalutation: inputs.value.letterSalutation,
-          addressSalutation: inputs.value.addressSalutation,
-        };
-      }
-      res = await fetch('/api/donation-receipt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-    }
-
+    const res = isNewRevision
+      ? await fetch(`/api/donation-receipt/${receiptId}/revision`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ inputs: inputs.value }),
+        })
+      : await fetch('/api/donation-receipt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(donorRequestBody()),
+        });
     const result = await res.json();
-
     if (!res.ok) {
-      error.value = result.error || 'Unknown error';
+      notify.error(result.error || 'Unknown error');
       return;
     }
-
     if (result.pdfStatus === 'FAILED') {
-      warning.value = result.pdfError || 'PDF could not be generated. Please try again.';
-      if (result.donorUpdated) {
-        info.value = 'Donor master data updated.';
-      }
+      notify.warn(result.pdfError || 'PDF could not be generated. Please try again.');
     } else {
-      success.value = 'Receipt saved successfully.';
-      if (result.donorUpdated) {
-        info.value = 'Donor master data updated.';
-      }
+      notify.success('Receipt saved successfully.');
     }
-
-    const zielId = result.receiptId ?? receiptId;
-    setTimeout(() => router.push(`/donation-receipt/${zielId}`), 1000);
+    if (result.donorUpdated) notify.info('Donor master data updated.');
+    router.push(`/donation-receipt/${result.receiptId ?? receiptId}`);
   } catch {
-    error.value = 'Network error while saving';
+    notify.error('Network error while saving');
   } finally {
     sending.value = false;
   }
@@ -260,250 +249,199 @@ async function submit() {
 </script>
 
 <template>
-  <div>
-    <div class="flex items-center gap-3 mb-6">
-      <button class="text-gray-400 hover:text-gray-700" @click="router.back()">← Back</button>
-      <h2 class="text-2xl font-bold text-gray-800">
-        {{
-          isNewRevision
-            ? 'Create New Revision'
-            : isCopy
-              ? 'Duplicate Receipt'
-              : 'New Donation Receipt'
-        }}
-      </h2>
-    </div>
+  <div class="page">
+    <PageHeader :title="pageTitle">
+      <template #actions>
+        <Button
+          label="Back"
+          icon="pi pi-arrow-left"
+          text
+          severity="secondary"
+          @click="router.back()"
+        />
+      </template>
+    </PageHeader>
 
-    <div
-      v-if="error"
-      class="bg-red-50 border border-red-200 text-red-700 p-3 rounded-lg mb-4 text-sm"
-    >
-      {{ error }}
-    </div>
-    <div
-      v-if="warning"
-      class="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-lg mb-4 text-sm"
-    >
-      {{ warning }}
-    </div>
-    <div
-      v-if="info"
-      class="bg-blue-50 border border-blue-200 text-blue-700 p-3 rounded-lg mb-4 text-sm"
-    >
-      {{ info }}
-    </div>
-    <div
-      v-if="success"
-      class="bg-green-50 border border-green-200 text-green-700 p-3 rounded-lg mb-4 text-sm"
-    >
-      {{ success }}
-    </div>
+    <Message v-if="loadError" severity="error" data-testid="load-error" class="load-error">
+      {{ loadError }}
+    </Message>
 
-    <form class="space-y-6" @submit.prevent="submit">
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-4">Donor</h3>
-
-        <div v-if="!isNewRevision" class="mb-3">
-          <label class="block text-sm font-medium text-gray-700 mb-1">Search or create donor</label>
+    <form @submit.prevent="submit">
+      <FormSection title="Donor">
+        <div v-if="!isNewRevision" class="field donor-search">
+          <label for="donor-search-input">Search or create donor</label>
           <DonorAutocomplete
             :model-value="donor"
-            @update:model-value="onDonorAusgewaehlt"
-            @neu="onNeuerDonor"
+            input-id="donor-search-input"
+            @update:model-value="onDonorSelected"
+            @neu="onNewDonor"
           />
         </div>
 
-        <div
+        <Message
           v-if="isNewRevision && defaultsHint"
-          class="mb-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-700"
+          severity="info"
+          size="small"
+          data-testid="defaults-hint"
+          class="hint-message"
         >
           This revision was pre-filled with the current donor master data.
-        </div>
+        </Message>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Name</label>
-            <input
+        <div class="grid-2">
+          <div class="field">
+            <label for="name">Name</label>
+            <InputText
+              id="name"
               v-model="inputs.name"
-              type="text"
               required
-              :disabled="!!donor && !newDonor"
-              :class="[
-                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                donor && !newDonor
-                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
-                  : 'border-gray-300 focus:ring-blue-500',
-              ]"
+              :disabled="donorFieldsLocked"
+              fluid
             />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Street</label>
-            <input
+          <div class="field">
+            <label for="street">Street</label>
+            <InputText
+              id="street"
               v-model="inputs.street"
-              type="text"
               required
-              :disabled="!!donor && !newDonor"
-              :class="[
-                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                donor && !newDonor
-                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
-                  : 'border-gray-300 focus:ring-blue-500',
-              ]"
+              :disabled="donorFieldsLocked"
+              fluid
             />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">City</label>
-            <input
+          <div class="field">
+            <label for="city">City</label>
+            <InputText
+              id="city"
               v-model="inputs.city"
-              type="text"
               required
-              :disabled="!!donor && !newDonor"
-              :class="[
-                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                donor && !newDonor
-                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
-                  : 'border-gray-300 focus:ring-blue-500',
-              ]"
+              :disabled="donorFieldsLocked"
+              fluid
             />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Letter Salutation</label>
-            <input
+          <div class="field">
+            <label for="letter-salutation">Letter Salutation</label>
+            <InputText
+              id="letter-salutation"
               v-model="inputs.letterSalutation"
-              type="text"
-              :disabled="!!donor && !newDonor"
-              :class="[
-                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                donor && !newDonor
-                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
-                  : showLetterSalutationError
-                    ? 'border-red-300 focus:ring-red-500'
-                    : 'border-gray-300 focus:ring-blue-500',
-              ]"
+              :disabled="donorFieldsLocked"
+              :invalid="!!fieldErrors.letterSalutation"
+              fluid
             />
-            <p v-if="showLetterSalutationError" class="mt-1 text-xs text-red-600">
-              Letter Salutation is required when creating a cover letter.
-            </p>
-          </div>
-          <div class="md:col-span-2">
-            <label class="block text-sm font-medium text-gray-700 mb-1"
-              >Address Salutation (optional)</label
+            <Message
+              v-if="fieldErrors.letterSalutation"
+              severity="error"
+              size="small"
+              variant="simple"
+              data-testid="error-letter-salutation"
             >
-            <input
+              {{ fieldErrors.letterSalutation }}
+            </Message>
+          </div>
+          <div class="field field--wide">
+            <label for="address-salutation">Address Salutation (optional)</label>
+            <InputText
+              id="address-salutation"
               v-model="inputs.addressSalutation"
-              type="text"
-              :disabled="!!donor && !newDonor"
-              :class="[
-                'w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2',
-                donor && !newDonor
-                  ? 'bg-gray-100 border-gray-200 text-gray-500 cursor-not-allowed'
-                  : 'border-gray-300 focus:ring-blue-500',
-              ]"
+              :disabled="donorFieldsLocked"
+              fluid
             />
           </div>
         </div>
-      </div>
 
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-4">Donation</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Amount (€)</label>
-            <input
-              v-model="amountEuro"
-              type="text"
-              required
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        <p v-if="isNewRevision" class="muted hint" data-testid="donor-edit-hint">
+          Editing these donor fields updates the linked donor record for this receipt.
+        </p>
+      </FormSection>
+
+      <FormSection title="Donation">
+        <div class="grid-2">
+          <div class="field">
+            <label for="amount">Amount</label>
+            <InputNumber
+              v-model="amountEuros"
+              input-id="amount"
+              mode="currency"
+              currency="EUR"
+              locale="de-DE"
+              :invalid="!!fieldErrors.amount"
+              fluid
+            />
+            <Message
+              v-if="fieldErrors.amount"
+              severity="error"
+              size="small"
+              variant="simple"
+              data-testid="error-amount"
+            >
+              {{ fieldErrors.amount }}
+            </Message>
+          </div>
+          <div class="field">
+            <label for="donation-date">Donation Date</label>
+            <DatePicker
+              v-model="donationDateValue"
+              input-id="donation-date"
+              data-testid="donation-date"
+              date-format="dd.mm.yy"
+              show-icon
+              fluid
             />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Donation Date</label>
-            <input
-              v-model="inputs.donationDate"
-              type="date"
-              required
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div class="flex items-center gap-2 pt-6">
-            <input
-              id="withCoverLetter"
-              v-model="inputs.withCoverLetter"
-              type="checkbox"
-              class="rounded"
-            />
-            <label for="withCoverLetter" class="text-sm text-gray-700">With Cover Letter</label>
+          <div class="field">
+            <label for="with-cover-letter">Cover Letter</label>
+            <div class="row gap-sm">
+              <ToggleSwitch v-model="inputs.withCoverLetter" input-id="with-cover-letter" />
+              <span>{{
+                inputs.withCoverLetter ? 'With cover letter' : 'Without cover letter'
+              }}</span>
+            </div>
           </div>
         </div>
-      </div>
+      </FormSection>
 
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-4">Association Data (from Settings)</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Treasurer</label>
-            <input
-              v-model="inputs.treasurer"
-              type="text"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+      <FormSection title="Association Data (from Settings)">
+        <div class="grid-2">
+          <div class="field">
+            <label for="treasurer">Treasurer</label>
+            <InputText id="treasurer" v-model="inputs.treasurer" fluid />
+          </div>
+          <div class="field">
+            <label for="charitable-purpose">Charitable Purpose</label>
+            <InputText id="charitable-purpose" v-model="inputs.charitablePurpose" fluid />
+          </div>
+          <div class="field">
+            <label for="tax-office">Tax Office</label>
+            <InputText id="tax-office" v-model="inputs.taxOfficeName" fluid />
+          </div>
+          <div class="field">
+            <label for="tax-number">Tax Number</label>
+            <InputText id="tax-number" v-model="inputs.taxNumber" fluid />
+          </div>
+          <div class="field">
+            <label for="exemption-date">Exemption Date</label>
+            <DatePicker
+              v-model="exemptionDateValue"
+              input-id="exemption-date"
+              data-testid="exemption-date"
+              date-format="dd.mm.yy"
+              show-icon
+              show-clear
+              fluid
             />
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Charitable Purpose</label>
-            <input
-              v-model="inputs.charitablePurpose"
-              type="text"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tax Office</label>
-            <input
-              v-model="inputs.taxOfficeName"
-              type="text"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Tax Number</label>
-            <input
-              v-model="inputs.taxNumber"
-              type="text"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Exemption Date</label>
-            <input
-              v-model="inputs.exemptionDate"
-              type="date"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Assessment Period</label>
-            <input
-              v-model="inputs.assessmentPeriod"
-              type="text"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <div class="field">
+            <label for="assessment-period">Assessment Period</label>
+            <InputText id="assessment-period" v-model="inputs.assessmentPeriod" fluid />
           </div>
         </div>
-      </div>
+      </FormSection>
 
-      <div class="flex justify-end gap-3">
-        <button
-          type="button"
-          class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-          @click="router.back()"
-        >
-          Cancel
-        </button>
-        <button
+      <div class="form-actions">
+        <Button label="Cancel" text severity="secondary" @click="router.back()" />
+        <Button
           type="submit"
-          :disabled="sending"
-          class="bg-blue-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
-        >
-          {{
+          :label="
             sending
               ? isNewRevision
                 ? 'Saving revision…'
@@ -511,9 +449,38 @@ async function submit() {
               : isNewRevision
                 ? 'Save Revision'
                 : 'Create Receipt'
-          }}
-        </button>
+          "
+          :disabled="sending"
+          data-testid="submit"
+        />
       </div>
     </form>
   </div>
 </template>
+
+<style scoped>
+.load-error {
+  margin-bottom: 1rem;
+}
+
+.donor-search,
+.hint-message {
+  margin-bottom: 1rem;
+}
+
+.field--wide {
+  grid-column: 1 / -1;
+}
+
+.hint {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+</style>
