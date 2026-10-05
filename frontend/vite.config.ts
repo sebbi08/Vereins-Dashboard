@@ -8,6 +8,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // Use shared source, not its (possibly stale) dist build — same as vitest and tsconfig.
+      shared: fileURLToPath(new URL('../shared/src/index.ts', import.meta.url)),
     },
   },
   define: {
