@@ -1,7 +1,7 @@
 # Configurable Instructor Invoice Text + Multi-line Line Items
 
 **Date**: 2026-10-05
-**Status**: Draft
+**Status**: Approved
 **Builds on**: `2026-10-05-instructor-rent-design.md`
 
 ## Overview
