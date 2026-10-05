@@ -444,6 +444,70 @@ export async function generateReceiptPdf(
   return toRelativePath(outputPath);
 }
 
+export interface InvoiceDocxInput {
+  salutation: string;
+  name: string;
+  street: string;
+  city: string;
+  invoiceDate: Date;
+  title: string;
+  invoiceNumber: string;
+  vat: number;
+  emailSalutation: string;
+  directDebit: boolean;
+  lineItems: Array<{ text: string; priceInCents: number }>;
+}
+
+/** Fills the invoice DOCX template (two passes). `\n` in line item texts becomes a line break. */
+export function buildInvoiceDocx(templateBuffer: Buffer, input: InvoiceDocxInput): Buffer {
+  const net = input.lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
+  const tax = Math.round(net * (input.vat / 100));
+  const gross = net + tax;
+
+  const paymentDetails = input.directDebit
+    ? `Der Betrag wird in den nächsten Tagen mit dem Vermerk "${input.invoiceNumber}" von Ihrem Konto eingezogen.`
+    : 'Bitte Überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.';
+
+  // Pass 1: Template-level placeholders
+  const doc1 = new Docxtemplater(new PizZip(templateBuffer), {
+    paragraphLoop: true,
+    linebreaks: true,
+  });
+  doc1.render({
+    Anrede: input.salutation,
+    Name: input.name,
+    Strasse: input.street,
+    Ort: input.city,
+    Heute: input.invoiceDate.toLocaleDateString('de'),
+    Title: input.title,
+    ReNr: input.invoiceNumber,
+    Netto: (net / 100).toFixed(2),
+    Steuer: (tax / 100).toFixed(2),
+    Brutto: (gross / 100).toFixed(2),
+    ust: input.vat,
+    MailAnrede: input.emailSalutation,
+    PaymentDetails: paymentDetails,
+    TableWithServices: getDocxTableLineItems(input.lineItems),
+    monthlyPay: false,
+    MonthlyBruto: '',
+  });
+
+  // Pass 2: Per-line-item placeholders (fresh zip from pass 1 output)
+  const pass1Buffer = doc1.getZip().generate({ type: 'nodebuffer' }) as Buffer;
+  const doc2 = new Docxtemplater(new PizZip(pass1Buffer), {
+    paragraphLoop: true,
+    linebreaks: true,
+  });
+  const pass2Data: Record<string, string> = {};
+  input.lineItems.forEach((item, idx) => {
+    pass2Data[`text${idx}`] = item.text;
+    pass2Data[`price${idx}`] = (item.priceInCents / 100).toFixed(2);
+  });
+  doc2.render(pass2Data);
+
+  return doc2.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
+}
+
 export async function generateInvoicePdf(
   prisma: PrismaClient,
   revisionId: number,
@@ -457,60 +521,21 @@ export async function generateInvoicePdf(
   });
 
   const lineItems: Array<{ text: string; priceInCents: number }> = JSON.parse(revision.positions);
-  const net = lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
-  const tax = Math.round(net * (revision.vat / 100));
-  const gross = net + tax;
-
-  const invoiceDateFormatted = revision.invoiceDate.toLocaleDateString('de');
-
-  const paymentDetails = revision.directDebit
-    ? `Der Betrag wird in den nächsten Tagen mit dem Vermerk "${revision.invoice.number}" von Ihrem Konto eingezogen.`
-    : 'Bitte Überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.';
-
-  const tableXml = getDocxTableLineItems(lineItems);
-
   const templateBuffer = await fs.promises.readFile(toAbsolutePath(revision.template.filePath));
 
-  // Pass 1: Template-level placeholders
-  const zip1 = new PizZip(templateBuffer);
-  const doc1 = new Docxtemplater(zip1, {
-    paragraphLoop: true,
-    linebreaks: true,
+  const docxBuffer = buildInvoiceDocx(templateBuffer, {
+    salutation: revision.salutation,
+    name: revision.name,
+    street: revision.street,
+    city: revision.city,
+    invoiceDate: revision.invoiceDate,
+    title: revision.title,
+    invoiceNumber: revision.invoice.number,
+    vat: revision.vat,
+    emailSalutation: revision.emailSalutation,
+    directDebit: revision.directDebit,
+    lineItems,
   });
-  doc1.render({
-    Anrede: revision.salutation,
-    Name: revision.name,
-    Strasse: revision.street,
-    Ort: revision.city,
-    Heute: invoiceDateFormatted,
-    Title: revision.title,
-    ReNr: revision.invoice.number,
-    Netto: (net / 100).toFixed(2),
-    Steuer: (tax / 100).toFixed(2),
-    Brutto: (gross / 100).toFixed(2),
-    ust: revision.vat,
-    MailAnrede: revision.emailSalutation,
-    PaymentDetails: paymentDetails,
-    TableWithServices: tableXml,
-    monthlyPay: false,
-    MonthlyBruto: '',
-  });
-
-  // Pass 2: Per-line-item placeholders
-  const doc2 = new Docxtemplater(doc1.getZip(), {
-    paragraphLoop: true,
-    linebreaks: true,
-  });
-  const pass2Data: Record<string, string> = {};
-  lineItems.forEach((item, idx) => {
-    pass2Data[`text${idx}`] = item.text;
-    pass2Data[`price${idx}`] = (item.priceInCents / 100).toFixed(2);
-  });
-  doc2.render(pass2Data);
-
-  const docxBuffer = doc2
-    .getZip()
-    .generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
   const pdfBuffer = await docxToPdf(docxBuffer);
 
   const outputDir = path.join(
