@@ -35,4 +35,14 @@ describe('HomeView', () => {
     expect(tile.text()).toContain(title);
     expect(tile.findAll('a').map((a) => a.attributes('href'))).toEqual(hrefs);
   });
+
+  it.each([
+    ['/invoice', 'Invoice'],
+    ['/donation-receipt', 'Donation Receipt'],
+    ['/instructor', 'Instructor Rent'],
+  ])('has a link to %s with text containing "%s"', async (href, sectionName) => {
+    const wrapper = await mountHome();
+    const link = wrapper.find(`a[href="${href}"]`);
+    expect(link.text()).toContain(sectionName);
+  });
 });
