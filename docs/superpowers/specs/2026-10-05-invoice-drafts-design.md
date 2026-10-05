@@ -17,7 +17,7 @@ Allow invoices to be prepared as drafts. A draft holds all invoice details but h
 | Recipient | Every draft save creates/updates the linked `InvoiceRecipient` in place (same convention as invoices). |
 | Validation | Draft save requires only `name`. Full `validateRequiredFields` runs on activation. |
 | Draft operations | Edit, activate, delete (hard delete). No cancel (`STORNIERT`). |
-| List placement | Separate "Drafts" section directly above the invoice table on the invoice list page. |
+| List placement | Separate "Drafts" section above the filter bar and invoice table on the invoice list page (filters do not apply to drafts). |
 
 Because a draft is not an `Invoice`, the existing list, detail, email, PDF and batch download code paths cannot reach it. "No PDF, cannot be sent" holds by construction rather than by status checks.
 
@@ -53,7 +53,7 @@ New router `backend/src/routes/invoiceDraft.ts`, mounted at `/api/invoice-draft`
 
 | Method | Path | Body | Behavior |
 |--------|------|------|----------|
-| `GET` | `/` | — | List drafts, newest `updatedAt` first: `InvoiceDraftListItemDto[]` |
+| `GET` | `/` | — | List drafts, newest `updatedAt` first: `InvoiceDraftListItem[]` |
 | `GET` | `/:id` | — | One draft: `InvoiceDraftDto` |
 | `POST` | `/` | `{ recipientId?, recipientData?, inputs }` | Create draft; create/update recipient in place. `201 { draftId }` |
 | `PUT` | `/:id` | `{ recipientId?, recipientData?, inputs }` | Update draft; create/update recipient in place. `200 { draftId }` |
@@ -84,22 +84,26 @@ Extract from `POST /api/invoice` into `backend/src/services/invoiceCreation.ts`:
 ### Shared Types (`shared/src/index.ts`)
 
 ```ts
+export type InvoiceContent = Omit<InvoiceInputs, 'invoiceDate'>;
+
 export interface InvoiceDraftDto {
   id: number;
   recipient: InvoiceRecipientDto;
-  inputs: Omit<InvoiceInputs, 'invoiceDate'>;
+  inputs: InvoiceContent;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface InvoiceDraftListItemDto {
+export interface InvoiceDraftListItem {
   id: number;
-  name: string;
+  recipientName: string;
   title: string;
-  grossInCents: number;
+  amountCents: number;
   updatedAt: string;
 }
 ```
+
+Naming follows the existing `InvoiceListItem` (`recipientName`, `amountCents`).
 
 ### Errors
 
@@ -127,11 +131,13 @@ Add `/invoice/draft/:draftId` (name `invoice-draft`) → `InvoiceFormView`.
   - **Delete** — confirm, `DELETE`, navigate to `/invoice`
 - In draft mode the invoice date field is hidden and replaced by the hint "Invoice date is set on activation".
 - Recipient search / new recipient / field locking behave as in new invoice mode.
+- Submitting the form (e.g. pressing Enter) in draft mode saves the draft; it never creates an invoice.
+- If the draft cannot be loaded (deleted / already activated), show "Draft not found" and hide Save / Activate / Delete.
 
 ### `InvoiceView.vue`
 
-- A **"Drafts"** section directly above the invoice table, rendered only when at least one draft exists. Loaded from `GET /api/invoice-draft`.
-- Columns: name, title, gross amount, last edited. Clicking a row opens `/invoice/draft/:id`.
+- A **"Drafts"** section above the filter bar and invoice table, rendered only when at least one draft exists. Loaded from `GET /api/invoice-draft`.
+- Columns: recipient, title, gross amount, last edited, DRAFT badge. Clicking a row opens `/invoice/draft/:id`.
 - Drafts are not part of checkbox selection or batch download, and are not affected by the date / cancelled filters.
 
 ### Unchanged
@@ -158,7 +164,7 @@ TDD: tests are written before implementation.
 - Form in draft mode hides the date field and shows Save draft / Activate / Delete
 - "Save as draft" on `/invoice/new` calls `POST /api/invoice-draft`
 - Activate calls `PUT` before `POST /activate` and navigates to the new invoice
-- `InvoiceView` renders the Drafts section above the invoice table only when drafts exist
+- `InvoiceView` renders the Drafts section above the filter bar and invoice table only when drafts exist
 
 ### Verification
 
