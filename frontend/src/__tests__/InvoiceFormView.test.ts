@@ -11,6 +11,7 @@ import type {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
+import { toIsoDate } from '../utils/format';
 import InvoiceFormView from '../views/InvoiceFormView.vue';
 import { withPrimeVue } from './helpers/primeVue';
 
@@ -100,7 +101,7 @@ const draftDto: InvoiceDraftDto = {
   updatedAt: '2026-10-01T10:00:00Z',
 };
 
-const today = new Date().toISOString().split('T')[0];
+const today = toIsoDate(new Date());
 
 function setRoute(params: Record<string, string>, query: Record<string, string> = {}) {
   vi.mocked(useRoute).mockReturnValue({ params, query } as unknown as ReturnType<typeof useRoute>);
@@ -161,6 +162,17 @@ describe('InvoiceFormView — new invoice', () => {
     expect(calls()).toEqual(['POST /api/invoice-draft']);
     expect(bodyOf('POST /api/invoice-draft').recipientData).toMatchObject({ name: 'Neue Firma' });
     expect(mockPush).toHaveBeenCalledWith('/invoice');
+  });
+
+  it('defaults the invoice date to the local day shortly after midnight', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 2, 10, 0, 30));
+    try {
+      const wrapper = await mountForm();
+      expect(vm(wrapper).inputs.invoiceDate).toBe('2026-03-10');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('"Save as Draft" requires a name', async () => {
@@ -284,6 +296,20 @@ describe('InvoiceFormView — copy and revision', () => {
     expect(vm(wrapper).recipient?.id).toBe(7);
   });
 
+  it('shows an error when the copy source cannot be loaded', async () => {
+    setRoute({}, { copyFrom: '3' });
+    replies['GET /api/invoice/3'] = { status: 404, body: { error: 'Not found' } };
+    const wrapper = await mountForm();
+    expect(wrapper.find('[data-testid="load-error"]').text()).toContain('could not be loaded');
+  });
+
+  it('shows an error when the revision source cannot be loaded', async () => {
+    setRoute({ id: '3' });
+    replies['GET /api/invoice/3'] = { status: 500, body: {} };
+    const wrapper = await mountForm();
+    expect(wrapper.find('[data-testid="load-error"]').text()).toContain('could not be loaded');
+  });
+
   it('creates a revision with the revision date and posts only the inputs', async () => {
     setRoute({ id: '3' });
     replies['GET /api/invoice/3'] = { status: 200, body: invoiceDto };
@@ -368,6 +394,13 @@ describe('InvoiceFormView — draft mode', () => {
     expect(wrapper.find('[data-testid="save-draft"]').exists()).toBe(false);
   });
 
+  it('shows an error when loading the draft fails on the network', async () => {
+    delete replies['GET /api/invoice-draft/42'];
+    const wrapper = await mountForm();
+    expect(wrapper.find('[data-testid="load-error"]').text()).toContain('Network error');
+    expect(wrapper.find('[data-testid="save-draft"]').exists()).toBe(false);
+  });
+
   it('Enter in a draft that failed to load saves nothing', async () => {
     replies['GET /api/invoice-draft/42'] = { status: 404, body: { error: 'Draft not found' } };
     const wrapper = await mountForm();
@@ -417,7 +450,23 @@ describe('InvoiceFormView — draft mode', () => {
       'POST /api/invoice-draft/42/activate',
     ]);
     expect((bodyOf('PUT /api/invoice-draft/42').inputs as InvoiceInputs).title).toBe('Geändert');
+    expect(notify.success).toHaveBeenCalledWith('Invoice created.');
     expect(mockPush).toHaveBeenCalledWith('/invoice/99');
+  });
+
+  it('shows the activation date as dd.mm.yyyy', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 5, 12, 0));
+    try {
+      const wrapper = await mountForm();
+      await wrapper.find('[data-testid="activate-draft"]').trigger('click');
+      await flushPromises();
+      expect(confirmAction).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('(05.10.2026)') }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('Activate does nothing when the confirmation is cancelled', async () => {
@@ -454,6 +503,7 @@ describe('InvoiceFormView — draft mode', () => {
 
     expect(confirmAction).toHaveBeenCalledWith(expect.objectContaining({ danger: true }));
     expect(calls()).toContain('DELETE /api/invoice-draft/42');
+    expect(notify.success).toHaveBeenCalledWith('Draft deleted.');
     expect(mockPush).toHaveBeenCalledWith('/invoice');
   });
 });

@@ -24,7 +24,7 @@ import PageHeader from '../components/ui/PageHeader.vue';
 import { useConfirmAction } from '../composables/useConfirmAction';
 import { useNotify } from '../composables/useNotify';
 import { useAppStore } from '../stores/app';
-import { formatCents, fromIsoDate, toIsoDate } from '../utils/format';
+import { formatCents, formatDate, fromIsoDate, toIsoDate } from '../utils/format';
 
 const router = useRouter();
 const route = useRoute();
@@ -63,7 +63,7 @@ const inputs = ref<InvoiceInputs>({
   name: '',
   street: '',
   city: '',
-  invoiceDate: new Date().toISOString().split('T')[0],
+  invoiceDate: toIsoDate(new Date()),
   title: '',
   lineItems: [{ text: '', priceInCents: 0 }],
   vat: 19,
@@ -150,7 +150,10 @@ function setPrice(index: number, euros: number | null) {
 async function loadRevision() {
   if (!invoiceId) return;
   const res = await fetch(`/api/invoice/${invoiceId}`);
-  if (!res.ok) return;
+  if (!res.ok) {
+    loadError.value = 'Invoice could not be loaded';
+    return;
+  }
   const data = await res.json();
   if (data.activeRevision) {
     const e = data.activeRevision.inputs as InvoiceInputs;
@@ -168,11 +171,14 @@ async function loadRevision() {
 async function copyFromInvoice() {
   if (!copyFromId) return;
   const res = await fetch(`/api/invoice/${copyFromId}`);
-  if (!res.ok) return;
+  if (!res.ok) {
+    loadError.value = 'Invoice could not be loaded';
+    return;
+  }
   const data = await res.json();
   if (data.activeRevision) {
     const e = data.activeRevision.inputs as InvoiceInputs;
-    inputs.value = { ...e, invoiceDate: new Date().toISOString().split('T')[0] };
+    inputs.value = { ...e, invoiceDate: toIsoDate(new Date()) };
   }
   if (data.recipient) {
     recipient.value = data.recipient;
@@ -207,7 +213,7 @@ async function prefillFromInstructor() {
   selectRecipient(data.recipient);
   inputs.value.title = data.title;
   inputs.value.lineItems = data.lineItems;
-  inputs.value.invoiceDate = new Date().toISOString().split('T')[0];
+  inputs.value.invoiceDate = toIsoDate(new Date());
 }
 
 onMounted(async () => {
@@ -223,10 +229,14 @@ onMounted(async () => {
     }
   }
 
-  if (isNewRevision) await loadRevision();
-  else if (isCopy) await copyFromInvoice();
-  else if (isDraft) await loadDraft();
-  else if (fromInstructorId) await prefillFromInstructor();
+  try {
+    if (isNewRevision) await loadRevision();
+    else if (isCopy) await copyFromInvoice();
+    else if (isDraft) await loadDraft();
+    else if (fromInstructorId) await prefillFromInstructor();
+  } catch {
+    loadError.value = 'Network error while loading';
+  }
 });
 
 function recipientRequestBody(): Record<string, unknown> {
@@ -319,12 +329,12 @@ async function saveDraft(): Promise<number | null> {
 async function onSaveDraft() {
   const id = await saveDraft();
   if (id === null) return;
-  if (isDraft) notify.success('Draft saved.');
-  else router.push('/invoice');
+  notify.success('Draft saved.');
+  if (!isDraft) router.push('/invoice');
 }
 
 async function activateDraft() {
-  const today = new Intl.DateTimeFormat('de-DE').format(new Date());
+  const today = formatDate(toIsoDate(new Date()));
   const confirmed = await confirmAction({
     message: `Assigns the next invoice number and today's date (${today}). Continue?`,
     header: 'Activate draft',
@@ -343,6 +353,7 @@ async function activateDraft() {
       notify.error(result.error || 'Unknown error');
       return;
     }
+    notify.success('Invoice created.');
     router.push(`/invoice/${result.invoiceId}`);
   } catch {
     notify.error('Network error while activating');
@@ -367,6 +378,7 @@ async function deleteDraft() {
       notify.error(result.error || 'Unknown error');
       return;
     }
+    notify.success('Draft deleted.');
     router.push('/invoice');
   } catch {
     notify.error('Network error while deleting');
