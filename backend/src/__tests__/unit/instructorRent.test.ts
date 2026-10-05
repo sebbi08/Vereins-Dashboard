@@ -209,6 +209,11 @@ describe('validateWeeksPerMonth', () => {
   it('accepts positive numbers', () => {
     expect(validateWeeksPerMonth(3.25)).toBeNull();
     expect(validateWeeksPerMonth(4)).toBeNull();
+    expect(validateWeeksPerMonth(4.33)).toBeNull();
+  });
+
+  it('rejects more than 2 decimals', () => {
+    expect(validateWeeksPerMonth(4.333)).toBe('Weeks per month may have at most 2 decimals');
   });
 
   it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY])('rejects %s', (value) => {

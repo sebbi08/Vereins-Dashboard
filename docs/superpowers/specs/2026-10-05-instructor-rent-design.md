@@ -22,7 +22,7 @@ Only net amounts are calculated. VAT is handled by the invoice form as usual.
 | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | Purpose         | Club rents rooms to instructors; result is what the instructor owes                                                                           |
 | Amounts         | Net only, integer cents, rounded once at the final result                                                                                     |
-| Weeks per month | Global setting, default `3.25`, must be > 0                                                                                                   |
+| Weeks per month | Global setting, default `3.25`, must be > 0 with at most 2 decimals                                                                           |
 | Months          | Stored per instructor, whole number ≥ 1                                                                                                       |
 | Schedule        | Abstract week Mo–So; no calendar dates                                                                                                        |
 | Storage         | One `Instructor` table; time blocks as a JSON string (same pattern as `InvoiceRevision.positions`)                                            |
@@ -85,18 +85,19 @@ export function validateWeeksPerMonth(value: number): string | null;
 
 ### Validation Rules
 
-| Rule                                                                          | Message                                        |
-| ----------------------------------------------------------------------------- | ---------------------------------------------- | ----------------------------- |
-| `start` / `end` match `^([01]\d                                               | 2[0-3]):[0-5]\d$`                              | `Invalid time format (HH:MM)` |
-| Block `start < end`                                                           | `Start must be before end`                     |
-| Break `start < end`                                                           | `Break start must be before break end`         |
-| Break inside its block (`block.start ≤ break.start`, `break.end ≤ block.end`) | `Break must be within the time block`          |
-| Breaks of one block do not overlap                                            | `Breaks must not overlap`                      |
-| Blocks on the same weekday do not overlap                                     | `Time blocks on the same day must not overlap` |
-| `weekday` is one of `WEEKDAYS`                                                | `Invalid weekday`                              |
-| `hourlyRateCents` integer > 0                                                 | `Hourly rate must be greater than 0`           |
-| `months` integer ≥ 1                                                          | `Months must be a whole number of at least 1`  |
-| `weeksPerMonth` finite > 0                                                    | `Weeks per month must be greater than 0`       |
+| Rule                                                                                              | Message                                        |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------- | ----------------------------- |
+| `start` / `end` match `^([01]\d                                                                   | 2[0-3]):[0-5]\d$`                              | `Invalid time format (HH:MM)` |
+| Block `start < end`                                                                               | `Start must be before end`                     |
+| Break `start < end`                                                                               | `Break start must be before break end`         |
+| Break inside its block (`block.start ≤ break.start`, `break.end ≤ block.end`)                     | `Break must be within the time block`          |
+| Breaks of one block do not overlap                                                                | `Breaks must not overlap`                      |
+| Blocks on the same weekday do not overlap                                                         | `Time blocks on the same day must not overlap` |
+| `weekday` is one of `WEEKDAYS`                                                                    | `Invalid weekday`                              |
+| `hourlyRateCents` integer > 0                                                                     | `Hourly rate must be greater than 0`           |
+| `months` integer ≥ 1                                                                              | `Months must be a whole number of at least 1`  |
+| `weeksPerMonth` finite > 0                                                                        | `Weeks per month must be greater than 0`       |
+| `weeksPerMonth` has at most 2 decimals (`Math.abs(value * 100 - Math.round(value * 100)) < 1e-9`) | `Weeks per month may have at most 2 decimals`  |
 
 An empty `timeBlocks` array is valid (total is 0).
 
@@ -194,8 +195,11 @@ Recipient write and instructor write happen in one transaction.
 
 - `title`: `Raummiete`
 - One line item:
-  - `text`: `Raummiete {months} Monate ({hours} h/Woche × {weeksPerMonth} Wochen × {months} Monate × {rate} €)`
-  - numbers formatted German-style: hours and weeks with up to 2 decimals and no trailing zeros (`7,5`, `3,25`), rate with exactly 2 decimals (`12,00`)
+  - `text`: `Raummiete {months} Monate ({hours}/Woche × {weeksPerMonth} Wochen × {months} Monate × {rate} €)`
+  - `{hours}` is printed exactly, so the text reproduces the billed amount:
+    - if `netMinutesPerWeek % 3 === 0` (exact with ≤ 2 decimals): German decimal with trailing zeros trimmed, followed by ` h` (`7,5 h`, `8 h`, `0,25 h`)
+    - otherwise: `{H} h {M} min` (e.g. `7 h 50 min`; when H is 0: `0 h 50 min`)
+  - numbers formatted German-style: weeks with up to 2 decimals and no trailing zeros (`3,25`; at most 2 decimals are allowed), rate with exactly 2 decimals (`12,00`)
   - `months` singular form when 1: `1 Monat`
   - `priceInCents`: `calculation.totalCents`
 - `recipient`: the linked recipient
@@ -204,14 +208,14 @@ The prefill uses the current `weeksPerMonth` setting.
 
 ### Errors
 
-| Case                                           | Response                                                  |
-| ---------------------------------------------- | --------------------------------------------------------- |
-| Validation fails                               | `400 { error: <first issue message> }`, nothing written   |
-| Invalid `weeksPerMonth`                        | `400 { error: 'Weeks per month must be greater than 0' }` |
-| No recipient specified                         | `400 { error: 'Recipient is required' }`                  |
-| Unknown `recipientId`                          | `400 { error: 'Recipient not found' }`                    |
-| Recipient already linked to another instructor | `409 { error: 'Recipient already has an instructor' }`    |
-| Unknown / non-numeric instructor id            | `404 { error: 'Instructor not found' }`                   |
+| Case                                           | Response                                                                                                                 |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Validation fails                               | `400 { error: <first issue message> }`, nothing written                                                                  |
+| Invalid `weeksPerMonth`                        | `400 { error: <validateWeeksPerMonth message> }`; non-number → `400 { error: 'Weeks per month must be greater than 0' }` |
+| No recipient specified                         | `400 { error: 'Recipient is required' }`                                                                                 |
+| Unknown `recipientId`                          | `400 { error: 'Recipient not found' }`                                                                                   |
+| Recipient already linked to another instructor | `409 { error: 'Recipient already has an instructor' }`                                                                   |
+| Unknown / non-numeric instructor id            | `404 { error: 'Instructor not found' }`                                                                                  |
 
 ### E2E Reset
 

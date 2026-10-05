@@ -32,8 +32,13 @@ instructorRouter.get('/settings', async (_req, res) => {
 // PUT /api/instructor/settings
 instructorRouter.put('/settings', async (req, res) => {
   const { weeksPerMonth } = req.body as { weeksPerMonth?: unknown };
-  if (typeof weeksPerMonth !== 'number' || validateWeeksPerMonth(weeksPerMonth)) {
+  if (typeof weeksPerMonth !== 'number') {
     res.status(400).json({ error: 'Weeks per month must be greater than 0' });
+    return;
+  }
+  const error = validateWeeksPerMonth(weeksPerMonth);
+  if (error) {
+    res.status(400).json({ error });
     return;
   }
   await prisma.systemSetting.upsert({

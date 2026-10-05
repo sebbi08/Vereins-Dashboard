@@ -150,5 +150,9 @@ export function validateInstructorRent(inputs: InstructorRentInputs): Validation
 }
 
 export function validateWeeksPerMonth(value: number): string | null {
-  return Number.isFinite(value) && value > 0 ? null : 'Weeks per month must be greater than 0';
+  if (!Number.isFinite(value) || value <= 0) return 'Weeks per month must be greater than 0';
+  if (Math.abs(value * 100 - Math.round(value * 100)) >= 1e-9) {
+    return 'Weeks per month may have at most 2 decimals';
+  }
+  return null;
 }

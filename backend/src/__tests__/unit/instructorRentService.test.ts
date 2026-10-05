@@ -109,4 +109,19 @@ describe('buildInvoiceLineText', () => {
       'Raummiete 1 Monat (7,5 h/Woche × 4 Wochen × 1 Monat × 12,50 €)',
     );
   });
+
+  it('prints hours and minutes when the hours are not exact with 2 decimals', () => {
+    const blocks = [
+      {
+        weekday: 'MO' as const,
+        start: '14:00',
+        end: '18:00',
+        breaks: [{ start: '16:00', end: '16:10' }],
+      },
+      { weekday: 'DO' as const, start: '09:00', end: '13:00', breaks: [] },
+    ];
+    expect(
+      buildInvoiceLineText({ hourlyRateCents: 1250, months: 6, timeBlocks: blocks }, 3.25),
+    ).toBe('Raummiete 6 Monate (7 h 50 min/Woche × 3,25 Wochen × 6 Monate × 12,50 €)');
+  });
 });

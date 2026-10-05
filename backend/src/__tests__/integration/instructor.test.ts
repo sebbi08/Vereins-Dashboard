@@ -88,6 +88,12 @@ describe('PUT /api/instructor/settings', () => {
     expect(res.body).toEqual({ error: 'Weeks per month must be greater than 0' });
   });
 
+  it('rejects more than 2 decimals', async () => {
+    const res = await request.put('/api/instructor/settings').send({ weeksPerMonth: 4.333 });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Weeks per month may have at most 2 decimals' });
+  });
+
   it('does not expose the setting through the donation receipt settings', async () => {
     await request.put('/api/instructor/settings').send({ weeksPerMonth: 4 });
     const res = await request.get('/api/settings');
@@ -361,6 +367,24 @@ describe('GET /api/instructor/:id/invoice-prefill', () => {
       'Raummiete 1 Monat (7,5 h/Woche × 3,25 Wochen × 1 Monat × 12,00 €)',
     );
     expect(res.body.lineItems[0].priceInCents).toBe(29250);
+  });
+
+  it('prints hours and minutes so the text reproduces the amount', async () => {
+    await request.put('/api/instructor/settings').send({ weeksPerMonth: 4.33 });
+    const { body } = await request.post('/api/instructor').send({
+      ...newInstructorBody(),
+      hourlyRateCents: 1250,
+      timeBlocks: [
+        { weekday: 'MO', start: '14:00', end: '18:00', breaks: [{ start: '16:00', end: '16:10' }] },
+        { weekday: 'DO', start: '09:00', end: '13:00', breaks: [] },
+      ],
+    });
+
+    const res = await request.get(`/api/instructor/${body.id}/invoice-prefill`);
+
+    expect(res.body.lineItems[0].text).toContain('7 h 50 min/Woche × 4,33 Wochen');
+    // Math.round(470 * 1250 * 4.33 * 6 / 60)
+    expect(res.body.lineItems[0].priceInCents).toBe(254388);
   });
 
   it.each(['999', 'abc'])('returns 404 for id %s', async (id) => {

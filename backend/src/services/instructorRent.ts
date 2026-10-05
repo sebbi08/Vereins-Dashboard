@@ -190,13 +190,22 @@ function monthsLabel(months: number): string {
   return months === 1 ? '1 Monat' : `${months} Monate`;
 }
 
+/**
+ * Weekly hours, printed exactly so the line text reproduces the billed amount:
+ * a trimmed decimal when it is exact with 2 decimals, otherwise hours and minutes.
+ */
+function formatWeeklyHours(netMinutesPerWeek: number): string {
+  if (netMinutesPerWeek % 3 === 0) return `${formatDecimal(netMinutesPerWeek / 60, 2, true)} h`;
+  return `${Math.floor(netMinutesPerWeek / 60)} h ${netMinutesPerWeek % 60} min`;
+}
+
 export function buildInvoiceLineText(inputs: InstructorRentInputs, weeksPerMonth: number): string {
   const { netMinutesPerWeek } = calculateInstructorRent(inputs, weeksPerMonth);
-  const hours = formatDecimal(netMinutesPerWeek / 60, 2, true);
+  const hours = formatWeeklyHours(netMinutesPerWeek);
   const weeks = formatDecimal(weeksPerMonth, 2, true);
   const rate = formatDecimal(inputs.hourlyRateCents / 100, 2, false);
   const label = monthsLabel(inputs.months);
-  return `Raummiete ${label} (${hours} h/Woche × ${weeks} Wochen × ${label} × ${rate} €)`;
+  return `Raummiete ${label} (${hours}/Woche × ${weeks} Wochen × ${label} × ${rate} €)`;
 }
 
 export function buildInvoicePrefill(
