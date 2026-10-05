@@ -8,6 +8,7 @@ import type {
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
+import { vAutogrow } from '../directives/autogrow';
 
 const router = useRouter();
 const route = useRoute();
@@ -568,12 +569,14 @@ function onFormSubmit() {
           <div class="space-y-2">
             <div v-for="(pos, idx) in inputs.lineItems" :key="idx" class="flex gap-2 items-start">
               <div class="flex-1">
-                <input
+                <textarea
                   v-model="pos.text"
-                  type="text"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  v-autogrow
+                  data-testid="line-item-text"
+                  rows="1"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none overflow-hidden focus:outline-none focus:ring-2 focus:ring-blue-500"
                   @input="updateGross"
-                />
+                ></textarea>
               </div>
               <div class="w-24">
                 <input

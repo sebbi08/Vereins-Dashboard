@@ -353,7 +353,9 @@ function pdfStatusBadge(status: PdfStatus) {
                     :key="idx"
                     class="flex justify-between py-1 border-b border-gray-100 last:border-0"
                   >
-                    <span class="text-gray-700">{{ pos.text }}</span>
+                    <span data-testid="line-item-text" class="text-gray-700 whitespace-pre-line">{{
+                      pos.text
+                    }}</span>
                     <span class="text-gray-800 font-medium">{{
                       formatAmount(pos.priceInCents)
                     }}</span>

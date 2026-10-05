@@ -155,6 +155,21 @@ describe('InvoiceFormView — new invoice', () => {
     expect(wrapper.text()).toContain('Create Invoice');
     expect(wrapper.find('[data-testid="activate-draft"]').exists()).toBe(false);
   });
+
+  it('edits line item text in a textarea and keeps line breaks', async () => {
+    replies['POST /api/invoice-draft'] = { status: 201, body: { draftId: 1 } };
+    const wrapper = await mountForm();
+    vm(wrapper).inputs.name = 'Neue Firma';
+
+    const textarea = wrapper.find('[data-testid="line-item-text"]');
+    expect(textarea.element.tagName).toBe('TEXTAREA');
+    await textarea.setValue('Zeile 1\nZeile 2');
+    await wrapper.find('[data-testid="save-draft"]').trigger('click');
+    await flushPromises();
+
+    const inputs = bodyOf('POST /api/invoice-draft').inputs as InvoiceInputs;
+    expect(inputs.lineItems[0].text).toBe('Zeile 1\nZeile 2');
+  });
 });
 
 describe('InvoiceFormView — draft mode', () => {
