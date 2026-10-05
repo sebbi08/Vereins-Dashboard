@@ -7,6 +7,7 @@ import {
 } from 'shared';
 import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
+import InvoiceTextSettings from '../components/InvoiceTextSettings.vue';
 import { useAppStore } from '../stores/app';
 import { formatCents, formatHours } from '../utils/format';
 
@@ -145,6 +146,11 @@ onMounted(async () => {
         Saved
       </p>
     </div>
+
+    <InvoiceTextSettings
+      :preview-instructor-id="instructors[0]?.id ?? null"
+      :weeks-per-month="Number(weeksPerMonth)"
+    />
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       <p v-if="error" class="p-4 text-sm text-red-600">{{ error }}</p>

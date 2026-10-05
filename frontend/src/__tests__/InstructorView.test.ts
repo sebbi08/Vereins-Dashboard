@@ -186,4 +186,12 @@ describe('InstructorView', () => {
 
     expect(mockPush).not.toHaveBeenCalledWith('/instructor/1');
   });
+
+  it('shows the invoice text settings with the first instructor as preview source', async () => {
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="invoice-template"]').exists()).toBe(true);
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/instructor/1')).toBe(true);
+  });
 });
