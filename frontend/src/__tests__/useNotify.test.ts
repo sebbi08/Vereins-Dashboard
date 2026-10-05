@@ -12,11 +12,13 @@ describe('useNotify', () => {
 
     notify.success('Saved');
     notify.info('Heads up');
+    notify.warn('Careful');
     notify.error('Failed');
 
     expect(add.mock.calls.map(([message]) => message)).toEqual([
       { severity: 'success', summary: 'Success', detail: 'Saved', life: 4000 },
       { severity: 'info', summary: 'Info', detail: 'Heads up', life: 4000 },
+      { severity: 'warn', summary: 'Warning', detail: 'Careful', life: 6000 },
       { severity: 'error', summary: 'Error', detail: 'Failed', life: 6000 },
     ]);
   });

@@ -7,6 +7,8 @@ export function useNotify() {
     success: (detail: string) =>
       toast.add({ severity: 'success', summary: 'Success', detail, life: 4000 }),
     info: (detail: string) => toast.add({ severity: 'info', summary: 'Info', detail, life: 4000 }),
+    warn: (detail: string) =>
+      toast.add({ severity: 'warn', summary: 'Warning', detail, life: 6000 }),
     error: (detail: string) =>
       toast.add({ severity: 'error', summary: 'Error', detail, life: 6000 }),
   };
