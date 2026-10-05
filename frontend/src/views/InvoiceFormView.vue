@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { InvoiceInputs, InvoiceRecipientDto } from 'shared';
+import type { InstructorInvoicePrefillDto, InvoiceInputs, InvoiceRecipientDto } from 'shared';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
@@ -12,6 +12,9 @@ const invoiceId = route.params.id ? parseInt(String(route.params.id)) : null;
 const copyFromId = route.query.copyFrom ? parseInt(String(route.query.copyFrom)) : null;
 const isNewRevision = !!invoiceId;
 const isCopy = !!copyFromId;
+const fromInstructorId = route.query.fromInstructor
+  ? parseInt(String(route.query.fromInstructor))
+  : null;
 const recipientFieldsLocked = computed(
   () => !isNewRevision && !!recipient.value && !newRecipient.value,
 );
@@ -143,6 +146,20 @@ async function copyFromInvoice() {
   }
 }
 
+async function prefillFromInstructor() {
+  if (!fromInstructorId) return;
+  const res = await fetch(`/api/instructor/${fromInstructorId}/invoice-prefill`);
+  if (!res.ok) {
+    error.value = 'Could not load instructor data';
+    return;
+  }
+  const data = (await res.json()) as InstructorInvoicePrefillDto;
+  selectRecipient(data.recipient);
+  inputs.value.title = data.title;
+  inputs.value.lineItems = data.lineItems;
+  inputs.value.invoiceDate = new Date().toISOString().split('T')[0];
+}
+
 onMounted(async () => {
   if (store.invoiceTemplateAvailable === false) {
     router.replace('/invoice');
@@ -160,6 +177,8 @@ onMounted(async () => {
     await ladeRevision();
   } else if (isCopy) {
     await copyFromInvoice();
+  } else if (fromInstructorId) {
+    await prefillFromInstructor();
   }
   updateGross();
 });
