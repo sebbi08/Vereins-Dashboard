@@ -11,6 +11,7 @@ import {
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import RecipientPicker from '../components/RecipientPicker.vue';
+import { useAppStore } from '../stores/app';
 import WeeklySchedule from '../components/WeeklySchedule.vue';
 import { centsToEuroInput, formatCents, formatHours, parseEuroToCents } from '../utils/format';
 import {
@@ -22,6 +23,7 @@ import {
 
 const route = useRoute();
 const router = useRouter();
+const store = useAppStore();
 
 const instructorId = route.params.id ? Number(route.params.id) : null;
 const isEdit = instructorId !== null;
@@ -63,6 +65,11 @@ function snapshot(): string {
   ]);
 }
 const isDirty = computed(() => snapshot() !== savedSnapshot.value);
+const createInvoiceBlockedReason = computed(() => {
+  if (isDirty.value) return 'Save your changes first';
+  if (store.invoiceTemplateAvailable === false) return 'No active invoice template';
+  return '';
+});
 
 async function loadSettings() {
   const res = await fetch('/api/instructor/settings');
@@ -126,7 +133,11 @@ function createInvoice() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadSettings(), loadInstructor()]);
+  await Promise.all([
+    loadSettings(),
+    loadInstructor(),
+    store.invoiceTemplateAvailable === null ? store.checkTemplates() : Promise.resolve(),
+  ]);
 });
 </script>
 
@@ -230,11 +241,10 @@ onMounted(async () => {
 
       <div class="flex gap-3">
         <button
-          type="button"
+          type="submit"
           data-testid="save"
           :disabled="!canSave"
           class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          @click="save"
         >
           Save
         </button>
@@ -242,8 +252,8 @@ onMounted(async () => {
           v-if="isEdit"
           type="button"
           data-testid="create-invoice"
-          :disabled="isDirty"
-          :title="isDirty ? 'Save your changes first' : ''"
+          :disabled="!!createInvoiceBlockedReason"
+          :title="createInvoiceBlockedReason"
           class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
           @click="createInvoice"
         >

@@ -5,7 +5,7 @@ import {
   type InstructorSettingsDto,
   validateWeeksPerMonth,
 } from 'shared';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAppStore } from '../stores/app';
 import { formatCents, formatHours } from '../utils/format';
@@ -20,6 +20,11 @@ const error = ref('');
 const weeksPerMonth = ref<number | string>(DEFAULT_WEEKS_PER_MONTH);
 const settingsError = ref('');
 const settingsSaved = ref(false);
+const settingsLoaded = ref(false);
+
+watch(weeksPerMonth, () => {
+  settingsSaved.value = false;
+});
 
 const totalCents = computed(() =>
   instructors.value.reduce((sum, i) => sum + i.calculation.totalCents, 0),
@@ -40,11 +45,18 @@ async function loadInstructors() {
 }
 
 async function loadSettings() {
-  const res = await fetch('/api/instructor/settings');
-  if (res.ok) weeksPerMonth.value = ((await res.json()) as InstructorSettingsDto).weeksPerMonth;
+  try {
+    const res = await fetch('/api/instructor/settings');
+    if (!res.ok) throw new Error('load failed');
+    weeksPerMonth.value = ((await res.json()) as InstructorSettingsDto).weeksPerMonth;
+    settingsLoaded.value = true;
+  } catch {
+    settingsError.value = 'Could not load settings';
+  }
 }
 
 async function saveSettings() {
+  if (!settingsLoaded.value) return;
   settingsError.value = '';
   settingsSaved.value = false;
   const value = Number(weeksPerMonth.value);
@@ -53,13 +65,18 @@ async function saveSettings() {
     settingsError.value = validation;
     return;
   }
-  const res = await fetch('/api/instructor/settings', {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ weeksPerMonth: value }),
-  });
-  if (!res.ok) {
-    settingsError.value = ((await res.json()) as { error: string }).error;
+  try {
+    const res = await fetch('/api/instructor/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ weeksPerMonth: value }),
+    });
+    if (!res.ok) {
+      settingsError.value = ((await res.json()) as { error?: string }).error ?? 'Saving failed';
+      return;
+    }
+  } catch {
+    settingsError.value = 'Saving failed';
     return;
   }
   settingsSaved.value = true;
@@ -115,7 +132,8 @@ onMounted(async () => {
       <button
         type="button"
         data-testid="save-settings"
-        class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50"
+        :disabled="!settingsLoaded"
+        class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
         @click="saveSettings"
       >
         Save
@@ -123,7 +141,9 @@ onMounted(async () => {
       <p v-if="settingsError" data-testid="settings-error" class="text-sm text-red-600">
         {{ settingsError }}
       </p>
-      <p v-else-if="settingsSaved" class="text-sm text-green-600">Saved</p>
+      <p v-else-if="settingsSaved" data-testid="settings-saved" class="text-sm text-green-600">
+        Saved
+      </p>
     </div>
 
     <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">

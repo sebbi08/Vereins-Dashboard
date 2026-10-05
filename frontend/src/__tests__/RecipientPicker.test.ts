@@ -63,6 +63,57 @@ describe('RecipientPicker', () => {
     });
   });
 
+  it.each(['recipient-suggestion', 'recipient-new'])(
+    'cancels a pending search when %s is clicked before the timer fires',
+    async (testId) => {
+      const wrapper = mount(RecipientPicker, { props: { modelValue: emptyRecipient() } });
+      const searchInput = wrapper.find('[data-testid="recipient-search"]');
+      await searchInput.setValue('An');
+      await vi.advanceTimersByTimeAsync(300);
+      await flushPromises();
+
+      await searchInput.setValue('Ann');
+      await wrapper.find(`[data-testid="${testId}"]`).trigger('click');
+      await vi.advanceTimersByTimeAsync(300);
+      await flushPromises();
+
+      expect(wrapper.findAll('[data-testid="recipient-suggestion"]')).toHaveLength(0);
+    },
+  );
+
+  it('ignores a search response when the search text changed meanwhile', async () => {
+    let resolveFirst: (value: Response) => void = () => {};
+    vi.mocked(fetch).mockImplementationOnce(
+      () => new Promise<Response>((resolve) => (resolveFirst = resolve)),
+    );
+    const wrapper = mount(RecipientPicker, { props: { modelValue: emptyRecipient() } });
+    const searchInput = wrapper.find('[data-testid="recipient-search"]');
+    await searchInput.setValue('An');
+    await vi.advanceTimersByTimeAsync(300);
+
+    await searchInput.setValue('');
+    resolveFirst({ ok: true, json: () => Promise.resolve(recipients) } as Response);
+    await flushPromises();
+
+    expect(wrapper.findAll('[data-testid="recipient-suggestion"]')).toHaveLength(0);
+  });
+
+  it('clears suggestions when the search request fails', async () => {
+    const wrapper = mount(RecipientPicker, { props: { modelValue: emptyRecipient() } });
+    const searchInput = wrapper.find('[data-testid="recipient-search"]');
+    await searchInput.setValue('An');
+    await vi.advanceTimersByTimeAsync(300);
+    await flushPromises();
+    expect(wrapper.findAll('[data-testid="recipient-suggestion"]')).toHaveLength(1);
+
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('offline'));
+    await searchInput.setValue('Ann');
+    await vi.advanceTimersByTimeAsync(300);
+    await flushPromises();
+
+    expect(wrapper.findAll('[data-testid="recipient-suggestion"]')).toHaveLength(0);
+  });
+
   it('emits edits to fields and keeps the linked id', async () => {
     const linked: RecipientFormValue = { ...emptyRecipient(), id: 7, name: 'Anna Alt' };
     const wrapper = mount(RecipientPicker, { props: { modelValue: linked } });

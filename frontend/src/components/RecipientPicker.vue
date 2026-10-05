@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { InvoiceRecipientDto } from 'shared';
-import { ref, watch } from 'vue';
+import { onBeforeUnmount, ref, watch } from 'vue';
 import { emptyRecipient, fromRecipientDto, type RecipientFormValue } from '../utils/recipientForm';
 
 const props = defineProps<{
@@ -29,18 +29,31 @@ function onSearchInput() {
     return;
   }
   debounceTimer = setTimeout(async () => {
-    const res = await fetch(`/api/invoice-recipient?search=${encodeURIComponent(search.value)}`);
-    if (res.ok) suggestions.value = await res.json();
+    const query = search.value;
+    try {
+      const res = await fetch(`/api/invoice-recipient?search=${encodeURIComponent(query)}`);
+      if (!res.ok) throw new Error('search failed');
+      const found = (await res.json()) as InvoiceRecipientDto[];
+      // A newer input has made this response stale.
+      if (search.value !== query) return;
+      suggestions.value = found;
+    } catch {
+      suggestions.value = [];
+    }
   }, 250);
 }
 
+onBeforeUnmount(() => clearTimeout(debounceTimer));
+
 function select(recipient: InvoiceRecipientDto) {
+  clearTimeout(debounceTimer);
   suggestions.value = [];
   search.value = recipient.name;
   emit('update:modelValue', fromRecipientDto(recipient));
 }
 
 function startNew() {
+  clearTimeout(debounceTimer);
   suggestions.value = [];
   emit('update:modelValue', { ...emptyRecipient(), name: search.value.trim() });
 }

@@ -35,6 +35,7 @@ function jsonResponse(body: unknown, ok = true): Response {
 }
 
 let fetchMock: ReturnType<typeof vi.fn>;
+let templates: { type: string }[];
 
 function setup(params: Record<string, string> = {}) {
   (useRoute as ReturnType<typeof vi.fn>).mockReturnValue({ params, query: {} });
@@ -64,8 +65,10 @@ describe('InstructorFormView', () => {
       if (url === '/api/instructor/5' && init?.method === 'DELETE') {
         return Promise.resolve({ ok: true, status: 204 } as Response);
       }
+      if (url === '/api/templates') return Promise.resolve(jsonResponse(templates));
       return Promise.resolve(jsonResponse({}, false));
     });
+    templates = [{ type: 'RECHNUNG' }];
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal(
       'confirm',
@@ -126,7 +129,7 @@ describe('InstructorFormView', () => {
     await wrapper.find('[data-testid="months"]').setValue('6');
     await addMondayBlock(wrapper, '08:00', '12:00');
 
-    await wrapper.find('[data-testid="save"]').trigger('click');
+    await wrapper.find('form').trigger('submit');
     await flushPromises();
 
     const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
@@ -162,6 +165,28 @@ describe('InstructorFormView', () => {
     expect(wrapper.find('[data-testid="create-invoice"]').attributes('disabled')).toBeDefined();
   });
 
+  it('Save is the submit button of the form so Enter saves', async () => {
+    const wrapper = setup();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="save"]').attributes('type')).toBe('submit');
+  });
+
+  it('disables invoice creation without an active invoice template', async () => {
+    templates = [];
+    const wrapper = setup({ id: '5' });
+    await flushPromises();
+
+    const createInvoice = wrapper.find('[data-testid="create-invoice"]');
+    expect(createInvoice.attributes('disabled')).toBeDefined();
+    expect(createInvoice.attributes('title')).toBe('No active invoice template');
+
+    await wrapper.find('[data-testid="months"]').setValue('3');
+    expect(wrapper.find('[data-testid="create-invoice"]').attributes('title')).toBe(
+      'Save your changes first',
+    );
+  });
+
   it('deletes after confirmation', async () => {
     const wrapper = setup({ id: '5' });
     await flushPromises();
@@ -189,7 +214,7 @@ describe('InstructorFormView', () => {
     await wrapper.find('[data-testid="recipient-name"]').setValue('Anna Alt');
     await wrapper.find('[data-testid="hourly-rate"]').setValue('12');
 
-    await wrapper.find('[data-testid="save"]').trigger('click');
+    await wrapper.find('form').trigger('submit');
     await flushPromises();
 
     expect(wrapper.find('[data-testid="form-error"]').text()).toBe(

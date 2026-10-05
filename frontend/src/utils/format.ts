@@ -9,7 +9,7 @@ export function formatHours(minutes: number): string {
 /** Accepts "12,50" or "12.5"; anything else (incl. thousands separators) → NaN. */
 export function parseEuroToCents(text: string): number {
   const trimmed = text.trim();
-  if (!/^\d+([.,]\d+)?$/.test(trimmed)) return Number.NaN;
+  if (!/^\d+([.,]\d{1,2})?$/.test(trimmed)) return Number.NaN;
   return Math.round(Number(trimmed.replace(',', '.')) * 100);
 }
 

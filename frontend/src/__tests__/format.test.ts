@@ -16,12 +16,12 @@ describe('format utils', () => {
     ['12,50', 1250],
     ['12.5', 1250],
     [' 12 ', 1200],
-    ['0,015', 2],
+    ['1,05', 105],
   ])('parses %j to cents', (text, cents) => {
     expect(parseEuroToCents(text)).toBe(cents);
   });
 
-  it.each(['', '   ', 'abc', '1.234,50'])('returns NaN for %j', (text) => {
+  it.each(['', '   ', 'abc', '1.234,50', '12,505', '1,005'])('returns NaN for %j', (text) => {
     expect(parseEuroToCents(text)).toBeNaN();
   });
 

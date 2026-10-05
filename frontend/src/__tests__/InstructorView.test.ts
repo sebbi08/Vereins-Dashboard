@@ -32,6 +32,7 @@ function jsonResponse(body: unknown, ok = true): Response {
   return { ok, json: () => Promise.resolve(body) } as Response;
 }
 
+type FetchImpl = (url: string, init?: RequestInit) => Promise<Response>;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 function mountView() {
@@ -112,6 +113,51 @@ describe('InstructorView', () => {
       'Weeks per month must be greater than 0',
     );
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+  });
+
+  it.each([
+    ['responds with an error', () => Promise.resolve(jsonResponse({}, false))],
+    ['is unreachable', () => Promise.reject(new Error('offline'))],
+  ])('disables saving when loading the setting %s', async (_label, settingsReply) => {
+    const defaultFetch = fetchMock.getMockImplementation() as FetchImpl;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      url === '/api/instructor/settings' && !init?.method
+        ? settingsReply()
+        : defaultFetch(url, init),
+    );
+    const wrapper = mountView();
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="settings-error"]').text()).toBe('Could not load settings');
+    expect(wrapper.find('[data-testid="save-settings"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('shows an error when saving the setting fails', async () => {
+    const defaultFetch = fetchMock.getMockImplementation() as FetchImpl;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      init?.method === 'PUT' ? Promise.reject(new Error('offline')) : defaultFetch(url, init),
+    );
+    const wrapper = mountView();
+    await flushPromises();
+
+    await wrapper.find('[data-testid="weeks-per-month"]').setValue('4');
+    await wrapper.find('[data-testid="save-settings"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="settings-error"]').text()).toBe('Saving failed');
+  });
+
+  it('hides the saved hint when the value changes again', async () => {
+    const wrapper = mountView();
+    await flushPromises();
+    await wrapper.find('[data-testid="weeks-per-month"]').setValue('4');
+    await wrapper.find('[data-testid="save-settings"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="settings-saved"]').exists()).toBe(true);
+
+    await wrapper.find('[data-testid="weeks-per-month"]').setValue('4.5');
+
+    expect(wrapper.find('[data-testid="settings-saved"]').exists()).toBe(false);
   });
 
   it('navigates to a prefilled invoice', async () => {
