@@ -390,11 +390,3 @@ onMounted(() => {
     </Tabs>
   </div>
 </template>
-
-<style scoped>
-.section-title {
-  margin: 0;
-  font-size: 1.125rem;
-  font-weight: 600;
-}
-</style>

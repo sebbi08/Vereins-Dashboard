@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import StatusTag from '../components/ui/StatusTag.vue';
 import {
+  DOCUMENT_STATUS_FILTER_OPTIONS,
   DOCUMENT_STATUS_OPTIONS,
   documentStatusTag,
   EMAIL_STATUS_OPTIONS,
@@ -46,5 +47,13 @@ describe('status tags', () => {
     });
     expect(wrapper.text()).toBe('Active');
     expect(wrapper.classes().join(' ')).toContain('p-tag-success');
+  });
+
+  it('offers a toolbar status filter including "All"', () => {
+    expect(DOCUMENT_STATUS_FILTER_OPTIONS).toEqual([
+      { label: 'Active', value: 'AKTIV' },
+      { label: 'Cancelled', value: 'STORNIERT' },
+      { label: 'All', value: null },
+    ]);
   });
 });

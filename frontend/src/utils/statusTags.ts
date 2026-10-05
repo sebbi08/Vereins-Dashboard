@@ -46,3 +46,9 @@ export const EMAIL_STATUS_OPTIONS = [
   { label: 'Sent', value: 'SENT' },
   { label: 'Failed', value: 'FAILED' },
 ];
+
+/** Toolbar status filter for list pages: the document states plus "All" (no filter). */
+export const DOCUMENT_STATUS_FILTER_OPTIONS: { label: string; value: string | null }[] = [
+  ...DOCUMENT_STATUS_OPTIONS,
+  { label: 'All', value: null },
+];

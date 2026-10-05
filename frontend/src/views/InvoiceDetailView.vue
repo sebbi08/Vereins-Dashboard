@@ -9,8 +9,10 @@ import Message from 'primevue/message';
 import type { InvoiceDto, InvoiceRevisionDto } from 'shared';
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import PdfFailureNotice from '../components/PdfFailureNotice.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
 import StatusTag from '../components/ui/StatusTag.vue';
+import { useActionRunner } from '../composables/useActionRunner';
 import { useConfirmAction } from '../composables/useConfirmAction';
 import { useNotify } from '../composables/useNotify';
 import { formatCents, formatDate, formatDateTime } from '../utils/format';
@@ -25,6 +27,7 @@ const route = useRoute();
 const router = useRouter();
 const notify = useNotify();
 const { confirmAction } = useConfirmAction();
+const { busy, run } = useActionRunner();
 
 const id = Number(route.params.id);
 
@@ -32,8 +35,6 @@ const invoice = ref<InvoiceDto | null>(null);
 const loading = ref(false);
 const loadError = ref('');
 const openPanels = ref<number[]>([]);
-const busy = ref<Record<string, boolean>>({});
-const techOpen = ref<Record<number, boolean>>({});
 
 const isActive = computed(() => invoice.value?.status === 'AKTIV');
 const title = computed(() => (invoice.value ? `Invoice ${invoice.value.number}` : 'Invoice'));
@@ -73,29 +74,6 @@ function grossCents(rev: InvoiceRevisionDto): number {
 
 function isLatest(rev: InvoiceRevisionDto): boolean {
   return invoice.value?.revisions[0]?.id === rev.id;
-}
-
-/** Runs one request per button with a busy flag; returns whether the request succeeded. */
-async function run(
-  key: string,
-  request: () => Promise<Response>,
-  errorText: (body: Record<string, string>) => string,
-) {
-  busy.value = { ...busy.value, [key]: true };
-  try {
-    const res = await request();
-    const body = (await res.json().catch(() => ({}))) as Record<string, string>;
-    if (!res.ok) {
-      notify.error(errorText(body));
-      return false;
-    }
-    return true;
-  } catch {
-    notify.error('Network error');
-    return false;
-  } finally {
-    busy.value = { ...busy.value, [key]: false };
-  }
 }
 
 async function cancel() {
@@ -292,23 +270,11 @@ function downloadPdf(rev: InvoiceRevisionDto) {
                   </div>
                 </dl>
 
-                <Message v-if="rev.pdfStatus === 'FAILED'" severity="warn">
-                  <div class="stack gap-sm">
-                    <span>{{
-                      rev.pdfError || 'PDF could not be generated. Please try again.'
-                    }}</span>
-                    <Button
-                      v-if="rev.pdfTechError"
-                      :label="techOpen[rev.id] ? 'Hide Details' : 'Show Details'"
-                      size="small"
-                      text
-                      @click="techOpen[rev.id] = !techOpen[rev.id]"
-                    />
-                    <pre v-if="rev.pdfTechError && techOpen[rev.id]" class="tech-error">{{
-                      rev.pdfTechError
-                    }}</pre>
-                  </div>
-                </Message>
+                <PdfFailureNotice
+                  v-if="rev.pdfStatus === 'FAILED'"
+                  :error="rev.pdfError"
+                  :tech-error="rev.pdfTechError"
+                />
 
                 <div class="line-items">
                   <p class="muted line-items__label">Line Items</p>
@@ -390,38 +356,6 @@ function downloadPdf(rev: InvoiceRevisionDto) {
 </template>
 
 <style scoped>
-.section-title {
-  margin: 0;
-  font-size: 1.125rem;
-  font-weight: 600;
-}
-
-.facts {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  gap: 1rem;
-  margin: 0;
-}
-
-.facts--grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-@media (max-width: 767px) {
-  .facts--grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.facts dt {
-  font-size: 0.8125rem;
-  color: var(--p-text-muted-color);
-}
-
-.facts dd {
-  margin: 0.25rem 0 0;
-}
-
 .strong {
   font-weight: 600;
 }
@@ -471,12 +405,6 @@ function downloadPdf(rev: InvoiceRevisionDto) {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
-}
-
-.tech-error {
-  white-space: pre-wrap;
-  font-size: 0.75rem;
-  margin: 0;
 }
 
 .error-text {

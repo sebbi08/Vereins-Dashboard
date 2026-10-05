@@ -101,3 +101,36 @@ body {
   font-size: 0.875rem;
   font-weight: 500;
 }
+
+.section-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+/* Label/value grid for detail pages: <dl class="facts"><div><dt/><dd/></div>…</dl> */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 1rem;
+  margin: 0;
+}
+
+.facts--grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 767px) {
+  .facts--grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.facts dt {
+  font-size: 0.8125rem;
+  color: var(--p-text-muted-color);
+}
+
+.facts dd {
+  margin: 0.25rem 0 0;
+}

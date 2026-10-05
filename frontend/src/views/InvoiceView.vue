@@ -4,7 +4,6 @@ import Button from 'primevue/button';
 import Column from 'primevue/column';
 import DataTable, {
   type DataTableFilterMeta,
-  type DataTableFilterMetaData,
   type DataTableRowClickEvent,
 } from 'primevue/datatable';
 import DatePicker from 'primevue/datepicker';
@@ -16,23 +15,25 @@ import Select from 'primevue/select';
 import SelectButton from 'primevue/selectbutton';
 import Tag from 'primevue/tag';
 import type { InvoiceDraftListItem, InvoiceListItem } from 'shared';
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import AmountRangeFilter from '../components/ui/AmountRangeFilter.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
 import StatusTag from '../components/ui/StatusTag.vue';
 import { useBatchDownload } from '../composables/useBatchDownload';
 import { useNotify } from '../composables/useNotify';
+import { useTableFilters } from '../composables/useTableFilters';
 import { useAppStore } from '../stores/app';
 import { formatCents, formatDate, formatTimestampDate } from '../utils/format';
 import {
-  DOCUMENT_STATUS_OPTIONS,
+  DOCUMENT_STATUS_FILTER_OPTIONS,
   documentStatusTag,
   EMAIL_STATUS_OPTIONS,
   emailStatusTag,
 } from '../utils/statusTags';
 import { globalFilter, TABLE_DEFAULTS } from '../utils/tableDefaults';
 import { AMOUNT_RANGE, DATE_RANGE } from '../utils/tableFilters';
+import { isControlClick } from '../utils/tableRowClick';
 
 const router = useRouter();
 const store = useAppStore();
@@ -55,33 +56,7 @@ function defaultFilters(): DataTableFilterMeta {
   };
 }
 
-const filters = ref<DataTableFilterMeta>(defaultFilters());
-
-const globalSearch = computed<string>({
-  get: () => ((filters.value.global as DataTableFilterMetaData).value as string | null) ?? '',
-  set: (value) => {
-    filters.value = {
-      ...filters.value,
-      global: { value: value || null, matchMode: FilterMatchMode.CONTAINS },
-    };
-  },
-});
-
-const STATUS_FILTER_OPTIONS = [...DOCUMENT_STATUS_OPTIONS, { label: 'All', value: null }];
-
-const statusFilter = computed<string | null>({
-  get: () => ((filters.value.status as DataTableFilterMetaData).value as string | null) ?? null,
-  set: (value) => {
-    filters.value = {
-      ...filters.value,
-      status: { value, matchMode: FilterMatchMode.EQUALS },
-    };
-  },
-});
-
-function clearFilters() {
-  filters.value = defaultFilters();
-}
+const { filters, globalSearch, statusFilter, clearFilters } = useTableFilters(defaultFilters);
 
 const { download, downloading } = useBatchDownload({
   url: '/api/invoice/download-batch',
@@ -121,12 +96,6 @@ onMounted(() => {
   void loadInvoices();
   void loadDrafts();
 });
-
-/** Clicks on checkboxes, buttons, links and inputs belong to that control, not to the row. */
-function isControlClick(event: Event): boolean {
-  const target = event.target as HTMLElement | null;
-  return !!target?.closest('.p-checkbox, button, a, input, td[data-p-selection-column="true"]');
-}
 
 function onInvoiceRowClick(event: DataTableRowClickEvent<InvoiceListItem>) {
   if (isControlClick(event.originalEvent)) return;
@@ -240,7 +209,7 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
             </IconField>
             <SelectButton
               v-model="statusFilter"
-              :options="STATUS_FILTER_OPTIONS"
+              :options="DOCUMENT_STATUS_FILTER_OPTIONS"
               option-label="label"
               option-value="value"
               :allow-empty="false"
@@ -385,12 +354,6 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
 </template>
 
 <style scoped>
-.section-title {
-  margin: 0;
-  font-size: 1.125rem;
-  font-weight: 600;
-}
-
 :deep(.col-number) {
   width: 8rem;
 }
