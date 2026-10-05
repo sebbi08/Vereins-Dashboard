@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import AppSidebar from '@/components/AppSidebar.vue';
+import { cancelPendingConfirm } from '@/composables/useConfirmAction';
 import { useAppStore } from '@/stores/app';
 import Button from 'primevue/button';
 import ConfirmDialog from 'primevue/confirmdialog';
@@ -18,6 +19,8 @@ watch(
   () => route.fullPath,
   () => {
     drawerOpen.value = false;
+    // A dialog left open across navigation must not run the previous page's action.
+    cancelPendingConfirm();
   },
 );
 
@@ -69,7 +72,7 @@ onUnmounted(() => desktopQuery.removeEventListener('change', onViewportChange));
     </Drawer>
 
     <Toast />
-    <ConfirmDialog />
+    <ConfirmDialog :style="{ width: '28rem' }" :breakpoints="{ '575px': '90vw' }" />
   </div>
 </template>
 

@@ -1,3 +1,9 @@
+import { enableAutoUnmount } from '@vue/test-utils';
+import { afterEach } from 'vitest';
+
+// Unmount every wrapper after each test so listeners and teleported DOM never leak.
+enableAutoUnmount(afterEach);
+
 // jsdom has no matchMedia; PrimeVue and useThemeMode query it.
 if (typeof window.matchMedia !== 'function') {
   Object.defineProperty(window, 'matchMedia', {

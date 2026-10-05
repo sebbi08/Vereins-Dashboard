@@ -4,12 +4,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMemoryHistory, createRouter } from 'vue-router';
 import App from '../App.vue';
 import { NAV_ITEMS } from '../components/navItems';
+import { cancelPendingConfirm } from '../composables/useConfirmAction';
 import { withPrimeVue } from './helpers/primeVue';
+
+vi.mock('../composables/useConfirmAction', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../composables/useConfirmAction')>()),
+  cancelPendingConfirm: vi.fn(),
+}));
 
 const Blank = { template: '<div data-testid="routed-page" />' };
 
 describe('App shell', () => {
   beforeEach(() => {
+    vi.mocked(cancelPendingConfirm).mockClear();
     setActivePinia(createPinia());
     vi.stubGlobal(
       'fetch',
@@ -19,7 +26,6 @@ describe('App shell', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    document.body.innerHTML = '';
   });
 
   async function mountApp(path = '/') {
@@ -118,5 +124,13 @@ describe('App shell', () => {
     const current = document.querySelectorAll('aside.app-shell__sidebar [aria-current="page"]');
     expect(current).toHaveLength(1);
     expect(current[0].getAttribute('data-testid')).toBe('nav-instructor');
+  });
+
+  it('cancels a pending confirm dialog when the route changes', async () => {
+    const { router } = await mountApp();
+    expect(cancelPendingConfirm).not.toHaveBeenCalled();
+    await router.push('/invoice');
+    await flushPromises();
+    expect(cancelPendingConfirm).toHaveBeenCalledTimes(1);
   });
 });
