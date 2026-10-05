@@ -1,556 +1,268 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+import type { DataTableFilterMeta } from 'primevue/datatable';
 import type { InvoiceDraftListItem, InvoiceListItem } from 'shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { nextTick } from 'vue';
 import { useRouter } from 'vue-router';
+import { useAppStore } from '../stores/app';
 import InvoiceView from '../views/InvoiceView.vue';
+import { withPrimeVue } from './helpers/primeVue';
 
-vi.mock('vue-router', () => ({
-  useRouter: vi.fn(),
+const { notify, download } = vi.hoisted(() => ({
+  notify: { success: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  download: vi.fn(),
 }));
 
-const mockPush = vi.fn();
+vi.mock('vue-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-router')>()),
+  useRouter: vi.fn(),
+}));
+vi.mock('../composables/useNotify', () => ({ useNotify: () => notify }));
+vi.mock('../composables/useBatchDownload', () => ({
+  useBatchDownload: () => ({ download, downloading: false }),
+}));
 
-/** Internal state exposed by InvoiceView's &lt;script setup&gt; at runtime. */
-interface InvoiceViewVM {
-  invoices: InvoiceListItem[];
-  selectedIds: Set<number>;
-  toggleSelect: (id: number) => void;
-  toggleSelectAll: () => void;
-  allSelected: boolean;
-  downloadSelected: () => Promise<void>;
+interface ViewVM {
+  filters: DataTableFilterMeta;
+  selection: InvoiceListItem[];
 }
 
-function vm(wrapper: VueWrapper): InvoiceViewVM {
-  return wrapper.vm as unknown as InvoiceViewVM;
+function vm(wrapper: VueWrapper): ViewVM {
+  return wrapper.vm as unknown as ViewVM;
 }
 
-function makeInvoice(overrides: Partial<InvoiceListItem> = {}): InvoiceListItem {
+function invoice(overrides: Partial<InvoiceListItem>): InvoiceListItem {
   return {
     id: 1,
-    number: 'INV-2024-001',
+    number: '1 / 2026',
     status: 'AKTIV',
-    recipientName: 'Test Recipient',
-    amountCents: 10000,
-    invoiceDate: '2024-01-15',
-    createdAt: '2024-01-15T10:00:00Z',
+    recipientName: 'Anna Alt',
+    amountCents: 11900,
+    invoiceDate: '2026-01-15T00:00:00.000Z',
+    createdAt: '2026-01-15T10:00:00.000Z',
     activeRevisionNumber: 1,
     emailStatus: 'NOT_SENT',
     ...overrides,
   };
 }
 
-const mockInvoices: InvoiceListItem[] = [
-  makeInvoice({ id: 1, number: 'INV-001' }),
-  makeInvoice({ id: 2, number: 'INV-002' }),
-  makeInvoice({ id: 3, number: 'INV-003' }),
+const invoices: InvoiceListItem[] = [
+  invoice({ id: 1 }),
+  invoice({
+    id: 2,
+    number: '2 / 2026',
+    recipientName: 'Bernd Bach',
+    amountCents: 5950,
+    invoiceDate: '2026-03-01T00:00:00.000Z',
+    emailStatus: 'SENT',
+  }),
+  invoice({
+    id: 3,
+    number: '3 / 2026',
+    recipientName: 'Clara Cord',
+    amountCents: 23800,
+    invoiceDate: '2026-02-10T00:00:00.000Z',
+    status: 'STORNIERT',
+  }),
 ];
 
-function mountInvoiceView() {
-  return mount(InvoiceView, {
-    global: {
-      stubs: {
-        'router-link': { template: '<a><slot /></a>' },
-      },
-    },
-  });
+let drafts: InvoiceDraftListItem[];
+const push = vi.fn();
+
+function jsonResponse(body: unknown, ok = true): Response {
+  return { ok, json: () => Promise.resolve(body) } as Response;
 }
 
-describe('InvoiceView — selection & download', () => {
-  beforeEach(() => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({ json: () => Promise.resolve(mockInvoices) } as Response),
-    );
-    (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({ push: mockPush });
-    setActivePinia(createPinia());
+async function mountView() {
+  const wrapper = mount(InvoiceView, {
+    attachTo: document.body,
+    global: withPrimeVue({ stubs: { RouterLink: { template: '<a><slot /></a>' } } }),
   });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  describe('toggleSelect', () => {
-    it('adds an ID to the Set when not present', async () => {
-      const wrapper = mountInvoiceView();
-      await nextTick();
-      // Set invoices data so we have items to select
-      vm(wrapper).invoices = [...mockInvoices];
-
-      vm(wrapper).toggleSelect(1);
-      expect(vm(wrapper).selectedIds.has(1)).toBe(true);
-      expect(vm(wrapper).selectedIds.size).toBe(1);
-
-      vm(wrapper).toggleSelect(2);
-      expect(vm(wrapper).selectedIds.has(1)).toBe(true);
-      expect(vm(wrapper).selectedIds.has(2)).toBe(true);
-      expect(vm(wrapper).selectedIds.size).toBe(2);
-    });
-
-    it('removes an ID from the Set when already present', async () => {
-      const wrapper = mountInvoiceView();
-      await nextTick();
-      vm(wrapper).invoices = [...mockInvoices];
-
-      vm(wrapper).toggleSelect(1);
-      vm(wrapper).toggleSelect(2);
-      expect(vm(wrapper).selectedIds.size).toBe(2);
-
-      vm(wrapper).toggleSelect(1);
-      expect(vm(wrapper).selectedIds.has(1)).toBe(false);
-      expect(vm(wrapper).selectedIds.has(2)).toBe(true);
-      expect(vm(wrapper).selectedIds.size).toBe(1);
-    });
-
-    it('does not mutate the previous Set reference', async () => {
-      const wrapper = mountInvoiceView();
-      await nextTick();
-      vm(wrapper).invoices = [...mockInvoices];
-
-      const before = vm(wrapper).selectedIds;
-      vm(wrapper).toggleSelect(1);
-      expect(vm(wrapper).selectedIds).not.toBe(before);
-    });
-  });
-
-  describe('toggleSelectAll', () => {
-    it('selects all when none are selected', async () => {
-      const wrapper = mountInvoiceView();
-      await nextTick();
-      vm(wrapper).invoices = [...mockInvoices];
-      expect(vm(wrapper).selectedIds.size).toBe(0);
-
-      vm(wrapper).toggleSelectAll();
-      expect(vm(wrapper).selectedIds.size).toBe(3);
-      expect(vm(wrapper).selectedIds.has(1)).toBe(true);
-      expect(vm(wrapper).selectedIds.has(2)).toBe(true);
-      expect(vm(wrapper).selectedIds.has(3)).toBe(true);
-    });
-
-    it('selects all when partially selected', async () => {
-      const wrapper = mountInvoiceView();
-      await nextTick();
-      vm(wrapper).invoices = [...mockInvoices];
-      vm(wrapper).toggleSelect(1);
-
-      vm(wrapper).toggleSelectAll();
-      expect(vm(wrapper).selectedIds.size).toBe(3);
-      expect(vm(wrapper).selectedIds.has(2)).toBe(true);
-    });
-
-    it('deselects all when all are selected', async () => {
-      const wrapper = mountInvoiceView();
-      await nextTick();
-      vm(wrapper).invoices = [...mockInvoices];
-      vm(wrapper).toggleSelect(1);
-      vm(wrapper).toggleSelect(2);
-      vm(wrapper).toggleSelect(3);
-      expect(vm(wrapper).selectedIds.size).toBe(3);
-
-      vm(wrapper).toggleSelectAll();
-      expect(vm(wrapper).selectedIds.size).toBe(0);
-    });
-  });
-
-  describe('allSelected', () => {
-    it('returns false when the invoice list is empty', async () => {
-      const wrapper = mountInvoiceView();
-      await nextTick();
-      vm(wrapper).invoices = [];
-      vm(wrapper).selectedIds = new Set();
-      await nextTick();
-
-      expect(vm(wrapper).allSelected).toBe(false);
-    });
-
-    it('returns false when no invoices are selected', async () => {
-      const wrapper = mountInvoiceView();
-      await nextTick();
-      vm(wrapper).invoices = [...mockInvoices];
-      vm(wrapper).selectedIds = new Set();
-      await nextTick();
-
-      expect(vm(wrapper).allSelected).toBe(false);
-    });
-
-    it('returns false when only some invoices are selected', async () => {
-      const wrapper = mountInvoiceView();
-      await nextTick();
-      vm(wrapper).invoices = [...mockInvoices];
-      vm(wrapper).selectedIds = new Set([1]);
-      await nextTick();
-
-      expect(vm(wrapper).allSelected).toBe(false);
-    });
-
-    it('returns true when all invoices are selected', async () => {
-      const wrapper = mountInvoiceView();
-      await nextTick();
-      vm(wrapper).invoices = [...mockInvoices];
-      vm(wrapper).selectedIds = new Set([1, 2, 3]);
-      await nextTick();
-
-      expect(vm(wrapper).allSelected).toBe(true);
-    });
-  });
-
-  describe('downloadSelected', () => {
-    /** Creates a fetch mock that returns invoices for the list endpoint and
-     *  delegates POST /api/invoice/download-batch to the provided handler. */
-    function stubFetch(downloadHandler: () => Promise<Response>) {
-      vi.stubGlobal(
-        'fetch',
-        vi.fn().mockImplementation((url: string) => {
-          if (typeof url === 'string' && url.startsWith('/api/invoice/download-batch')) {
-            return downloadHandler();
-          }
-          // Initial loadData call
-          return Promise.resolve({
-            json: () => Promise.resolve(mockInvoices),
-          } as Response);
-        }),
-      );
-    }
-
-    it('does nothing when no IDs are selected', async () => {
-      const downloadHandler = vi.fn();
-      stubFetch(downloadHandler as unknown as () => Promise<Response>);
-
-      const wrapper = mountInvoiceView();
-      await nextTick();
-      await nextTick(); // let loadData settle
-
-      vm(wrapper).selectedIds = new Set();
-
-      await vm(wrapper).downloadSelected();
-      expect(downloadHandler).not.toHaveBeenCalled();
-    });
-
-    describe('success path', () => {
-      beforeEach(() => {
-        vi.stubGlobal('URL', {
-          createObjectURL: vi.fn().mockReturnValue('blob:test'),
-          revokeObjectURL: vi.fn(),
-        });
-      });
-
-      it('calls fetch with selected IDs', async () => {
-        const downloadHandler = vi.fn().mockResolvedValue({
-          ok: true,
-          blob: () => Promise.resolve(new Blob(['zip-content'])),
-          headers: new Headers({
-            'Content-Disposition': 'attachment; filename="rechnungen.zip"',
-          }),
-        } as Response);
-        stubFetch(downloadHandler);
-
-        const wrapper = mountInvoiceView();
-        await nextTick();
-        await nextTick();
-        vm(wrapper).selectedIds = new Set([1, 2]);
-
-        await vm(wrapper).downloadSelected();
-
-        expect(downloadHandler).toHaveBeenCalled();
-      });
-
-      it('triggers a download via anchor click', async () => {
-        stubFetch(() =>
-          Promise.resolve({
-            ok: true,
-            blob: () => Promise.resolve(new Blob(['zip-content'])),
-            headers: new Headers({
-              'Content-Disposition': 'attachment; filename="rechnungen.zip"',
-            }),
-          } as Response),
-        );
-
-        const clickSpy = vi.fn();
-        const originalCreateElement = document.createElement.bind(document);
-        vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-          const el = originalCreateElement(tag);
-          if (tag === 'a') {
-            el.click = clickSpy;
-          }
-          return el;
-        });
-
-        const wrapper = mountInvoiceView();
-        await nextTick();
-        await nextTick();
-        vm(wrapper).selectedIds = new Set([1]);
-
-        await vm(wrapper).downloadSelected();
-
-        expect(clickSpy).toHaveBeenCalled();
-        expect(URL.createObjectURL).toHaveBeenCalled();
-        expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:test');
-      });
-
-      it('uses default filename when Content-Disposition lacks filename', async () => {
-        stubFetch(() =>
-          Promise.resolve({
-            ok: true,
-            blob: () => Promise.resolve(new Blob(['zip-content'])),
-            headers: new Headers(),
-          } as Response),
-        );
-
-        let anchorDownload = '';
-        const originalCreateElement = document.createElement.bind(document);
-        vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
-          const el = originalCreateElement(tag);
-          if (tag === 'a') {
-            Object.defineProperty(el, 'download', {
-              set(val: string) {
-                anchorDownload = val;
-              },
-              get() {
-                return anchorDownload;
-              },
-            });
-          }
-          return el;
-        });
-
-        const wrapper = mountInvoiceView();
-        await nextTick();
-        await nextTick();
-        vm(wrapper).selectedIds = new Set([1]);
-
-        await vm(wrapper).downloadSelected();
-
-        expect(anchorDownload).toBe('rechnungen.zip');
-      });
-    });
-
-    describe('400 error paths', () => {
-      it('deselects IDs returned in the error body and alerts with CANCELLED label', async () => {
-        const alertSpy = vi.fn();
-        vi.stubGlobal('alert', alertSpy);
-        stubFetch(() =>
-          Promise.resolve({
-            ok: false,
-            json: () => Promise.resolve({ ids: [1, 2], error: 'CANCELLED' }),
-          } as Response),
-        );
-
-        const wrapper = mountInvoiceView();
-        await nextTick();
-        await nextTick();
-        vm(wrapper).selectedIds = new Set([1, 2, 3]);
-
-        await vm(wrapper).downloadSelected();
-
-        // IDs 1 and 2 should be removed, 3 should remain
-        expect(vm(wrapper).selectedIds.has(1)).toBe(false);
-        expect(vm(wrapper).selectedIds.has(2)).toBe(false);
-        expect(vm(wrapper).selectedIds.has(3)).toBe(true);
-        expect(vm(wrapper).selectedIds.size).toBe(1);
-
-        expect(alertSpy).toHaveBeenCalledWith(
-          '2 invoices cannot be downloaded: cancelled. They have been deselected.',
-        );
-      });
-
-      it('uses PDF_NOT_READY label when error code is PDF_NOT_READY', async () => {
-        const alertSpy = vi.fn();
-        vi.stubGlobal('alert', alertSpy);
-        stubFetch(() =>
-          Promise.resolve({
-            ok: false,
-            json: () => Promise.resolve({ ids: [1], error: 'PDF_NOT_READY' }),
-          } as Response),
-        );
-
-        const wrapper = mountInvoiceView();
-        await nextTick();
-        await nextTick();
-        vm(wrapper).selectedIds = new Set([1]);
-
-        await vm(wrapper).downloadSelected();
-
-        expect(alertSpy).toHaveBeenCalledWith(
-          '1 invoice cannot be downloaded: PDF not ready. It has been deselected.',
-        );
-      });
-
-      it('uses NOT_FOUND label when error code is NOT_FOUND', async () => {
-        const alertSpy = vi.fn();
-        vi.stubGlobal('alert', alertSpy);
-        stubFetch(() =>
-          Promise.resolve({
-            ok: false,
-            json: () => Promise.resolve({ ids: [1], error: 'NOT_FOUND' }),
-          } as Response),
-        );
-
-        const wrapper = mountInvoiceView();
-        await nextTick();
-        await nextTick();
-        vm(wrapper).selectedIds = new Set([1]);
-
-        await vm(wrapper).downloadSelected();
-
-        expect(alertSpy).toHaveBeenCalledWith(
-          '1 invoice cannot be downloaded: not found. It has been deselected.',
-        );
-      });
-
-      it('uses "invalid" label for unknown error codes', async () => {
-        const alertSpy = vi.fn();
-        vi.stubGlobal('alert', alertSpy);
-        stubFetch(() =>
-          Promise.resolve({
-            ok: false,
-            json: () => Promise.resolve({ ids: [3], error: 'SOME_OTHER' }),
-          } as Response),
-        );
-
-        const wrapper = mountInvoiceView();
-        await nextTick();
-        await nextTick();
-        vm(wrapper).selectedIds = new Set([3]);
-
-        await vm(wrapper).downloadSelected();
-
-        expect(alertSpy).toHaveBeenCalledWith(
-          '1 invoice cannot be downloaded: invalid. It has been deselected.',
-        );
-      });
-
-      it('shows generic alert when 400 body has no ids array', async () => {
-        const alertSpy = vi.fn();
-        vi.stubGlobal('alert', alertSpy);
-        stubFetch(() =>
-          Promise.resolve({
-            ok: false,
-            json: () => Promise.resolve({ message: 'something else' }),
-          } as Response),
-        );
-
-        const wrapper = mountInvoiceView();
-        await nextTick();
-        await nextTick();
-        vm(wrapper).selectedIds = new Set([1]);
-
-        await vm(wrapper).downloadSelected();
-
-        expect(alertSpy).toHaveBeenCalledWith('Download failed. Please try again.');
-      });
-
-      it('shows generic alert on network error (catch path)', async () => {
-        const alertSpy = vi.fn();
-        vi.stubGlobal('alert', alertSpy);
-
-        // For the catch path we reject the download call; loadData must still work
-        vi.stubGlobal(
-          'fetch',
-          vi.fn().mockImplementation((url: string) => {
-            if (typeof url === 'string' && url.startsWith('/api/invoice/download-batch')) {
-              return Promise.reject(new Error('Network error'));
-            }
-            return Promise.resolve({
-              json: () => Promise.resolve(mockInvoices),
-            } as Response);
-          }),
-        );
-
-        const wrapper = mountInvoiceView();
-        await nextTick();
-        await nextTick();
-        vm(wrapper).selectedIds = new Set([1]);
-
-        await vm(wrapper).downloadSelected();
-
-        expect(alertSpy).toHaveBeenCalledWith('Download failed. Please try again.');
-      });
-    });
-  });
+  await flushPromises();
+  return wrapper;
+}
+
+function rows(wrapper: VueWrapper) {
+  return wrapper.findAll('.invoice-row');
+}
+
+async function setFilter(wrapper: VueWrapper, field: string, value: unknown) {
+  const current = vm(wrapper).filters[field] as { matchMode: string };
+  vm(wrapper).filters = { ...vm(wrapper).filters, [field]: { ...current, value } };
+  await flushPromises();
+}
+
+beforeEach(() => {
+  drafts = [];
+  push.mockReset();
+  download.mockReset();
+  Object.values(notify).forEach((fn) => fn.mockReset());
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string) => {
+      if (url === '/api/invoice?withCancelled=true') return Promise.resolve(jsonResponse(invoices));
+      if (url === '/api/invoice-draft') return Promise.resolve(jsonResponse(drafts));
+      return Promise.resolve(jsonResponse({}, false));
+    }),
+  );
+  vi.mocked(useRouter).mockReturnValue({ push } as unknown as ReturnType<typeof useRouter>);
+  setActivePinia(createPinia());
+  useAppStore().invoiceTemplateAvailable = true;
 });
 
-describe('InvoiceView — drafts section', () => {
-  const mockDrafts: InvoiceDraftListItem[] = [
-    {
-      id: 7,
-      recipientName: 'Draft Recipient',
-      title: 'Draft Title',
-      amountCents: 11900,
-      updatedAt: '2026-10-01T10:00:00Z',
-    },
-  ];
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
-  function stubFetch(drafts: InvoiceDraftListItem[]) {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((url: string) => {
-        if (url === '/api/invoice-draft') {
-          return Promise.resolve({ ok: true, json: () => Promise.resolve(drafts) } as Response);
-        }
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(mockInvoices),
-        } as Response);
-      }),
-    );
-  }
-
-  beforeEach(() => {
-    mockPush.mockClear();
-    (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({ push: mockPush });
-    setActivePinia(createPinia());
+describe('InvoiceView', () => {
+  it('loads all invoices (incl. cancelled) and drafts once', async () => {
+    await mountView();
+    expect(fetch).toHaveBeenCalledWith('/api/invoice?withCancelled=true');
+    expect(fetch).toHaveBeenCalledWith('/api/invoice-draft');
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it('shows the heading and actions', async () => {
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="page-title"]').text()).toBe('Invoices');
+    expect(wrapper.text()).toContain('Settings');
+    expect(wrapper.find('[data-testid="new-invoice"]').text()).toContain('New Invoice');
   });
 
-  it('renders drafts above the filter bar and the invoice table', async () => {
-    stubFetch(mockDrafts);
-    const wrapper = mountInvoiceView();
+  it('hides cancelled invoices by default', async () => {
+    const wrapper = await mountView();
+    expect(rows(wrapper)).toHaveLength(2);
+    expect(wrapper.text()).not.toContain('Clara Cord');
+  });
+
+  it('shows cancelled invoices when the status filter is cleared', async () => {
+    const wrapper = await mountView();
+    await setFilter(wrapper, 'status', null);
+    expect(rows(wrapper)).toHaveLength(3);
+    expect(wrapper.text()).toContain('Cancelled');
+  });
+
+  it('searches by recipient or number', async () => {
+    const wrapper = await mountView();
+    await wrapper.find('[data-testid="global-search"]').setValue('bach');
     await flushPromises();
+    expect(rows(wrapper)).toHaveLength(1);
+    expect(rows(wrapper)[0].text()).toContain('Bernd Bach');
+  });
+
+  it('filters by amount range in euros', async () => {
+    const wrapper = await mountView();
+    await setFilter(wrapper, 'amountCents', [100, null]);
+    expect(rows(wrapper)).toHaveLength(1);
+    expect(rows(wrapper)[0].text()).toContain('Anna Alt');
+  });
+
+  it('filters by date range', async () => {
+    const wrapper = await mountView();
+    await setFilter(wrapper, 'invoiceDate', [new Date(2026, 1, 1), new Date(2026, 2, 1)]);
+    expect(rows(wrapper)).toHaveLength(1);
+    expect(rows(wrapper)[0].text()).toContain('Bernd Bach');
+  });
+
+  it('clears filters back to the defaults', async () => {
+    const wrapper = await mountView();
+    await wrapper.find('[data-testid="global-search"]').setValue('bach');
+    await flushPromises();
+    await wrapper.find('[data-testid="clear-filters"]').trigger('click');
+    await flushPromises();
+    expect(rows(wrapper)).toHaveLength(2);
+    expect((wrapper.find('[data-testid="global-search"]').element as HTMLInputElement).value).toBe(
+      '',
+    );
+  });
+
+  it('shows amount, date, revision and status tags', async () => {
+    const wrapper = await mountView();
+    const first = rows(wrapper)[0].text();
+    expect(first).toContain('1 / 2026');
+    expect(first).toContain('119,00');
+    expect(first).toContain('15.01.2026');
+    expect(first).toContain('R1');
+    expect(first).toContain('Active');
+    expect(rows(wrapper)[1].text()).toContain('Email sent');
+  });
+
+  it('opens an invoice on row click', async () => {
+    const wrapper = await mountView();
+    await rows(wrapper)[1].trigger('click');
+    expect(push).toHaveBeenCalledWith('/invoice/2');
+  });
+
+  it('does not open the invoice when its checkbox is clicked', async () => {
+    const wrapper = await mountView();
+    const checkbox = rows(wrapper)[0].find('input[type="checkbox"]');
+    await checkbox.trigger('click');
+    await flushPromises();
+    expect(push).not.toHaveBeenCalled();
+    expect(vm(wrapper).selection.map((i) => i.id)).toEqual([1]);
+  });
+
+  it('copies an invoice without opening it', async () => {
+    const wrapper = await mountView();
+    await wrapper.findAll('[data-testid="copy-invoice"]')[0].trigger('click');
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith('/invoice/new?copyFrom=1');
+  });
+
+  it('downloads the selection and deselects rejected invoices', async () => {
+    download.mockResolvedValue([2]);
+    const wrapper = await mountView();
+    vm(wrapper).selection = [invoices[0], invoices[1]];
+    await flushPromises();
+
+    const button = wrapper.find('[data-testid="download-selected"]');
+    expect(button.text()).toContain('Download selected (2)');
+    await button.trigger('click');
+    await flushPromises();
+
+    expect(download).toHaveBeenCalledWith([1, 2]);
+    expect(vm(wrapper).selection.map((i) => i.id)).toEqual([1]);
+  });
+
+  it('disables download without a selection', async () => {
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="download-selected"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('shows drafts above the invoices and opens them', async () => {
+    drafts = [
+      {
+        id: 9,
+        recipientName: 'Dora Drei',
+        title: '',
+        amountCents: 1000,
+        updatedAt: '2026-10-01T10:00:00Z',
+      },
+    ];
+    const wrapper = await mountView();
 
     const section = wrapper.find('[data-testid="drafts-section"]');
-    expect(section.exists()).toBe(true);
-    expect(section.text()).toContain('Draft Recipient');
-    expect(section.text()).toContain('Draft Title');
-    expect(section.text()).toContain('119,00');
-
-    const html = wrapper.html();
-    const draftsAt = html.indexOf('data-testid="drafts-section"');
-    expect(draftsAt).toBeLessThan(html.indexOf('Search by name or number'));
-    expect(draftsAt).toBeLessThan(html.indexOf('INV-001'));
+    expect(section.text()).toContain('Drafts (1)');
+    expect(section.text()).toContain('Dora Drei');
+    expect(section.text()).toContain('—');
+    await wrapper.find('.draft-row').trigger('click');
+    expect(push).toHaveBeenCalledWith('/invoice/draft/9');
   });
 
-  it('hides the drafts section when there are no drafts', async () => {
-    stubFetch([]);
-    const wrapper = mountInvoiceView();
-    await flushPromises();
-
+  it('has no drafts section without drafts', async () => {
+    const wrapper = await mountView();
     expect(wrapper.find('[data-testid="drafts-section"]').exists()).toBe(false);
   });
 
-  it('opens the draft form when a draft row is clicked', async () => {
-    stubFetch(mockDrafts);
-    const wrapper = mountInvoiceView();
-    await flushPromises();
-
-    await wrapper.find('[data-testid="drafts-section"] tbody tr').trigger('click');
-
-    expect(mockPush).toHaveBeenCalledWith('/invoice/draft/7');
+  it('warns and blocks new invoices without a template', async () => {
+    useAppStore().invoiceTemplateAvailable = false;
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="no-template-warning"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="new-invoice"]').attributes('disabled')).toBeDefined();
   });
 
-  it('select all ignores drafts', async () => {
-    stubFetch(mockDrafts);
-    const wrapper = mountInvoiceView();
-    await flushPromises();
-
-    vm(wrapper).toggleSelectAll();
-
-    expect([...vm(wrapper).selectedIds].sort()).toEqual([1, 2, 3]);
-    expect(
-      wrapper.find('[data-testid="drafts-section"]').findAll('input[type="checkbox"]'),
-    ).toHaveLength(0);
+  it('reports a load error', async () => {
+    vi.mocked(fetch).mockImplementation(() => Promise.reject(new Error('offline')));
+    await mountView();
+    expect(notify.error).toHaveBeenCalledWith('Error loading invoices');
   });
 });
