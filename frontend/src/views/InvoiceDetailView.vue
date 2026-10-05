@@ -27,7 +27,7 @@ const route = useRoute();
 const router = useRouter();
 const notify = useNotify();
 const { confirmAction } = useConfirmAction();
-const { busy, run } = useActionRunner();
+const { busy, run, runWithBody } = useActionRunner();
 
 const id = Number(route.params.id);
 
@@ -98,13 +98,19 @@ async function cancel() {
 }
 
 async function retryPdf(rev: InvoiceRevisionDto) {
-  const ok = await run(
+  const { ok, body: result } = await runWithBody(
     `retry-${rev.id}`,
     () => fetch(`/api/invoice/revision/${rev.id}/retry-pdf`, { method: 'POST' }),
     (body) => body.error || 'Error on retry',
   );
   if (ok) {
-    notify.success('PDF generated successfully');
+    if (result.pdfStatus === 'FAILED') {
+      notify.warn(
+        (result.pdfError as string | null) || 'PDF could not be generated. Please try again.',
+      );
+    } else {
+      notify.success('PDF generated successfully');
+    }
     await loadData();
   }
 }

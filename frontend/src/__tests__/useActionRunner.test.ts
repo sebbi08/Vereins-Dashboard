@@ -34,6 +34,28 @@ describe('useActionRunner', () => {
     expect(notify.error).not.toHaveBeenCalled();
   });
 
+  it('runWithBody hands back the parsed body on success and on failure', async () => {
+    const { runWithBody } = useActionRunner();
+    const good = await runWithBody(
+      'retry',
+      () => Promise.resolve(response(true, { pdfStatus: 'FAILED' })),
+      () => 'unused',
+    );
+    expect(good).toEqual({ ok: true, body: { pdfStatus: 'FAILED' } });
+    const bad = await runWithBody(
+      'retry',
+      () => Promise.resolve(response(false, { error: 'nope' })),
+      (body) => body.error,
+    );
+    expect(bad).toEqual({ ok: false, body: { error: 'nope' } });
+    const offline = await runWithBody(
+      'retry',
+      () => Promise.reject(new Error('offline')),
+      () => 'unused',
+    );
+    expect(offline).toEqual({ ok: false, body: {} });
+  });
+
   it('toasts the error text built from the response body', async () => {
     const { run } = useActionRunner();
     const ok = await run(

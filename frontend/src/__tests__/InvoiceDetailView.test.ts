@@ -233,6 +233,24 @@ describe('InvoiceDetailView', () => {
     expect(notify.success).toHaveBeenCalledWith('PDF generated successfully');
   });
 
+  it('warns instead of reporting success when the retry fails again', async () => {
+    replies['GET /api/invoice/1'] = {
+      status: 200,
+      body: makeInvoice({
+        revisions: [revision({ pdfStatus: 'FAILED', pdfError: 'Template broken' })],
+      }),
+    };
+    replies['POST /api/invoice/revision/11/retry-pdf'] = {
+      status: 200,
+      body: { pdfStatus: 'FAILED', pdfError: 'Still broken' },
+    };
+    const wrapper = await mountView();
+    await wrapper.find('[data-testid="retry-pdf"]').trigger('click');
+    await flushPromises();
+    expect(notify.warn).toHaveBeenCalledWith('Still broken');
+    expect(notify.success).not.toHaveBeenCalled();
+  });
+
   it('opens the PDF download', async () => {
     const open = vi.fn();
     vi.stubGlobal('open', open);
