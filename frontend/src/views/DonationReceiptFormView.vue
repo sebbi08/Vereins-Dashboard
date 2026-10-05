@@ -193,7 +193,8 @@ function onNewDonor(data: { name: string; street: string; city: string }) {
   inputs.value.name = data.name;
   inputs.value.street = data.street;
   inputs.value.city = data.city;
-  if (!inputs.value.letterSalutation) inputs.value.letterSalutation = DEFAULT_LETTER_SALUTATION;
+  inputs.value.letterSalutation = DEFAULT_LETTER_SALUTATION;
+  inputs.value.addressSalutation = '';
 }
 
 function donorRequestBody(): Record<string, unknown> {

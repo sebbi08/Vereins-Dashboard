@@ -232,6 +232,18 @@ describe('DonationReceiptFormView — new receipt', () => {
     expect(wrapper.find('#name').attributes('disabled')).toBeUndefined();
   });
 
+  it('resets the salutations when a new donor follows a picked donor', async () => {
+    const wrapper = await mountForm();
+    picker(wrapper).vm.$emit('update:modelValue', hans);
+    await flushPromises();
+    picker(wrapper).vm.$emit('neu', { name: 'Maria Meier', street: '', city: '' });
+    await flushPromises();
+
+    expect(vm(wrapper).inputs.name).toBe('Maria Meier');
+    expect(vm(wrapper).inputs.letterSalutation).toBe('Sehr geehrte Damen und Herren');
+    expect(vm(wrapper).inputs.addressSalutation).toBe('');
+  });
+
   it('stores euro amounts as cents', async () => {
     const wrapper = await mountForm();
     await setAmount(wrapper, 12.5);
