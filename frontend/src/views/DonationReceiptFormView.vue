@@ -69,7 +69,7 @@ const pageTitle = isNewRevision
     ? 'Duplicate Receipt'
     : 'New Donation Receipt';
 
-type FieldKey = 'letterSalutation' | 'amount';
+type FieldKey = 'letterSalutation' | 'amount' | 'donationDate';
 
 /** Shown after the first submit attempt and kept up to date while the user fixes them. */
 const fieldErrors = computed<Partial<Record<FieldKey, string>>>(() => {
@@ -79,6 +79,7 @@ const fieldErrors = computed<Partial<Record<FieldKey, string>>>(() => {
     errors.letterSalutation = 'Letter Salutation is required when creating a cover letter.';
   }
   if (inputs.value.donationAmountCents <= 0) errors.amount = 'Amount is required';
+  if (!inputs.value.donationDate) errors.donationDate = 'Donation Date is required';
   return errors;
 });
 
@@ -212,6 +213,7 @@ function donorRequestBody(): Record<string, unknown> {
 }
 
 async function submit() {
+  if (loadError.value) return;
   validationAttempted.value = true;
   if (Object.keys(fieldErrors.value).length > 0) return;
 
@@ -385,8 +387,18 @@ async function submit() {
               data-testid="donation-date"
               date-format="dd.mm.yy"
               show-icon
+              :invalid="!!fieldErrors.donationDate"
               fluid
             />
+            <Message
+              v-if="fieldErrors.donationDate"
+              severity="error"
+              size="small"
+              variant="simple"
+              data-testid="error-donation-date"
+            >
+              {{ fieldErrors.donationDate }}
+            </Message>
           </div>
           <div class="field">
             <label for="with-cover-letter">Cover Letter</label>
@@ -450,7 +462,7 @@ async function submit() {
                 ? 'Save Revision'
                 : 'Create Receipt'
           "
-          :disabled="sending"
+          :disabled="sending || !!loadError"
           data-testid="submit"
         />
       </div>

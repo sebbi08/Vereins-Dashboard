@@ -268,6 +268,21 @@ describe('DonationReceiptFormView — new receipt', () => {
     expect(wrapper.find('[data-testid="error-letter-salutation"]').exists()).toBe(false);
   });
 
+  it('requires a donation date', async () => {
+    const wrapper = await mountForm();
+    picker(wrapper).vm.$emit('update:modelValue', hans);
+    await setAmount(wrapper, 100);
+    datePicker(wrapper, 'donation-date').vm.$emit('update:modelValue', null);
+    await flushPromises();
+
+    await submit(wrapper);
+
+    expect(calls()).toEqual(['GET /api/settings']);
+    expect(wrapper.find('[data-testid="error-donation-date"]').text()).toBe(
+      'Donation Date is required',
+    );
+  });
+
   it('does not require a letter salutation without a cover letter', async () => {
     replies['POST /api/donation-receipt'] = {
       status: 201,
@@ -433,6 +448,19 @@ describe('DonationReceiptFormView — new revision', () => {
     expect(wrapper.find('[data-testid="load-error"]').text()).toContain(
       'Receipt could not be loaded',
     );
+  });
+});
+
+describe('DonationReceiptFormView — failed load', () => {
+  it('blocks saving after a failed receipt load', async () => {
+    setRoute({ id: '3' });
+    replies['GET /api/donation-receipt/3'] = { status: 404, body: { error: 'Receipt not found' } };
+    const wrapper = await mountForm();
+
+    await submit(wrapper);
+
+    expect(calls()).not.toContain('POST /api/donation-receipt/3/revision');
+    expect(wrapper.find('[data-testid="submit"]').attributes('disabled')).toBeDefined();
   });
 });
 
