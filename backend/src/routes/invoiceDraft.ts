@@ -9,10 +9,13 @@ import type { InvoiceDraft, Prisma } from '../../prisma/generated/client.js';
 import { prisma } from '../prismaClient.js';
 import {
   calculateGross,
+  createInvoiceWithFirstRevision,
   RecipientError,
   saveRecipient,
+  validateRequiredFields,
   type RecipientSelection,
 } from '../services/invoiceCreation.js';
+import { attemptInvoicePdfGeneration } from '../services/invoicePdf.js';
 
 export const invoiceDraftRouter = Router();
 
@@ -181,4 +184,79 @@ invoiceDraftRouter.delete('/:id', async (req, res) => {
 
   await prisma.invoiceDraft.delete({ where: { id } });
   res.status(204).end();
+});
+
+function isRecordNotFound(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && err.code === 'P2025';
+}
+
+// POST /api/invoice-draft/:id/activate
+invoiceDraftRouter.post('/:id/activate', async (req, res) => {
+  const id = parseId(req.params.id);
+  if (id === null) {
+    res.status(400).json({ error: 'Invalid ID' });
+    return;
+  }
+
+  const draft = await prisma.invoiceDraft.findUnique({ where: { id } });
+  if (!draft) {
+    res.status(404).json({ error: 'Draft not found' });
+    return;
+  }
+
+  const inputs = draftToContent(draft);
+  const validationError = validateRequiredFields(inputs);
+  if (validationError) {
+    res.status(400).json({ error: validationError });
+    return;
+  }
+
+  const invoiceTemplate = await prisma.template.findFirst({
+    where: { type: 'RECHNUNG', active: true },
+  });
+  if (!invoiceTemplate) {
+    res.status(400).json({ error: 'No active invoice template found' });
+    return;
+  }
+
+  const result = await prisma
+    .$transaction(async (tx: Prisma.TransactionClient) => {
+      const { invoice, revision } = await createInvoiceWithFirstRevision(tx, {
+        recipientId: draft.recipientId,
+        inputs,
+        invoiceDate: new Date(),
+        templateId: invoiceTemplate.id,
+      });
+      // Throws P2025 if a concurrent activation already deleted the draft,
+      // which rolls back the invoice created above.
+      await tx.invoiceDraft.delete({ where: { id } });
+      const recipient = await tx.invoiceRecipient.findUniqueOrThrow({
+        where: { id: draft.recipientId },
+      });
+      return { invoice, revision, recipient };
+    })
+    .catch((err: unknown) => {
+      if (isRecordNotFound(err)) return null;
+      throw err;
+    });
+  if (result === null) {
+    res.status(404).json({ error: 'Draft not found' });
+    return;
+  }
+
+  // Start PDF generation in background – do NOT await, as libreoffice can be slow
+  attemptInvoicePdfGeneration(result.revision.id).catch(() => {
+    // PDF generation errors are already persisted to the DB inside attemptInvoicePdfGeneration
+  });
+
+  res.status(201).json({
+    invoiceId: result.invoice.id,
+    revisionId: result.revision.id,
+    recipient: result.recipient,
+    recipientUpdated: false,
+    pdfStatus: 'PENDING' as const,
+    pdfError: null,
+    pdfTechError: null,
+    filePath: null,
+  });
 });
