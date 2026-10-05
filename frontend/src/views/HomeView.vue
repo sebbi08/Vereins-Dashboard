@@ -18,6 +18,13 @@
         <h3 class="text-lg font-semibold text-gray-800 mb-2">Invoice</h3>
         <p class="text-sm text-gray-500">Create and manage invoices.</p>
       </RouterLink>
+      <RouterLink
+        to="/instructor"
+        class="block p-6 bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+      >
+        <h3 class="text-lg font-semibold text-gray-800 mb-2">Instructor Rent</h3>
+        <p class="text-sm text-gray-500">Calculate room rent for instructors.</p>
+      </RouterLink>
     </div>
   </div>
 </template>

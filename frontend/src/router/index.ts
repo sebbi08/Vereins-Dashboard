@@ -2,6 +2,8 @@ import DonationReceiptDetailView from '@/views/DonationReceiptDetailView.vue';
 import DonationReceiptFormView from '@/views/DonationReceiptFormView.vue';
 import DonationReceiptView from '@/views/DonationReceiptView.vue';
 import HomeView from '@/views/HomeView.vue';
+import InstructorFormView from '@/views/InstructorFormView.vue';
+import InstructorView from '@/views/InstructorView.vue';
 import InvoiceDetailView from '@/views/InvoiceDetailView.vue';
 import InvoiceFormView from '@/views/InvoiceFormView.vue';
 import InvoiceSettingsView from '@/views/InvoiceSettingsView.vue';
@@ -59,6 +61,9 @@ const router = createRouter({
       name: 'donation-receipt-settings',
       component: SettingsView,
     },
+    { path: '/instructor', name: 'instructor', component: InstructorView },
+    { path: '/instructor/new', name: 'instructor-new', component: InstructorFormView },
+    { path: '/instructor/:id', name: 'instructor-detail', component: InstructorFormView },
     {
       path: '/settings',
       redirect: '/donation-receipt/settings',

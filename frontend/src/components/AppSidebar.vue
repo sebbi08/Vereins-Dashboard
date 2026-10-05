@@ -5,6 +5,7 @@ const navItems = [
   { name: 'Dashboard', to: '/' },
   { name: 'Donation Receipt', to: '/donation-receipt' },
   { name: 'Invoice', to: '/invoice' },
+  { name: 'Instructor Rent', to: '/instructor' },
 ];
 
 const appVersion = import.meta.env.VITE_APP_VERSION;
