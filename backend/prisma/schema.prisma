@@ -95,6 +95,7 @@ model InvoiceRecipient {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   invoices  Invoice[]
+  invoiceDrafts InvoiceDraft[]
 }
 
 model Invoice {
@@ -136,4 +137,22 @@ model InvoiceRevision {
   emailStatus    String   @default("NOT_SENT")
   emailError     String?
   createdAt      DateTime @default(now())
+}
+
+model InvoiceDraft {
+  id              Int              @id @default(autoincrement())
+  recipientId     Int
+  recipient       InvoiceRecipient @relation(fields: [recipientId], references: [id])
+  salutation      String
+  name            String
+  street          String
+  city            String
+  title           String
+  positions       String
+  vat             Int
+  directDebit     Boolean
+  email           String
+  emailSalutation String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 }

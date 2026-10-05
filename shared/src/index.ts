@@ -85,6 +85,22 @@ export interface InvoiceDto {
   revisions: InvoiceRevisionDto[];
 }
 
+export interface InvoiceDraftDto {
+  id: number;
+  recipient: InvoiceRecipientDto;
+  inputs: InvoiceContent;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InvoiceDraftListItem {
+  id: number;
+  recipientName: string;
+  title: string;
+  amountCents: number;
+  updatedAt: string;
+}
+
 export type TemplateType = 'ANSCHREIBEN' | 'QUITTUNG' | 'RECHNUNG';
 
 export interface TemplateDto {
