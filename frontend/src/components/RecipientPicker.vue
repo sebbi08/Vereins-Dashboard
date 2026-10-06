@@ -65,7 +65,10 @@ function onSearchInput(value: string | InvoiceRecipientDto | null) {
   // Picking an option also emits the object here; onSelect handles that case
   if (typeof value === 'string' || value === null) {
     search.value = value ?? '';
-    invalidatePendingSearch();
+    // Drop in-flight responses but keep the shown suggestions until the next search
+    // answers, so the overlay does not flash "No results found" on every keystroke
+    latestAction++;
+    if (!search.value) suggestions.value = [];
   }
 }
 

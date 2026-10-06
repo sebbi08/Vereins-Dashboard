@@ -122,6 +122,44 @@ describe('RecipientPicker', () => {
     expect(autocomplete(wrapper).props('suggestions')).toEqual([]);
   });
 
+  it('keeps the suggestions while typing until the next response arrives', async () => {
+    const wrapper = mountPicker();
+    await typeSearch(wrapper, 'An');
+    complete(wrapper, 'An');
+    await flushPromises();
+    expect(autocomplete(wrapper).props('suggestions')).toEqual(recipients);
+
+    let resolveNext: (value: Response) => void = () => {};
+    vi.mocked(fetch).mockImplementationOnce(
+      () => new Promise<Response>((resolve) => (resolveNext = resolve)),
+    );
+    await typeSearch(wrapper, 'Ann');
+    expect(autocomplete(wrapper).props('suggestions')).toEqual(recipients);
+
+    complete(wrapper, 'Ann');
+    await flushPromises();
+    expect(autocomplete(wrapper).props('suggestions')).toEqual(recipients);
+    resolveNext(okResponse([]));
+    await flushPromises();
+    expect(autocomplete(wrapper).props('suggestions')).toEqual([]);
+  });
+
+  it('ignores a response for the old query that arrives after more typing', async () => {
+    let resolveFirst: (value: Response) => void = () => {};
+    vi.mocked(fetch).mockImplementationOnce(
+      () => new Promise<Response>((resolve) => (resolveFirst = resolve)),
+    );
+    const wrapper = mountPicker();
+    await typeSearch(wrapper, 'An');
+    complete(wrapper, 'An');
+
+    await typeSearch(wrapper, 'Ann');
+    resolveFirst(okResponse(recipients));
+    await flushPromises();
+
+    expect(autocomplete(wrapper).props('suggestions')).toEqual([]);
+  });
+
   it('ignores a search response that arrives after "New recipient"', async () => {
     let resolveFirst: (value: Response) => void = () => {};
     vi.mocked(fetch).mockImplementationOnce(

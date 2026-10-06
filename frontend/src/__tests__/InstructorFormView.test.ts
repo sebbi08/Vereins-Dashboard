@@ -311,6 +311,12 @@ describe('InstructorFormView', () => {
     expect(requestsWith('DELETE')).toHaveLength(0);
   });
 
+  async function fillValidAfterLoadError(wrapper: VueWrapper) {
+    await wrapper.find('[data-testid="recipient-name"]').setValue('Anna Alt');
+    await setNumber(wrapper, 'hourly-rate', 12);
+    await addMondayBlock(wrapper, '08:00', '12:00');
+  }
+
   it('blocks saving when the instructor could not be loaded', async () => {
     fetchMock.mockImplementation((url: string, init?: RequestInit) =>
       url === '/api/instructor/5' && !init?.method
@@ -320,13 +326,31 @@ describe('InstructorFormView', () => {
     const wrapper = await setup({ id: '5' });
 
     expect(wrapper.find('[data-testid="load-error"]').text()).toContain('Instructor not found');
+    await fillValidAfterLoadError(wrapper);
+    expect(wrapper.find('[data-testid="recipient-error"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="hourly-rate-error"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="save"]').attributes('disabled')).toBeDefined();
     await wrapper.find('form').trigger('submit');
     await flushPromises();
     expect(requestsWith('PUT')).toHaveLength(0);
+    expect(requestsWith('POST')).toHaveLength(0);
   });
 
-  it('reports a network error while loading', async () => {
+  it('disables delete and invoice creation when the instructor could not be loaded', async () => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      url === '/api/instructor/5' && !init?.method
+        ? Promise.resolve(jsonResponse({ error: 'Not found' }, false))
+        : defaultFetch(url, init),
+    );
+    const wrapper = await setup({ id: '5' });
+
+    expect(wrapper.find('[data-testid="delete"]').attributes('disabled')).toBeDefined();
+    const createInvoice = wrapper.find('[data-testid="create-invoice"]');
+    expect(createInvoice.attributes('disabled')).toBeDefined();
+    expect(createInvoice.attributes('title')).toBe('Instructor could not be loaded');
+  });
+
+  it('reports a network error while loading and blocks saving', async () => {
     fetchMock.mockImplementation((url: string, init?: RequestInit) =>
       url === '/api/instructor/5' ? Promise.reject(new Error('offline')) : defaultFetch(url, init),
     );
@@ -334,5 +358,41 @@ describe('InstructorFormView', () => {
     expect(wrapper.find('[data-testid="load-error"]').text()).toContain(
       'Network error while loading',
     );
+    await fillValidAfterLoadError(wrapper);
+    expect(wrapper.find('[data-testid="save"]').attributes('disabled')).toBeDefined();
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+    expect(requestsWith('PUT')).toHaveLength(0);
+    expect(requestsWith('POST')).toHaveLength(0);
+  });
+
+  it('still saves a new instructor when the settings cannot be loaded', async () => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      url === '/api/instructor/settings'
+        ? Promise.reject(new Error('offline'))
+        : defaultFetch(url, init),
+    );
+    const wrapper = await setup();
+
+    expect(wrapper.find('[data-testid="load-error"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Summary (net, 3,25 weeks/month)');
+    await fillValidNew(wrapper);
+    expect(wrapper.find('[data-testid="save"]').attributes('disabled')).toBeUndefined();
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+    expect(requestsWith('POST')).toHaveLength(1);
+  });
+
+  it('rejects a fractional number of months', async () => {
+    const wrapper = await setup();
+    await setNumber(wrapper, 'months', 1.5);
+    expect(wrapper.find('[data-testid="months-error"]').text()).toBe(
+      'Months must be a whole number of at least 1',
+    );
+  });
+
+  it('parses the months field with the German locale so "1,5" is not read as 15', async () => {
+    const wrapper = await setup();
+    expect(numberInput(wrapper, 'months').props('locale')).toBe('de-DE');
   });
 });

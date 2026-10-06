@@ -84,14 +84,20 @@ function snapshot(): string {
 }
 const isDirty = computed(() => snapshot() !== savedSnapshot.value);
 const createInvoiceBlockedReason = computed(() => {
+  if (loadError.value) return 'Instructor could not be loaded';
   if (isDirty.value) return 'Save your changes first';
   if (store.invoiceTemplateAvailable === false) return 'No active invoice template';
   return '';
 });
 
 async function loadSettings() {
-  const res = await fetch('/api/instructor/settings');
-  if (res.ok) weeksPerMonth.value = ((await res.json()) as InstructorSettingsDto).weeksPerMonth;
+  // Informational only: on any failure the summary keeps the default weeks per month
+  try {
+    const res = await fetch('/api/instructor/settings');
+    if (res.ok) weeksPerMonth.value = ((await res.json()) as InstructorSettingsDto).weeksPerMonth;
+  } catch {
+    // keep DEFAULT_WEEKS_PER_MONTH
+  }
 }
 
 async function loadInstructor(id: number) {
@@ -236,6 +242,7 @@ onMounted(async () => {
               v-model="months"
               input-id="months"
               data-testid="months"
+              locale="de-DE"
               :min="1"
               :use-grouping="false"
               :invalid="!!fieldIssue('months')"
@@ -307,6 +314,7 @@ onMounted(async () => {
           icon="pi pi-trash"
           severity="danger"
           outlined
+          :disabled="!!loadError"
           data-testid="delete"
           class="form-actions__delete"
           @click="remove"
