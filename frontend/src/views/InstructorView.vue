@@ -350,9 +350,4 @@ onMounted(async () => {
 :deep(.instructor-row) {
   cursor: pointer;
 }
-
-:deep(.col-amount) {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
 </style>

@@ -112,7 +112,7 @@ function inputValue(event: Event): string {
           data-testid="block"
           class="schedule__block"
         >
-          <div class="row gap-sm">
+          <div class="row gap-sm schedule__row">
             <input
               data-testid="block-start"
               type="time"
@@ -217,8 +217,17 @@ function inputValue(event: Event): string {
 <style scoped>
 .schedule {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
+  align-items: start;
   gap: 1rem;
+}
+
+.schedule input[type='time'] {
+  width: 7rem;
+}
+
+.schedule__row {
+  flex-wrap: nowrap;
 }
 
 .schedule__block {

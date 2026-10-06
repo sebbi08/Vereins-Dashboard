@@ -134,3 +134,13 @@ body {
 .facts dd {
   margin: 0.25rem 0 0;
 }
+
+/* Numeric DataTable columns: values and headers right-aligned, digits aligned */
+.p-datatable .col-amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.p-datatable th.col-amount .p-datatable-column-header-content {
+  justify-content: flex-end;
+}

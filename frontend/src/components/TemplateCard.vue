@@ -157,14 +157,16 @@ async function showCurrentPreview() {
       </p>
     </div>
     <div class="row gap-sm">
-      <a
+      <Button
         v-if="template"
+        as="a"
         :href="`/api/templates/${type}/download`"
-        class="template-card__download"
+        label="Download"
+        icon="pi pi-download"
+        text
+        size="small"
         data-testid="template-download"
-      >
-        Download
-      </a>
+      />
       <FileUpload
         ref="fileUpload"
         mode="basic"
@@ -255,10 +257,6 @@ async function showCurrentPreview() {
 
 .template-card__missing {
   color: var(--p-orange-500);
-}
-
-.template-card__download {
-  color: var(--p-primary-color);
 }
 
 .dialog-title {

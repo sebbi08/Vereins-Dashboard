@@ -44,6 +44,7 @@ const notify = useNotify();
 const { confirmAction } = useConfirmAction();
 
 const template = ref(DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE);
+const savedTemplate = ref(DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE);
 const usingDefault = ref(true);
 const loaded = ref(false);
 const loadError = ref('');
@@ -53,7 +54,13 @@ const previewSource = ref<PreviewSource | null>(null);
 
 const validationError = computed(() => validateInstructorInvoiceTemplate(template.value));
 const shownError = computed(() => validationError.value ?? loadError.value);
-const canSave = computed(() => loaded.value && !validationError.value && !saving.value);
+const canSave = computed(
+  () =>
+    loaded.value &&
+    !validationError.value &&
+    !saving.value &&
+    template.value !== savedTemplate.value,
+);
 
 const preview = computed(() => {
   const source = previewSource.value ?? EXAMPLE;
@@ -73,6 +80,7 @@ async function loadTemplate() {
     if (!res.ok) throw new Error('load failed');
     const dto = (await res.json()) as InstructorSettingsDto;
     template.value = dto.invoiceTemplate ?? DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE;
+    savedTemplate.value = template.value;
     usingDefault.value = dto.invoiceTemplate === null;
     loaded.value = true;
   } catch {
@@ -130,6 +138,7 @@ async function save() {
   if (!dto) return;
   usingDefault.value = dto.invoiceTemplate === null;
   if (dto.invoiceTemplate === null) template.value = DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE;
+  savedTemplate.value = template.value;
   notify.success('Invoice text saved');
 }
 
@@ -144,6 +153,7 @@ async function resetToDefault() {
   const dto = await put(null);
   if (!dto) return;
   template.value = DEFAULT_INSTRUCTOR_INVOICE_TEMPLATE;
+  savedTemplate.value = template.value;
   usingDefault.value = true;
   notify.success('Invoice text reset to the default');
 }

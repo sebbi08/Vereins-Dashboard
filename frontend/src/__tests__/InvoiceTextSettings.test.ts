@@ -192,6 +192,29 @@ describe('InvoiceTextSettings', () => {
     expect(wrapper.find('[data-testid="invoice-template-default-hint"]').exists()).toBe(false);
   });
 
+  it('keeps save disabled for a freshly loaded template', async () => {
+    storedTemplate = 'Miete {name}';
+    const wrapper = mountCard();
+    await flushPromises();
+
+    expect(
+      wrapper.find('[data-testid="save-invoice-template"]').attributes('disabled'),
+    ).toBeDefined();
+  });
+
+  it('enables save when the text changes and disables it again after saving', async () => {
+    const wrapper = mountCard();
+    await flushPromises();
+    const save = () => wrapper.find('[data-testid="save-invoice-template"]');
+
+    await wrapper.find('[data-testid="invoice-template"]').setValue('Miete {name}');
+    expect(save().attributes('disabled')).toBeUndefined();
+
+    await save().trigger('click');
+    await flushPromises();
+    expect(save().attributes('disabled')).toBeDefined();
+  });
+
   it('shows the default text after saving a blank template', async () => {
     storedTemplate = 'Miete {name}';
     const wrapper = mountCard();
@@ -239,6 +262,7 @@ describe('InvoiceTextSettings', () => {
   it('toasts the server error when saving fails', async () => {
     const wrapper = mountCard();
     await flushPromises();
+    await wrapper.find('[data-testid="invoice-template"]').setValue('Miete {name}');
     fetchMock.mockImplementationOnce(() =>
       Promise.resolve(
         jsonResponse({ error: 'Invoice text must be at most 2000 characters' }, false),

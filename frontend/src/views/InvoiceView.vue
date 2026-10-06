@@ -387,9 +387,4 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
 :deep(.draft-row) {
   cursor: pointer;
 }
-
-:deep(.col-amount) {
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
 </style>
