@@ -9,7 +9,6 @@ import './assets/layout.css';
 import { applyStoredTheme } from './composables/useThemeMode';
 import { primeVueOptions } from './primevue';
 import router from './router';
-import './style.css';
 
 applyStoredTheme();
 

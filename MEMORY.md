@@ -11,15 +11,15 @@ A dashboard with multiple applications sharing one backend and one frontend, cod
 
 ## Tech Stack
 
-| Layer           | Technology                     |
-| --------------- | ------------------------------ |
-| Frontend        | Vue 3 + TypeScript + Vite      |
-| State           | Pinia                          |
-| Routing         | Vue Router 4                   |
-| Styling         | Tailwind CSS v4                |
-| Backend         | Node.js + Express + TypeScript |
-| Database        | SQLite via Prisma              |
-| Package manager | npm workspaces                 |
+| Layer           | Technology                           |
+| --------------- | ------------------------------------ |
+| Frontend        | Vue 3 + TypeScript + Vite            |
+| State           | Pinia                                |
+| Routing         | Vue Router 4                         |
+| Styling         | PrimeVue 5 (Aura theme) + layout.css |
+| Backend         | Node.js + Express + TypeScript       |
+| Database        | SQLite via Prisma                    |
+| Package manager | npm workspaces                       |
 
 ## Architecture Decisions
 

@@ -1,5 +1,63 @@
 /* App-wide base and layout helpers. Colors come from PrimeVue's theme variables so both
    color modes work without extra rules. */
+
+/* Minimal reset replacing the CSS-framework preflight that all screens were built on.
+   It sits in the lowest-priority layer, as preflight did, so PrimeVue's and our own
+   styles always win. */
+@layer base {
+  *,
+  ::before,
+  ::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    border: 0 solid;
+  }
+
+  html {
+    line-height: 1.5;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  ol,
+  ul,
+  menu {
+    list-style: none;
+  }
+
+  img,
+  svg,
+  video,
+  canvas,
+  iframe {
+    display: block;
+    max-width: 100%;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+    color: inherit;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: inherit;
+  }
+}
+
 :root {
   --app-bg: var(--p-surface-50);
   --app-sidebar-width: 16rem;
