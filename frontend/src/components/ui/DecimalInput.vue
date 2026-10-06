@@ -17,8 +17,9 @@ const props = withDefaults(
     ariaLabel?: string;
     invalid?: boolean;
     size?: 'small' | 'large';
+    grouping?: boolean;
   }>(),
-  { minFractionDigits: 0, maxFractionDigits: 2 },
+  { minFractionDigits: 0, maxFractionDigits: 2, grouping: true },
 );
 
 const emit = defineEmits<{
@@ -29,13 +30,13 @@ const emit = defineEmits<{
 function display(value: number | null): string {
   return value === null || Number.isNaN(value)
     ? ''
-    : formatDecimal(value, props.minFractionDigits, props.maxFractionDigits);
+    : formatDecimal(value, props.minFractionDigits, props.maxFractionDigits, props.grouping);
 }
 
 const text = ref(display(props.modelValue));
 const focused = ref(false);
 
-const parsed = computed(() => parseDecimal(text.value, props.maxFractionDigits));
+const parsed = computed(() => parseDecimal(text.value, props.maxFractionDigits, props.grouping));
 const formatError = computed(() => Number.isNaN(parsed.value));
 const example = computed(() => (props.maxFractionDigits === 0 ? '6' : '12,50'));
 
@@ -58,6 +59,19 @@ function onInput(value: string | undefined) {
   emit('validity', !formatError.value);
 }
 
+// Selecting everything stops a click before the text from inserting digits into the old value
+function onFocus(event: Event) {
+  focused.value = true;
+  const field = event.target as HTMLInputElement;
+  field.select();
+  // A mouse click places the caret on mouseup, which would undo the selection
+  requestAnimationFrame(() => {
+    if (document.activeElement === field && field.selectionStart === field.selectionEnd) {
+      field.select();
+    }
+  });
+}
+
 function onBlur() {
   focused.value = false;
   if (!formatError.value) text.value = display(props.modelValue);
@@ -78,7 +92,7 @@ function onBlur() {
         :size="size"
         class="decimal-input__field"
         @update:model-value="onInput"
-        @focus="focused = true"
+        @focus="onFocus"
         @blur="onBlur"
       />
       <InputGroupAddon v-if="suffix">{{ suffix }}</InputGroupAddon>

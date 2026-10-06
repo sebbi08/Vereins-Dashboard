@@ -76,9 +76,39 @@ describe('DecimalInput', () => {
   it('keeps the typed text while focused when the model changes to another value', async () => {
     const wrapper = mountInput({ modelValue: 12 });
     await input(wrapper).trigger('focus');
-    await input(wrapper).setValue('12,');
+    await input(wrapper).setValue('12,5');
     await wrapper.setProps({ modelValue: 99 });
-    expect((input(wrapper).element as HTMLInputElement).value).toBe('12,');
+    expect((input(wrapper).element as HTMLInputElement).value).toBe('12,5');
+  });
+
+  it('selects the whole text on focus', async () => {
+    const wrapper = mount(DecimalInput, {
+      props: { modelValue: 1250.5, inputId: 'amount', minFractionDigits: 2 },
+      global: withPrimeVue(),
+      attachTo: document.body,
+    });
+    await input(wrapper).trigger('focus');
+    const el = input(wrapper).element as HTMLInputElement;
+    expect(el.selectionStart).toBe(0);
+    expect(el.selectionEnd).toBe(el.value.length);
+  });
+
+  it('treats a trailing separator while typing as valid', async () => {
+    const wrapper = mountInput();
+    await input(wrapper).setValue('12,');
+    expect(lastEmitted(wrapper)).toBe(12);
+    expect(wrapper.find('[data-testid="decimal-format-error"]').exists()).toBe(false);
+  });
+
+  it('can switch thousands grouping off for parsing and display', async () => {
+    const wrapper = mountInput({ grouping: false });
+    await input(wrapper).setValue('4.333');
+    expect(lastEmitted(wrapper)).toBeNull();
+    expect(wrapper.find('[data-testid="decimal-format-error"]').exists()).toBe(true);
+    await wrapper.setProps({ modelValue: 1000 });
+    await input(wrapper).setValue('1000');
+    await input(wrapper).trigger('blur');
+    expect((input(wrapper).element as HTMLInputElement).value).toBe('1000');
   });
 
   it('reports validity on mount and on every input', async () => {

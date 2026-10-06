@@ -174,6 +174,7 @@ onMounted(async () => {
                   input-id="weeks-per-month"
                   data-testid="weeks-per-month"
                   :max-fraction-digits="2"
+                  :grouping="false"
                   :invalid="!!weeksError"
                   class="weeks-input"
                 />

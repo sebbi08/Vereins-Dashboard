@@ -186,6 +186,17 @@ describe('InstructorView', () => {
     expect(JSON.parse(String(puts()[0][1].body))).toEqual({ weeksPerMonth: 3.5 });
   });
 
+  it('rejects "4.333" weeks per month instead of reading it as 4333', async () => {
+    const wrapper = await mountView();
+    await wrapper.find('#weeks-per-month').trigger('focus');
+    await setWeeks(wrapper, '4.333');
+    expect(wrapper.find('[data-testid="decimal-format-error"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="save-settings"]').attributes('disabled')).toBeDefined();
+    await wrapper.find('[data-testid="save-settings"]').trigger('click');
+    await flushPromises();
+    expect(puts()).toHaveLength(0);
+  });
+
   it.each([
     ['0', 'Weeks per month must be greater than 0'],
     ['', 'Weeks per month must be greater than 0'],

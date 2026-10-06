@@ -17,6 +17,9 @@ describe('parseDecimal', () => {
     ['0.5', 2, 0.5],
     ['0,5', 2, 0.5],
     ['1.000.000,00', 2, 1000000],
+    ['12,', 2, 12],
+    ['12.', 2, 12],
+    ['1.250,', 2, 1250],
   ])('parses %j (max %i decimals) as %d', (text, max, expected) => {
     expect(parseDecimal(text, max)).toBe(expected);
   });
@@ -32,7 +35,6 @@ describe('parseDecimal', () => {
     ['1,5', 0],
     ['1.5', 0],
     ['-5', 2],
-    ['12,', 2],
     [',5', 2],
     ['1.25.0', 2],
     ['0.500', 2],
@@ -45,7 +47,27 @@ describe('parseDecimal', () => {
   });
 });
 
+describe('parseDecimal without grouping', () => {
+  it.each([
+    ['3.5', 3.5],
+    ['3,25', 3.25],
+    ['1000', 1000],
+    ['12,', 12],
+  ])('parses %j as %d', (text, expected) => {
+    expect(parseDecimal(text, 2, false)).toBe(expected);
+  });
+
+  it.each(['4.333', '1.000', '1.250,00'])('rejects %j', (text) => {
+    expect(parseDecimal(text, 2, false)).toBeNaN();
+  });
+});
+
 describe('formatDecimal', () => {
+  it('leaves out thousands grouping when asked', () => {
+    expect(formatDecimal(1000, 0, 2, false)).toBe('1000');
+    expect(formatDecimal(1000, 0, 2)).toBe('1.000');
+  });
+
   it.each([
     [1250.5, 2, 2, '1.250,50'],
     [12, 2, 2, '12,00'],

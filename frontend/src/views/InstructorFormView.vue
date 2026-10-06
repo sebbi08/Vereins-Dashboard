@@ -241,6 +241,7 @@ onMounted(async () => {
               input-id="months"
               data-testid="months"
               :max-fraction-digits="0"
+              :grouping="false"
               :invalid="!!fieldIssue('months')"
             />
             <Message
