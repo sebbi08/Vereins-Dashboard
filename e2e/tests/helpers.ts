@@ -1,6 +1,9 @@
 import fs from 'fs';
 import path from 'path';
 
+// same default as wdio.conf.ts; set E2E_BACKEND_URL to run against another backend
+export const BACKEND_URL = process.env.E2E_BACKEND_URL ?? 'http://localhost:3000';
+
 const FIXTURES_DIR = path.resolve(__dirname, '..', 'fixture');
 
 /**
@@ -21,7 +24,7 @@ export async function uploadTemplateViaApi(
     fixtureFilename,
   );
 
-  const res = await fetch(`http://localhost:3000/api/templates/${type}/upload`, {
+  const res = await fetch(`${BACKEND_URL}/api/templates/${type}/upload`, {
     method: 'POST',
     body: formData,
   });

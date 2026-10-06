@@ -19,19 +19,16 @@ describe('Donation Receipts list', () => {
   it('shows the search filter input', async () => {
     await expect($('input[placeholder*="Search"]')).toBeDisplayed();
   });
-  it('shows the date filter inputs', async () => {
-    const inputs = await $$('input[type="date"]');
-    expect(inputs.length).toBe(2);
-    for (const i of inputs) await expect(i).toBeDisplayed();
+  it('shows the date range filter', async () => {
+    await expect($('[aria-label="Filter by donation date"]')).toBeDisplayed();
   });
-  it('shows the "Show cancelled" checkbox', async () => {
-    const cb = await $('#withCancelled');
-    await expect(cb).toBeDisplayed();
-    expect(await cb.getAttribute('type')).toBe('checkbox');
+  it('shows the status filter with Active selected', async () => {
+    const filter = await $('[data-testid="status-filter"]');
+    await expect(filter).toBeDisplayed();
+    await expect(filter.$('[aria-pressed="true"]')).toHaveText('Active');
   });
   it('shows empty state when no receipts exist', async () => {
-    await browser.waitUntil(async () => (await $$('tbody tr')).length === 0, { timeout: 5000 });
-    expect((await $$('tbody tr')).length).toBe(0);
+    await expect($('td*=No receipts found.')).toBeDisplayed();
   });
   it('navigates to Settings page when button is clicked', async () => {
     await (await $('button=Settings')).click();
@@ -90,9 +87,9 @@ describe('Create Donation Receipt', () => {
     expect(result.receiptId).toBeGreaterThan(0);
 
     await browser.url(`/donation-receipt/${result.receiptId}`);
-    await (await $('h2=Receipt Details')).waitForDisplayed({ timeout: 10000 });
-    await expect($('h2=Receipt Details')).toBeDisplayed();
-    await expect(await $('span=R1')).toBeDisplayed();
+    await (await $('h2*=Receipt ')).waitForDisplayed({ timeout: 10000 });
+    await expect($('h2*=Receipt ')).toBeDisplayed();
+    await expect(await $('span=Revision 1')).toBeDisplayed();
   });
 });
 
@@ -174,9 +171,9 @@ describe('Create Donation Receipt Revision', () => {
     expect(result.revisionId).toBeGreaterThan(0);
 
     await browser.url(`/donation-receipt/${receiptId}`);
-    await (await $('h2=Receipt Details')).waitForDisplayed({ timeout: 10000 });
-    await expect($('span=R1')).toBeDisplayed();
-    await (await $('span=R2')).waitForDisplayed({ timeout: 10000 });
-    await expect($('span=R2')).toBeDisplayed();
+    await (await $('h2*=Receipt ')).waitForDisplayed({ timeout: 10000 });
+    await expect($('span=Revision 1')).toBeDisplayed();
+    await (await $('span=Revision 2')).waitForDisplayed({ timeout: 10000 });
+    await expect($('span=Revision 2')).toBeDisplayed();
   });
 });

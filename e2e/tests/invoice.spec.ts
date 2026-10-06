@@ -1,4 +1,4 @@
-import { uploadInvoiceTemplate } from './helpers';
+import { BACKEND_URL, uploadInvoiceTemplate } from './helpers';
 
 describe('Invoice list', () => {
   beforeEach(async () => {
@@ -21,19 +21,16 @@ describe('Invoice list', () => {
   it('shows the search filter input', async () => {
     await expect($('input[placeholder*="Search"]')).toBeDisplayed();
   });
-  it('shows the date filter inputs', async () => {
-    const inputs = await $$('input[type="date"]');
-    expect(inputs.length).toBe(2);
-    for (const i of inputs) await expect(i).toBeDisplayed();
+  it('shows the date range filter', async () => {
+    await expect($('[aria-label="Filter by invoice date"]')).toBeDisplayed();
   });
-  it('shows the "Show cancelled" checkbox', async () => {
-    const cb = await $('#withCancelled-invoice');
-    await expect(cb).toBeDisplayed();
-    expect(await cb.getAttribute('type')).toBe('checkbox');
+  it('shows the status filter with Active selected', async () => {
+    const filter = await $('[data-testid="status-filter"]');
+    await expect(filter).toBeDisplayed();
+    await expect(filter.$('[aria-pressed="true"]')).toHaveText('Active');
   });
   it('shows empty state when no invoices exist', async () => {
-    await browser.waitUntil(async () => (await $$('tbody tr')).length === 0, { timeout: 5000 });
-    expect((await $$('tbody tr')).length).toBe(0);
+    await expect($('td*=No invoices found.')).toBeDisplayed();
   });
   it('displays the warning banner when no template is uploaded', async () => {
     await expect($('h2=Invoices')).toBeDisplayed();
@@ -49,7 +46,7 @@ describe('Create Invoice', () => {
   it('creates a new invoice via API', async function () {
     this.timeout(30000);
 
-    const res = await fetch('http://localhost:3000/api/invoice', {
+    const res = await fetch(`${BACKEND_URL}/api/invoice`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -82,21 +79,8 @@ describe('Create Invoice', () => {
     const result = await res.json().catch(() => ({}));
     const id: number | undefined = result.invoiceId;
 
-    if (id) {
-      await browser.url(`/invoice/${id}`);
-    } else {
-      // Fallback: grab the first invoice from the list
-      await browser.url('/invoice');
-      await browser.waitUntil(async () => (await $$('tbody tr')).length > 0, { timeout: 10000 });
-      await (await $('button=Details')).click();
-      await browser.waitUntil(
-        async () => {
-          const u = await browser.getUrl();
-          return u.includes('/invoice/') && !u.includes('/new');
-        },
-        { timeout: 10000 },
-      );
-    }
+    expect(id).toBeGreaterThan(0);
+    await browser.url(`/invoice/${id}`);
 
     await (await $('h2*=Invoice ')).waitForDisplayed({ timeout: 10000 });
     await expect($('h2*=Invoice ')).toBeDisplayed();
@@ -114,7 +98,7 @@ describe('Create Invoice Revision', () => {
     await uploadInvoiceTemplate();
 
     // Create an invoice via API so we have one to revise
-    const res = await fetch('http://localhost:3000/api/invoice', {
+    const res = await fetch(`${BACKEND_URL}/api/invoice`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -150,7 +134,7 @@ describe('Create Invoice Revision', () => {
   it('creates a new revision via API', async function () {
     this.timeout(30000);
 
-    const res = await fetch(`http://localhost:3000/api/invoice/${invoiceId}/revision`, {
+    const res = await fetch(`${BACKEND_URL}/api/invoice/${invoiceId}/revision`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

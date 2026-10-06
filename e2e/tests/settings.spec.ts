@@ -35,11 +35,13 @@ describe('Settings', () => {
   });
 
   it('shows the Templates section', async () => {
+    await (await $('button=Templates')).click();
     const sectionHeading = await $('h3=Templates');
     await expect(sectionHeading).toBeDisplayed();
   });
 
   it('shows ANSCHREIBEN and QUITTUNG template sections', async () => {
+    await (await $('button=Templates')).click();
     const coverLetter = await $('p=Cover Letter (.docx)');
     const receipt = await $('p=Donation Receipt (.pdf)');
     await expect(coverLetter).toBeDisplayed();
@@ -47,6 +49,7 @@ describe('Settings', () => {
   });
 
   it('shows "No template uploaded" for each template type initially', async () => {
+    await (await $('button=Templates')).click();
     const noTemplateMessages = await $$('p=No template uploaded');
     expect(noTemplateMessages.length).toBe(2);
   });
@@ -63,20 +66,9 @@ describe('Settings', () => {
     const saveBtn = await $('button=Save');
     await saveBtn.click();
 
-    // Wait for success message by looking for the green success div
-    await browser.waitUntil(
-      async () => {
-        try {
-          const msg = await $('.bg-green-50');
-          return await msg.isDisplayed();
-        } catch {
-          return false;
-        }
-      },
-      { timeout: 10000, timeoutMsg: 'Success message did not appear' },
-    );
-
-    const successDiv = await $('.bg-green-50');
-    await expect(successDiv).toBeDisplayed();
+    await browser.waitUntil(async () => (await $('body').getText()).includes('Settings saved'), {
+      timeout: 10000,
+      timeoutMsg: 'Success toast did not appear',
+    });
   });
 });

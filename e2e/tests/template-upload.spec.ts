@@ -80,6 +80,7 @@ describe('Template uploads', () => {
   describe('Donation Receipt Settings', () => {
     beforeEach(async () => {
       await browser.url('/donation-receipt/settings');
+      await (await $('button=Templates')).click();
     });
 
     it('uploads Cover Letter template (.docx)', async function () {
