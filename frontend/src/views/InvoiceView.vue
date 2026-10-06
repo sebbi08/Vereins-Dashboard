@@ -364,6 +364,7 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
 <style scoped>
 :deep(.col-number) {
   width: 8rem;
+  white-space: nowrap;
 }
 
 :deep(.col-recipient) {

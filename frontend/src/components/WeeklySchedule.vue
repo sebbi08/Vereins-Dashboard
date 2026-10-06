@@ -217,7 +217,7 @@ function inputValue(event: Event): string {
 <style scoped>
 .schedule {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr));
   align-items: start;
   gap: 1rem;
 }
@@ -226,8 +226,12 @@ function inputValue(event: Event): string {
   width: 7rem;
 }
 
-.schedule__row {
-  flex-wrap: nowrap;
+.schedule > .p-fieldset {
+  min-width: 0; /* a native fieldset defaults to min-inline-size: min-content */
+}
+
+.schedule [data-testid='block-hours'] {
+  white-space: nowrap;
 }
 
 .schedule__block {

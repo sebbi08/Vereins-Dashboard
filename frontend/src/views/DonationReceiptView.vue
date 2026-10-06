@@ -291,6 +291,7 @@ function onRowClick(event: DataTableRowClickEvent<DonationReceiptListItem>) {
 <style scoped>
 :deep(.col-number) {
   width: 9rem;
+  white-space: nowrap;
 }
 
 :deep(.col-donor) {
