@@ -1,16 +1,31 @@
-import { flushPromises, mount } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+import type { DataTableFilterMeta } from 'primevue/datatable';
+import InputNumber from 'primevue/inputnumber';
 import type { InstructorListItemDto } from 'shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRouter } from 'vue-router';
+import { useAppStore } from '../stores/app';
 import InstructorView from '../views/InstructorView.vue';
 import { withPrimeVue } from './helpers/primeVue';
 
-vi.mock('vue-router', () => ({
-  useRouter: vi.fn(),
+const { notify, confirmAction } = vi.hoisted(() => ({
+  notify: { success: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  confirmAction: vi.fn(),
 }));
 
-const mockPush = vi.fn();
+vi.mock('vue-router', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('vue-router')>()),
+  useRouter: vi.fn(),
+}));
+vi.mock('../composables/useNotify', () => ({ useNotify: () => notify }));
+vi.mock('../composables/useConfirmAction', () => ({
+  useConfirmAction: () => ({ confirmAction }),
+}));
+
+interface ViewVM {
+  filters: DataTableFilterMeta;
+}
 
 const instructors: InstructorListItemDto[] = [
   {
@@ -35,164 +50,220 @@ function jsonResponse(body: unknown, ok = true): Response {
 
 type FetchImpl = (url: string, init?: RequestInit) => Promise<Response>;
 let fetchMock: ReturnType<typeof vi.fn>;
+const push = vi.fn();
 
-function mountView() {
-  return mount(InstructorView, {
-    global: withPrimeVue({ stubs: { 'router-link': { template: '<a><slot /></a>' } } }),
+const defaultFetch: FetchImpl = (url, init) => {
+  if (url === '/api/instructor') return Promise.resolve(jsonResponse(instructors));
+  if (url === '/api/instructor/settings' && init?.method === 'PUT') {
+    return Promise.resolve(
+      jsonResponse({ invoiceTemplate: null, ...JSON.parse(String(init.body)) }),
+    );
+  }
+  if (url === '/api/instructor/settings') {
+    return Promise.resolve(jsonResponse({ weeksPerMonth: 3.25, invoiceTemplate: null }));
+  }
+  if (url === '/api/instructor/1')
+    return Promise.resolve(
+      jsonResponse({
+        ...instructors[0],
+        recipient: { id: 7, name: 'Anna Alt', street: '', city: '', email: null, salutation: null },
+        timeBlocks: [],
+      }),
+    );
+  return Promise.resolve(jsonResponse({}, false));
+};
+
+async function mountView() {
+  const wrapper = mount(InstructorView, {
+    attachTo: document.body,
+    global: withPrimeVue({ stubs: { RouterLink: { template: '<a><slot /></a>' } } }),
   });
+  await flushPromises();
+  return wrapper;
 }
 
-describe('InstructorView', () => {
-  beforeEach(() => {
-    fetchMock = vi.fn((url: string, init?: RequestInit) => {
-      if (url === '/api/instructor') return Promise.resolve(jsonResponse(instructors));
-      if (url === '/api/instructor/settings' && init?.method === 'PUT') {
-        return Promise.resolve(jsonResponse(JSON.parse(String(init.body))));
-      }
-      if (url === '/api/instructor/settings') {
-        return Promise.resolve(jsonResponse({ weeksPerMonth: 3.25 }));
-      }
-      if (url === '/api/templates') return Promise.resolve(jsonResponse([{ type: 'RECHNUNG' }]));
-      return Promise.resolve(jsonResponse({}, false));
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({ push: mockPush });
-    setActivePinia(createPinia());
-    mockPush.mockReset();
-  });
+function rows(wrapper: VueWrapper) {
+  return wrapper.findAll('.instructor-row');
+}
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
+function weeksInput(wrapper: VueWrapper) {
+  return wrapper
+    .findAllComponents(InputNumber)
+    .find((c) => c.attributes('data-testid') === 'weeks-per-month')!;
+}
+
+async function setWeeks(wrapper: VueWrapper, value: number | null) {
+  weeksInput(wrapper).vm.$emit('update:modelValue', value);
+  await flushPromises();
+}
+
+function puts() {
+  return fetchMock.mock.calls.filter(([, init]) => init?.method === 'PUT');
+}
+
+beforeEach(() => {
+  fetchMock = vi.fn(defaultFetch);
+  vi.stubGlobal('fetch', fetchMock);
+  vi.mocked(useRouter).mockReturnValue({ push } as unknown as ReturnType<typeof useRouter>);
+  push.mockReset();
+  confirmAction.mockReset().mockResolvedValue(true);
+  Object.values(notify).forEach((fn) => fn.mockReset());
+  setActivePinia(createPinia());
+  useAppStore().invoiceTemplateAvailable = true;
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('InstructorView', () => {
+  it('shows the heading and the new-instructor action', async () => {
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="page-title"]').text()).toBe('Instructor Rent');
+    await wrapper.find('[data-testid="new-instructor"]').trigger('click');
+    expect(push).toHaveBeenCalledWith('/instructor/new');
   });
 
   it('renders one row per instructor and the sum of totals', async () => {
-    const wrapper = mountView();
-    await flushPromises();
+    const wrapper = await mountView();
 
-    const rows = wrapper.findAll('[data-testid="instructor-row"]');
-    expect(rows).toHaveLength(2);
-    expect(rows[0].text()).toContain('Anna Alt');
-    expect(rows[0].text()).toContain('7,5');
-    expect(rows[0].text()).toContain('1.755,00');
+    expect(rows(wrapper)).toHaveLength(2);
+    expect(rows(wrapper)[0].text()).toContain('Anna Alt');
+    expect(rows(wrapper)[0].text()).toContain('12,00');
+    expect(rows(wrapper)[0].text()).toContain('7,5');
+    expect(rows(wrapper)[0].text()).toContain('292,50');
+    expect(rows(wrapper)[0].text()).toContain('1.755,00');
     expect(wrapper.find('[data-testid="footer-total"]').text()).toContain('1.787,50');
   });
 
-  it('loads the weeks-per-month setting into the input', async () => {
-    const wrapper = mountView();
-    await flushPromises();
+  it('sums only the rows left by the filters', async () => {
+    const wrapper = await mountView();
 
-    const input = wrapper.find('[data-testid="weeks-per-month"]').element as HTMLInputElement;
-    expect(input.value).toBe('3.25');
+    await wrapper.find('[data-testid="global-search"]').setValue('bach');
+    await flushPromises();
+    expect(rows(wrapper)).toHaveLength(1);
+    expect(wrapper.find('[data-testid="footer-total"]').text()).toContain('32,50');
+
+    await wrapper.find('[data-testid="clear-filters"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="footer-total"]').text()).toContain('1.787,50');
   });
 
-  it('saves the setting and reloads the list', async () => {
-    const wrapper = mountView();
+  it('filters by total amount in euros', async () => {
+    const wrapper = await mountView();
+    const vm = wrapper.vm as unknown as ViewVM;
+    const current = vm.filters['calculation.totalCents'] as { matchMode: string };
+    vm.filters = { ...vm.filters, 'calculation.totalCents': { ...current, value: [100, null] } };
     await flushPromises();
+
+    expect(rows(wrapper)).toHaveLength(1);
+    expect(rows(wrapper)[0].text()).toContain('Anna Alt');
+  });
+
+  it('keeps the calculation settings in a collapsed panel with the saved value in its header', async () => {
+    const wrapper = await mountView();
+    const panel = wrapper.find('[data-testid="calculation-settings"]');
+    expect(panel.text()).toContain('Calculation settings (3,25 weeks/month)');
+    expect(panel.find('[data-testid="invoice-template"]').exists()).toBe(true);
+    expect(weeksInput(wrapper).props('modelValue')).toBe(3.25);
+  });
+
+  it('saves weeks per month, updates the header and reloads the list', async () => {
+    const wrapper = await mountView();
     const listCallsBefore = fetchMock.mock.calls.filter(([u]) => u === '/api/instructor').length;
 
-    await wrapper.find('[data-testid="weeks-per-month"]').setValue('4');
+    await setWeeks(wrapper, 4);
     await wrapper.find('[data-testid="save-settings"]').trigger('click');
     await flushPromises();
 
-    const putCall = fetchMock.mock.calls.find(
-      ([u, init]) => u === '/api/instructor/settings' && init?.method === 'PUT',
+    expect(JSON.parse(String(puts()[0][1].body))).toEqual({ weeksPerMonth: 4 });
+    expect(notify.success).toHaveBeenCalledWith('Weeks per month saved');
+    expect(wrapper.find('[data-testid="calculation-settings"]').text()).toContain(
+      'Calculation settings (4 weeks/month)',
     );
-    expect(JSON.parse(String(putCall?.[1]?.body))).toEqual({ weeksPerMonth: 4 });
     const listCallsAfter = fetchMock.mock.calls.filter(([u]) => u === '/api/instructor').length;
     expect(listCallsAfter).toBe(listCallsBefore + 1);
   });
 
-  it('shows a validation error and does not save weeks per month of 0', async () => {
-    const wrapper = mountView();
-    await flushPromises();
+  it.each([
+    [0, 'Weeks per month must be greater than 0'],
+    [null, 'Weeks per month must be greater than 0'],
+  ])('shows an error and does not save weeks per month of %j', async (value, message) => {
+    const wrapper = await mountView();
 
-    await wrapper.find('[data-testid="weeks-per-month"]').setValue('0');
+    await setWeeks(wrapper, value);
+    expect(wrapper.find('[data-testid="weeks-error"]').text()).toBe(message);
+    expect(wrapper.find('[data-testid="save-settings"]').attributes('disabled')).toBeDefined();
+
     await wrapper.find('[data-testid="save-settings"]').trigger('click');
     await flushPromises();
-
-    expect(wrapper.find('[data-testid="settings-error"]').text()).toBe(
-      'Weeks per month must be greater than 0',
-    );
-    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'PUT')).toBe(false);
+    expect(puts()).toHaveLength(0);
   });
 
   it.each([
     ['responds with an error', () => Promise.resolve(jsonResponse({}, false))],
     ['is unreachable', () => Promise.reject(new Error('offline'))],
   ])('disables saving when loading the setting %s', async (_label, settingsReply) => {
-    const defaultFetch = fetchMock.getMockImplementation() as FetchImpl;
     fetchMock.mockImplementation((url: string, init?: RequestInit) =>
       url === '/api/instructor/settings' && !init?.method
         ? settingsReply()
         : defaultFetch(url, init),
     );
-    const wrapper = mountView();
-    await flushPromises();
+    const wrapper = await mountView();
 
-    expect(wrapper.find('[data-testid="settings-error"]').text()).toBe('Could not load settings');
+    expect(wrapper.find('[data-testid="settings-load-error"]').text()).toBe(
+      'Could not load settings',
+    );
     expect(wrapper.find('[data-testid="save-settings"]').attributes('disabled')).toBeDefined();
   });
 
-  it('shows an error when saving the setting fails', async () => {
-    const defaultFetch = fetchMock.getMockImplementation() as FetchImpl;
+  it('toasts the error when saving the setting fails', async () => {
     fetchMock.mockImplementation((url: string, init?: RequestInit) =>
       init?.method === 'PUT' ? Promise.reject(new Error('offline')) : defaultFetch(url, init),
     );
-    const wrapper = mountView();
-    await flushPromises();
+    const wrapper = await mountView();
 
-    await wrapper.find('[data-testid="weeks-per-month"]').setValue('4');
+    await setWeeks(wrapper, 4);
     await wrapper.find('[data-testid="save-settings"]').trigger('click');
     await flushPromises();
 
-    expect(wrapper.find('[data-testid="settings-error"]').text()).toBe('Saving failed');
+    expect(notify.error).toHaveBeenCalledWith('Saving failed');
+    expect(wrapper.find('[data-testid="calculation-settings"]').text()).toContain(
+      '(3,25 weeks/month)',
+    );
   });
 
-  it('hides the saved hint when the value changes again', async () => {
-    const wrapper = mountView();
-    await flushPromises();
-    await wrapper.find('[data-testid="weeks-per-month"]').setValue('4');
-    await wrapper.find('[data-testid="save-settings"]').trigger('click');
-    await flushPromises();
-    expect(wrapper.find('[data-testid="settings-saved"]').exists()).toBe(true);
-
-    await wrapper.find('[data-testid="weeks-per-month"]').setValue('4.5');
-
-    expect(wrapper.find('[data-testid="settings-saved"]').exists()).toBe(false);
-  });
-
-  it('navigates to a prefilled invoice', async () => {
-    const wrapper = mountView();
-    await flushPromises();
-
+  it('navigates to a prefilled invoice without opening the instructor', async () => {
+    const wrapper = await mountView();
     await wrapper.find('[data-testid="create-invoice-1"]').trigger('click');
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith('/invoice/new?fromInstructor=1');
+  });
 
-    expect(mockPush).toHaveBeenCalledWith('/invoice/new?fromInstructor=1');
+  it('disables invoice creation without an invoice template', async () => {
+    useAppStore().invoiceTemplateAvailable = false;
+    const wrapper = await mountView();
+    const button = wrapper.find('[data-testid="create-invoice-1"]');
+    expect(button.attributes('disabled')).toBeDefined();
+    expect(button.attributes('title')).toBe('No active invoice template');
   });
 
   it('opens the instructor on row click', async () => {
-    const wrapper = mountView();
-    await flushPromises();
-
-    await wrapper.findAll('[data-testid="instructor-row"]')[1].trigger('click');
-
-    expect(mockPush).toHaveBeenCalledWith('/instructor/2');
+    const wrapper = await mountView();
+    await rows(wrapper)[1].trigger('click');
+    expect(push).toHaveBeenCalledWith('/instructor/2');
   });
 
-  it('does not open the instructor when Enter is pressed on the create-invoice button', async () => {
-    const wrapper = mountView();
-    await flushPromises();
-
-    await wrapper.find('[data-testid="create-invoice-1"]').trigger('keydown', { key: 'Enter' });
-
-    expect(mockPush).not.toHaveBeenCalledWith('/instructor/1');
-  });
-
-  it('shows the invoice text settings with the first instructor as preview source', async () => {
-    const wrapper = mountView();
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="invoice-template"]').exists()).toBe(true);
+  it('uses the first instructor as preview source for the invoice text', async () => {
+    await mountView();
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/instructor/1')).toBe(true);
+  });
+
+  it('reports a load error', async () => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      url === '/api/instructor' ? Promise.reject(new Error('offline')) : defaultFetch(url, init),
+    );
+    await mountView();
+    expect(notify.error).toHaveBeenCalledWith('Error loading instructors');
   });
 });

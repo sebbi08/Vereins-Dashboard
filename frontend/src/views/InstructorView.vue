@@ -1,4 +1,17 @@
 <script setup lang="ts">
+import { FilterMatchMode } from '@primevue/core/api';
+import Button from 'primevue/button';
+import Column from 'primevue/column';
+import DataTable, {
+  type DataTableFilterMeta,
+  type DataTableRowClickEvent,
+} from 'primevue/datatable';
+import IconField from 'primevue/iconfield';
+import InputIcon from 'primevue/inputicon';
+import InputNumber from 'primevue/inputnumber';
+import InputText from 'primevue/inputtext';
+import Message from 'primevue/message';
+import Panel from 'primevue/panel';
 import {
   DEFAULT_WEEKS_PER_MONTH,
   type InstructorListItemDto,
@@ -6,66 +19,102 @@ import {
   validateWeeksPerMonth,
 } from 'shared';
 import { computed, onMounted, ref, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { RouterLink, useRouter } from 'vue-router';
 import InvoiceTextSettings from '../components/InvoiceTextSettings.vue';
+import AmountRangeFilter from '../components/ui/AmountRangeFilter.vue';
+import PageHeader from '../components/ui/PageHeader.vue';
+import { useNotify } from '../composables/useNotify';
+import { useTableFilters } from '../composables/useTableFilters';
 import { useAppStore } from '../stores/app';
 import { formatCents, formatHours } from '../utils/format';
+import { globalFilter, TABLE_DEFAULTS } from '../utils/tableDefaults';
+import { AMOUNT_RANGE } from '../utils/tableFilters';
+import { isControlClick } from '../utils/tableRowClick';
 
 const router = useRouter();
 const store = useAppStore();
+const notify = useNotify();
 
+// ── Instructors ─────────────────────────────
 const instructors = ref<InstructorListItemDto[]>([]);
+/** Rows left after filtering; the footer sum follows them. */
+const visibleInstructors = ref<InstructorListItemDto[]>([]);
 const loading = ref(false);
-const error = ref('');
 
-const weeksPerMonth = ref<number | string>(DEFAULT_WEEKS_PER_MONTH);
-const settingsError = ref('');
-const settingsSaved = ref(false);
-const settingsLoaded = ref(false);
-
-watch(weeksPerMonth, () => {
-  settingsSaved.value = false;
+watch(instructors, (all) => {
+  visibleInstructors.value = all;
 });
 
-const totalCents = computed(() =>
-  instructors.value.reduce((sum, i) => sum + i.calculation.totalCents, 0),
+function defaultFilters(): DataTableFilterMeta {
+  return {
+    ...globalFilter(),
+    name: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    'calculation.totalCents': { value: null, matchMode: AMOUNT_RANGE },
+  };
+}
+
+const { filters, globalSearch, clearFilters } = useTableFilters(defaultFilters);
+
+const visibleTotalCents = computed(() =>
+  visibleInstructors.value.reduce((sum, i) => sum + i.calculation.totalCents, 0),
 );
+
+function onValueChange(rows: InstructorListItemDto[]) {
+  visibleInstructors.value = rows;
+}
 
 async function loadInstructors() {
   loading.value = true;
-  error.value = '';
   try {
     const res = await fetch('/api/instructor');
     if (!res.ok) throw new Error('load failed');
     instructors.value = await res.json();
   } catch {
-    error.value = 'Error loading instructors';
+    notify.error('Error loading instructors');
   } finally {
     loading.value = false;
   }
 }
 
+function onRowClick(event: DataTableRowClickEvent<InstructorListItemDto>) {
+  if (isControlClick(event.originalEvent)) return;
+  router.push(`/instructor/${event.data.id}`);
+}
+
+// ── Calculation settings ─────────────────────────────
+const weeksPerMonth = ref<number | null>(DEFAULT_WEEKS_PER_MONTH);
+const savedWeeksPerMonth = ref(DEFAULT_WEEKS_PER_MONTH);
+const settingsLoaded = ref(false);
+const settingsLoadError = ref('');
+const savingSettings = ref(false);
+
+const weeksError = computed(() => validateWeeksPerMonth(weeksPerMonth.value ?? Number.NaN));
+const canSaveSettings = computed(
+  () => settingsLoaded.value && !weeksError.value && !savingSettings.value,
+);
+
+const weeksFormat = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 2 });
+const panelHeader = computed(
+  () => `Calculation settings (${weeksFormat.format(savedWeeksPerMonth.value)} weeks/month)`,
+);
+
 async function loadSettings() {
   try {
     const res = await fetch('/api/instructor/settings');
     if (!res.ok) throw new Error('load failed');
-    weeksPerMonth.value = ((await res.json()) as InstructorSettingsDto).weeksPerMonth;
+    const value = ((await res.json()) as InstructorSettingsDto).weeksPerMonth;
+    weeksPerMonth.value = value;
+    savedWeeksPerMonth.value = value;
     settingsLoaded.value = true;
   } catch {
-    settingsError.value = 'Could not load settings';
+    settingsLoadError.value = 'Could not load settings';
   }
 }
 
 async function saveSettings() {
-  if (!settingsLoaded.value) return;
-  settingsError.value = '';
-  settingsSaved.value = false;
-  const value = Number(weeksPerMonth.value);
-  const validation = validateWeeksPerMonth(value);
-  if (validation) {
-    settingsError.value = validation;
-    return;
-  }
+  if (!canSaveSettings.value || weeksPerMonth.value === null) return;
+  const value = weeksPerMonth.value;
+  savingSettings.value = true;
   try {
     const res = await fetch('/api/instructor/settings', {
       method: 'PUT',
@@ -73,23 +122,19 @@ async function saveSettings() {
       body: JSON.stringify({ weeksPerMonth: value }),
     });
     if (!res.ok) {
-      settingsError.value = ((await res.json()) as { error?: string }).error ?? 'Saving failed';
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      notify.error(body.error ?? 'Saving failed');
       return;
     }
   } catch {
-    settingsError.value = 'Saving failed';
+    notify.error('Saving failed');
     return;
+  } finally {
+    savingSettings.value = false;
   }
-  settingsSaved.value = true;
+  savedWeeksPerMonth.value = value;
+  notify.success('Weeks per month saved');
   await loadInstructors();
-}
-
-function openInstructor(id: number) {
-  router.push(`/instructor/${id}`);
-}
-
-function createInvoice(id: number) {
-  router.push(`/invoice/new?fromInstructor=${id}`);
 }
 
 onMounted(async () => {
@@ -102,120 +147,206 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div>
-    <div class="flex items-center justify-between mb-6">
-      <h2 class="text-2xl font-bold text-gray-800">Instructor Rent</h2>
-      <button
-        type="button"
-        data-testid="new-instructor"
-        class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
-        @click="router.push('/instructor/new')"
-      >
-        New instructor
-      </button>
-    </div>
-
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6 flex items-end gap-3">
-      <div>
-        <label for="weeks-per-month" class="block text-sm font-medium text-gray-700 mb-1"
-          >Weeks per month</label
-        >
-        <input
-          id="weeks-per-month"
-          v-model="weeksPerMonth"
-          data-testid="weeks-per-month"
-          type="number"
-          step="0.01"
-          min="0.01"
-          class="w-32 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+  <div class="page">
+    <PageHeader title="Instructor Rent">
+      <template #actions>
+        <Button
+          label="New instructor"
+          icon="pi pi-plus"
+          data-testid="new-instructor"
+          @click="router.push('/instructor/new')"
         />
-      </div>
-      <button
-        type="button"
-        data-testid="save-settings"
-        :disabled="!settingsLoaded"
-        class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-        @click="saveSettings"
+      </template>
+    </PageHeader>
+
+    <div class="stack">
+      <Panel :header="panelHeader" toggleable collapsed data-testid="calculation-settings">
+        <div class="stack gap-lg">
+          <div class="stack gap-sm">
+            <div class="row gap-sm weeks-row">
+              <div class="field">
+                <label for="weeks-per-month">Weeks per month</label>
+                <InputNumber
+                  v-model="weeksPerMonth"
+                  input-id="weeks-per-month"
+                  data-testid="weeks-per-month"
+                  locale="de-DE"
+                  :min-fraction-digits="0"
+                  :max-fraction-digits="2"
+                  :invalid="!!weeksError"
+                  class="weeks-input"
+                />
+              </div>
+              <Button
+                label="Save"
+                icon="pi pi-check"
+                severity="secondary"
+                outlined
+                :disabled="!canSaveSettings"
+                :loading="savingSettings"
+                data-testid="save-settings"
+                @click="saveSettings"
+              />
+            </div>
+            <Message
+              v-if="settingsLoadError"
+              severity="error"
+              size="small"
+              data-testid="settings-load-error"
+            >
+              {{ settingsLoadError }}
+            </Message>
+            <Message
+              v-else-if="weeksError"
+              severity="error"
+              size="small"
+              variant="simple"
+              data-testid="weeks-error"
+            >
+              {{ weeksError }}
+            </Message>
+          </div>
+
+          <InvoiceTextSettings
+            :preview-instructor-id="instructors[0]?.id ?? null"
+            :weeks-per-month="weeksPerMonth ?? 0"
+          />
+        </div>
+      </Panel>
+
+      <DataTable
+        v-model:filters="filters"
+        :value="instructors"
+        data-key="id"
+        v-bind="TABLE_DEFAULTS"
+        :global-filter-fields="['name']"
+        :loading="loading"
+        row-hover
+        :row-class="() => 'instructor-row'"
+        @row-click="onRowClick"
+        @value-change="onValueChange"
       >
-        Save
-      </button>
-      <p v-if="settingsError" data-testid="settings-error" class="text-sm text-red-600">
-        {{ settingsError }}
-      </p>
-      <p v-else-if="settingsSaved" data-testid="settings-saved" class="text-sm text-green-600">
-        Saved
-      </p>
-    </div>
+        <template #header>
+          <div class="row row--between">
+            <IconField>
+              <InputIcon class="pi pi-search" />
+              <InputText
+                v-model="globalSearch"
+                placeholder="Search by name…"
+                aria-label="Search instructors"
+                data-testid="global-search"
+              />
+            </IconField>
+            <Button
+              label="Clear filters"
+              icon="pi pi-filter-slash"
+              text
+              data-testid="clear-filters"
+              @click="clearFilters"
+            />
+          </div>
+        </template>
+        <template #empty>No instructors yet.</template>
 
-    <InvoiceTextSettings
-      :preview-instructor-id="instructors[0]?.id ?? null"
-      :weeks-per-month="Number(weeksPerMonth)"
-    />
-
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-      <p v-if="error" class="p-4 text-sm text-red-600">{{ error }}</p>
-      <p v-else-if="loading" class="p-4 text-sm text-gray-500">Loading…</p>
-      <p v-else-if="instructors.length === 0" class="p-4 text-sm text-gray-500">
-        No instructors yet.
-      </p>
-      <table v-else class="w-full text-sm">
-        <thead>
-          <tr class="border-b border-gray-200 bg-gray-50">
-            <th class="text-left px-4 py-3 font-medium text-gray-600">Name</th>
-            <th class="text-right px-4 py-3 font-medium text-gray-600">Hourly rate (net)</th>
-            <th class="text-right px-4 py-3 font-medium text-gray-600">h/week</th>
-            <th class="text-right px-4 py-3 font-medium text-gray-600">Per month (net)</th>
-            <th class="text-right px-4 py-3 font-medium text-gray-600">Months</th>
-            <th class="text-right px-4 py-3 font-medium text-gray-600">Total (net)</th>
-            <th class="px-4 py-3"></th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="i in instructors"
-            :key="i.id"
-            data-testid="instructor-row"
-            class="border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer"
-            tabindex="0"
-            role="button"
-            @click="openInstructor(i.id)"
-            @keydown.enter.prevent="openInstructor(i.id)"
-          >
-            <td class="px-4 py-3 text-gray-800">{{ i.name }}</td>
-            <td class="px-4 py-3 text-right">{{ formatCents(i.hourlyRateCents) }}</td>
-            <td class="px-4 py-3 text-right">{{ formatHours(i.calculation.netMinutesPerWeek) }}</td>
-            <td class="px-4 py-3 text-right">{{ formatCents(i.calculation.monthlyCents) }}</td>
-            <td class="px-4 py-3 text-right">{{ i.months }}</td>
-            <td class="px-4 py-3 text-right font-medium">
-              {{ formatCents(i.calculation.totalCents) }}
-            </td>
-            <td class="px-4 py-3 text-right">
-              <button
-                type="button"
-                :data-testid="`create-invoice-${i.id}`"
-                :disabled="store.invoiceTemplateAvailable === false"
-                :title="
-                  store.invoiceTemplateAvailable === false ? 'No active invoice template' : ''
-                "
-                class="px-3 py-1 border border-gray-300 rounded-lg text-xs font-medium hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
-                @keydown.enter.stop
-                @click.stop="createInvoice(i.id)"
-              >
-                Create invoice
-              </button>
-            </td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr class="bg-gray-50">
-            <td colspan="5" class="px-4 py-3 font-medium text-gray-600">Sum</td>
-            <td data-testid="footer-total" class="px-4 py-3 text-right font-semibold">
-              {{ formatCents(totalCents) }}
-            </td>
-            <td></td>
-          </tr>
-        </tfoot>
-      </table>
+        <Column field="name" header="Name" sortable :show-filter-menu="false">
+          <template #body="{ data }">
+            <RouterLink :to="`/instructor/${data.id}`">{{ data.name }}</RouterLink>
+          </template>
+          <template #filter="{ filterModel, filterCallback }">
+            <InputText
+              v-model="filterModel.value"
+              size="small"
+              placeholder="Name"
+              fluid
+              aria-label="Filter by name"
+              @input="filterCallback()"
+            />
+          </template>
+          <template #footer><span class="strong">Sum</span></template>
+        </Column>
+        <Column field="hourlyRateCents" header="Hourly rate (net)" sortable class="col-amount">
+          <template #body="{ data }">{{ formatCents(data.hourlyRateCents) }}</template>
+        </Column>
+        <Column field="calculation.netMinutesPerWeek" header="h/week" sortable class="col-amount">
+          <template #body="{ data }">{{
+            formatHours(data.calculation.netMinutesPerWeek)
+          }}</template>
+        </Column>
+        <Column
+          field="calculation.monthlyCents"
+          header="Per month (net)"
+          sortable
+          class="col-amount"
+        >
+          <template #body="{ data }">{{ formatCents(data.calculation.monthlyCents) }}</template>
+        </Column>
+        <Column field="months" header="Months" sortable class="col-amount" />
+        <Column
+          field="calculation.totalCents"
+          header="Total (net)"
+          sortable
+          :show-filter-menu="false"
+          class="col-amount"
+        >
+          <template #body="{ data }">
+            <span class="strong">{{ formatCents(data.calculation.totalCents) }}</span>
+          </template>
+          <template #filter="{ filterModel, filterCallback }">
+            <AmountRangeFilter
+              :model-value="filterModel.value"
+              label="Total"
+              @update:model-value="
+                (value) => {
+                  filterModel.value = value;
+                  filterCallback();
+                }
+              "
+            />
+          </template>
+          <template #footer>
+            <span data-testid="footer-total" class="strong">{{
+              formatCents(visibleTotalCents)
+            }}</span>
+          </template>
+        </Column>
+        <Column header-style="width: 10rem">
+          <template #body="{ data }">
+            <Button
+              label="Create invoice"
+              icon="pi pi-file"
+              size="small"
+              text
+              :disabled="store.invoiceTemplateAvailable === false"
+              :title="store.invoiceTemplateAvailable === false ? 'No active invoice template' : ''"
+              :data-testid="`create-invoice-${data.id}`"
+              @click.stop="router.push(`/invoice/new?fromInstructor=${data.id}`)"
+            />
+          </template>
+        </Column>
+      </DataTable>
     </div>
   </div>
 </template>
+
+<style scoped>
+.weeks-row {
+  align-items: flex-end;
+}
+
+.weeks-input :deep(input) {
+  width: 8rem;
+}
+
+.strong {
+  font-weight: 600;
+}
+
+:deep(.instructor-row) {
+  cursor: pointer;
+}
+
+:deep(.col-amount) {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+</style>
