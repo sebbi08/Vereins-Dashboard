@@ -4,6 +4,7 @@ import type { InstructorListItemDto } from 'shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRouter } from 'vue-router';
 import InstructorView from '../views/InstructorView.vue';
+import { withPrimeVue } from './helpers/primeVue';
 
 vi.mock('vue-router', () => ({
   useRouter: vi.fn(),
@@ -37,7 +38,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 
 function mountView() {
   return mount(InstructorView, {
-    global: { stubs: { 'router-link': { template: '<a><slot /></a>' } } },
+    global: withPrimeVue({ stubs: { 'router-link': { template: '<a><slot /></a>' } } }),
   });
 }
 
