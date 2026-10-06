@@ -14,6 +14,9 @@ describe('parseDecimal', () => {
     ['0', 2, 0],
     ['6', 0, 6],
     ['3.25', 2, 3.25],
+    ['0.5', 2, 0.5],
+    ['0,5', 2, 0.5],
+    ['1.000.000,00', 2, 1000000],
   ])('parses %j (max %i decimals) as %d', (text, max, expected) => {
     expect(parseDecimal(text, max)).toBe(expected);
   });
@@ -32,6 +35,11 @@ describe('parseDecimal', () => {
     ['12,', 2],
     [',5', 2],
     ['1.25.0', 2],
+    ['0.500', 2],
+    ['01.250', 2],
+    ['12 50', 2],
+    ['1 2', 2],
+    ['12345678901234567890', 2],
   ])('rejects %j (max %i decimals)', (text, max) => {
     expect(parseDecimal(text, max)).toBeNaN();
   });

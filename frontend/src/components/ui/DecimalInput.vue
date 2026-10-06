@@ -23,6 +23,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:modelValue': [value: number | null];
+  validity: [valid: boolean];
 }>();
 
 function display(value: number | null): string {
@@ -38,6 +39,8 @@ const parsed = computed(() => parseDecimal(text.value, props.maxFractionDigits))
 const formatError = computed(() => Number.isNaN(parsed.value));
 const example = computed(() => (props.maxFractionDigits === 0 ? '6' : '12,50'));
 
+emit('validity', true);
+
 // The user's own typing wins while the field has focus; other changes (load, reset) show up
 watch(
   () => props.modelValue,
@@ -50,6 +53,7 @@ function onInput(value: string | undefined) {
   text.value = value ?? '';
   const result = parsed.value;
   emit('update:modelValue', result === null || Number.isNaN(result) ? null : result);
+  emit('validity', !formatError.value);
 }
 
 function onBlur() {

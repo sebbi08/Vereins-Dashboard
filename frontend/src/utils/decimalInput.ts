@@ -1,7 +1,7 @@
 /** "1250" or "1250,5" — comma as decimal separator, no grouping. */
 const COMMA_DECIMAL = /^\d+(,\d+)?$/;
 /** "1.250" or "1.250,5" — German thousands grouping with dots. */
-const GROUPED = /^\d{1,3}(\.\d{3})+(,\d+)?$/;
+const GROUPED = /^[1-9]\d{0,2}(\.\d{3})+(,\d+)?$/;
 /** "12.5" — a single dot as decimal point (English style). */
 const DOT_DECIMAL = /^\d+\.\d+$/;
 
@@ -12,8 +12,9 @@ const DOT_DECIMAL = /^\d+\.\d+$/;
  * digits groups thousands, as in German ("1.250" = 1250).
  */
 export function parseDecimal(text: string, maxFractionDigits: number): number | null {
-  const compact = text.replace(/[\s€]/g, '');
+  const compact = text.replace(/€/g, '').trim();
   if (compact === '') return null;
+  if (/\s/.test(compact)) return Number.NaN;
 
   let normalized: string;
   if (COMMA_DECIMAL.test(compact)) normalized = compact.replace(',', '.');
@@ -23,7 +24,9 @@ export function parseDecimal(text: string, maxFractionDigits: number): number | 
 
   const fraction = normalized.split('.')[1] ?? '';
   if (fraction.length > maxFractionDigits) return Number.NaN;
-  return Number(normalized);
+  const value = Number(normalized);
+  if (!Number.isSafeInteger(Math.round(value * 10 ** maxFractionDigits))) return Number.NaN;
+  return value;
 }
 
 export function formatDecimal(

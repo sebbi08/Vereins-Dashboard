@@ -65,12 +65,32 @@ describe('DecimalInput', () => {
     );
   });
 
-  it('keeps the typed text while focused even when the model changes', async () => {
-    const wrapper = mountInput();
+  it('keeps the typed text while focused when the parent echoes the model', async () => {
+    const wrapper = mountInput({ modelValue: 12 });
     await input(wrapper).trigger('focus');
-    await input(wrapper).setValue('0,');
-    await wrapper.setProps({ modelValue: null });
-    expect((input(wrapper).element as HTMLInputElement).value).toBe('0,');
+    await input(wrapper).setValue('12,5');
+    await wrapper.setProps({ modelValue: 12.5 });
+    expect((input(wrapper).element as HTMLInputElement).value).toBe('12,5');
+  });
+
+  it('keeps the typed text while focused when the model changes to another value', async () => {
+    const wrapper = mountInput({ modelValue: 12 });
+    await input(wrapper).trigger('focus');
+    await input(wrapper).setValue('12,');
+    await wrapper.setProps({ modelValue: 99 });
+    expect((input(wrapper).element as HTMLInputElement).value).toBe('12,');
+  });
+
+  it('reports validity on mount and on every input', async () => {
+    const wrapper = mountInput();
+    const validity = () => (wrapper.emitted('validity') ?? []).map((e) => e[0]);
+    expect(validity()).toEqual([true]);
+    await input(wrapper).setValue('abc');
+    expect(validity().at(-1)).toBe(false);
+    await input(wrapper).setValue('12');
+    expect(validity().at(-1)).toBe(true);
+    await input(wrapper).setValue('');
+    expect(validity().at(-1)).toBe(true);
   });
 
   it('follows model changes while not focused', async () => {
