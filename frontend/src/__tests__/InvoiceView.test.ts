@@ -313,7 +313,21 @@ describe('InvoiceView', () => {
 
   it('reports a load error', async () => {
     vi.mocked(fetch).mockImplementation(() => Promise.reject(new Error('offline')));
-    await mountView();
+    const wrapper = await mountView();
     expect(notify.error).toHaveBeenCalledWith('Error loading invoices');
+    expect(wrapper.find('[data-testid="list-load-error"]').text()).toContain('could not be loaded');
+  });
+
+  it('shows a load-error state when the list request returns not ok', async () => {
+    vi.mocked(fetch).mockImplementation((url: string | URL | Request) => {
+      const urlStr = typeof url === 'string' ? url : String(url);
+      if (urlStr === '/api/invoice?withCancelled=true')
+        return Promise.resolve(jsonResponse({}, false));
+      if (urlStr === '/api/invoice-draft') return Promise.resolve(jsonResponse(drafts));
+      return Promise.resolve(jsonResponse({}, false));
+    });
+    const wrapper = await mountView();
+    expect(notify.error).toHaveBeenCalledWith('Error loading invoices');
+    expect(wrapper.find('[data-testid="list-load-error"]').text()).toContain('could not be loaded');
   });
 });

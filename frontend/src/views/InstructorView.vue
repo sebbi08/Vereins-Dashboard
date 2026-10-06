@@ -40,6 +40,7 @@ const instructors = ref<InstructorListItemDto[]>([]);
 /** Rows left after filtering; the footer sum follows them. */
 const visibleInstructors = ref<InstructorListItemDto[]>([]);
 const loading = ref(false);
+const loadFailed = ref(false);
 
 watch(instructors, (all) => {
   visibleInstructors.value = all;
@@ -65,11 +66,13 @@ function onValueChange(rows: InstructorListItemDto[]) {
 
 async function loadInstructors() {
   loading.value = true;
+  loadFailed.value = false;
   try {
     const res = await fetch('/api/instructor');
     if (!res.ok) throw new Error('load failed');
     instructors.value = await res.json();
   } catch {
+    loadFailed.value = true;
     notify.error('Error loading instructors');
   } finally {
     loading.value = false;
@@ -244,7 +247,12 @@ onMounted(async () => {
             />
           </div>
         </template>
-        <template #empty>No instructors yet.</template>
+        <template #empty>
+          <span v-if="loadFailed" data-testid="list-load-error"
+            >Instructors could not be loaded. Reload the page to try again.</span
+          >
+          <span v-else>No instructors yet.</span>
+        </template>
 
         <Column field="name" header="Name" sortable :show-filter-menu="false">
           <template #body="{ data }">

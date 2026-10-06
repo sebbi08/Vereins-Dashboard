@@ -42,6 +42,7 @@ const notify = useNotify();
 const invoices = ref<InvoiceListItem[]>([]);
 const drafts = ref<InvoiceDraftListItem[]>([]);
 const loading = ref(false);
+const loadFailed = ref(false);
 const selection = ref<InvoiceListItem[]>([]);
 
 function defaultFilters(): DataTableFilterMeta {
@@ -72,11 +73,13 @@ async function downloadSelected() {
 
 async function loadInvoices() {
   loading.value = true;
+  loadFailed.value = false;
   try {
     const res = await fetch('/api/invoice?withCancelled=true');
     if (!res.ok) throw new Error('load failed');
     invoices.value = await res.json();
   } catch {
+    loadFailed.value = true;
     notify.error('Error loading invoices');
   } finally {
     loading.value = false;
@@ -225,7 +228,12 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
             />
           </div>
         </template>
-        <template #empty>No invoices found.</template>
+        <template #empty>
+          <span v-if="loadFailed" data-testid="list-load-error"
+            >Invoices could not be loaded. Reload the page to try again.</span
+          >
+          <span v-else>No invoices found.</span>
+        </template>
 
         <Column selection-mode="multiple" header-style="width: 3rem" />
         <Column

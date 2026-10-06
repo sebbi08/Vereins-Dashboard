@@ -262,7 +262,21 @@ describe('DonationReceiptView', () => {
 
   it('reports a load error', async () => {
     vi.mocked(fetch).mockImplementation(() => Promise.reject(new Error('offline')));
-    await mountView();
+    const wrapper = await mountView();
     expect(notify.error).toHaveBeenCalledWith('Error loading receipts');
+    expect(wrapper.find('[data-testid="list-load-error"]').text()).toContain('could not be loaded');
+  });
+
+  it('shows a load-error state when the list request returns not ok', async () => {
+    vi.mocked(fetch).mockImplementation((url: string | URL | Request) =>
+      Promise.resolve(
+        (typeof url === 'string' ? url : String(url)) === '/api/donation-receipt?withCancelled=true'
+          ? jsonResponse({}, false)
+          : jsonResponse({}, false),
+      ),
+    );
+    const wrapper = await mountView();
+    expect(notify.error).toHaveBeenCalledWith('Error loading receipts');
+    expect(wrapper.find('[data-testid="list-load-error"]').text()).toContain('could not be loaded');
   });
 });

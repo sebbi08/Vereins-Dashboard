@@ -264,7 +264,19 @@ describe('InstructorView', () => {
     fetchMock.mockImplementation((url: string, init?: RequestInit) =>
       url === '/api/instructor' ? Promise.reject(new Error('offline')) : defaultFetch(url, init),
     );
-    await mountView();
+    const wrapper = await mountView();
     expect(notify.error).toHaveBeenCalledWith('Error loading instructors');
+    expect(wrapper.find('[data-testid="list-load-error"]').text()).toContain('could not be loaded');
+  });
+
+  it('shows a load-error state when the list request returns not ok', async () => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      url === '/api/instructor'
+        ? Promise.resolve(jsonResponse({}, false))
+        : defaultFetch(url, init),
+    );
+    const wrapper = await mountView();
+    expect(notify.error).toHaveBeenCalledWith('Error loading instructors');
+    expect(wrapper.find('[data-testid="list-load-error"]').text()).toContain('could not be loaded');
   });
 });
