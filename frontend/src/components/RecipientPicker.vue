@@ -1,6 +1,12 @@
 <script setup lang="ts">
+import AutoComplete, {
+  type AutoCompleteCompleteEvent,
+  type AutoCompleteOptionSelectEvent,
+} from 'primevue/autocomplete';
+import Button from 'primevue/button';
+import InputText from 'primevue/inputtext';
 import type { InvoiceRecipientDto } from 'shared';
-import { onBeforeUnmount, ref, watch } from 'vue';
+import { ref, watch } from 'vue';
 import { emptyRecipient, fromRecipientDto, type RecipientFormValue } from '../utils/recipientForm';
 
 const props = defineProps<{
@@ -11,9 +17,20 @@ const emit = defineEmits<{
   'update:modelValue': [value: RecipientFormValue];
 }>();
 
+type FieldKey = keyof Omit<RecipientFormValue, 'id'>;
+
+const fields: { key: FieldKey; label: string }[] = [
+  { key: 'salutation', label: 'Salutation' },
+  { key: 'name', label: 'Name' },
+  { key: 'street', label: 'Street' },
+  { key: 'city', label: 'Postal code / City' },
+  { key: 'email', label: 'Email' },
+];
+
 const search = ref(props.modelValue.name);
 const suggestions = ref<InvoiceRecipientDto[]>([]);
-let debounceTimer: ReturnType<typeof setTimeout>;
+/** Bumped by every user action; a search response from an older action is stale. */
+let latestAction = 0;
 
 watch(
   () => props.modelValue.id,
@@ -22,121 +39,118 @@ watch(
   },
 );
 
-function onSearchInput() {
-  clearTimeout(debounceTimer);
-  if (!search.value.trim()) {
+function invalidatePendingSearch() {
+  latestAction++;
+  suggestions.value = [];
+}
+
+async function onComplete(event: AutoCompleteCompleteEvent) {
+  const query = event.query.trim();
+  const action = ++latestAction;
+  if (!query) {
     suggestions.value = [];
     return;
   }
-  debounceTimer = setTimeout(async () => {
-    const query = search.value;
-    try {
-      const res = await fetch(`/api/invoice-recipient?search=${encodeURIComponent(query)}`);
-      if (!res.ok) throw new Error('search failed');
-      const found = (await res.json()) as InvoiceRecipientDto[];
-      // A newer input has made this response stale.
-      if (search.value !== query) return;
-      suggestions.value = found;
-    } catch {
-      suggestions.value = [];
-    }
-  }, 250);
+  try {
+    const res = await fetch(`/api/invoice-recipient?search=${encodeURIComponent(query)}`);
+    if (!res.ok) throw new Error('search failed');
+    const found = (await res.json()) as InvoiceRecipientDto[];
+    if (action === latestAction) suggestions.value = found;
+  } catch {
+    if (action === latestAction) suggestions.value = [];
+  }
 }
 
-onBeforeUnmount(() => clearTimeout(debounceTimer));
+function onSearchInput(value: string | InvoiceRecipientDto | null) {
+  // Picking an option also emits the object here; onSelect handles that case
+  if (typeof value === 'string' || value === null) {
+    search.value = value ?? '';
+    invalidatePendingSearch();
+  }
+}
 
-function select(recipient: InvoiceRecipientDto) {
-  clearTimeout(debounceTimer);
-  suggestions.value = [];
+function onSelect(event: AutoCompleteOptionSelectEvent) {
+  const recipient = event.value as InvoiceRecipientDto;
+  invalidatePendingSearch();
   search.value = recipient.name;
   emit('update:modelValue', fromRecipientDto(recipient));
 }
 
 function startNew() {
-  clearTimeout(debounceTimer);
-  suggestions.value = [];
+  invalidatePendingSearch();
   emit('update:modelValue', { ...emptyRecipient(), name: search.value.trim() });
 }
 
-function update(field: keyof Omit<RecipientFormValue, 'id'>, value: string) {
-  const next = { ...props.modelValue };
-  next[field] = value;
-  emit('update:modelValue', next);
+function update(field: FieldKey, value: string) {
+  emit('update:modelValue', { ...props.modelValue, [field]: value });
 }
-
-const fields: { key: keyof Omit<RecipientFormValue, 'id'>; label: string }[] = [
-  { key: 'salutation', label: 'Salutation' },
-  { key: 'name', label: 'Name' },
-  { key: 'street', label: 'Street' },
-  { key: 'city', label: 'Postal code / City' },
-  { key: 'email', label: 'Email' },
-];
 </script>
 
 <template>
-  <div>
-    <div class="mb-3 relative">
-      <label for="recipient-search" class="block text-sm font-medium text-gray-700 mb-1"
-        >Search or create recipient</label
-      >
-      <div class="flex gap-2">
-        <input
-          id="recipient-search"
-          v-model="search"
+  <div class="stack">
+    <div class="field">
+      <label for="recipient-search">Search or create recipient</label>
+      <div class="row gap-sm recipient-search">
+        <AutoComplete
+          :model-value="search"
+          input-id="recipient-search"
           data-testid="recipient-search"
-          type="text"
+          :suggestions="suggestions"
+          option-label="name"
           placeholder="Enter name…"
-          class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          @input="onSearchInput"
-        />
-        <button
-          type="button"
+          :delay="250"
+          class="recipient-search__input"
+          fluid
+          @complete="onComplete"
+          @option-select="onSelect"
+          @update:model-value="onSearchInput"
+        >
+          <template #option="{ option }">
+            {{ option.name }} — {{ option.street }}, {{ option.city }}
+          </template>
+        </AutoComplete>
+        <Button
+          label="New recipient"
+          icon="pi pi-user-plus"
+          severity="secondary"
+          outlined
           data-testid="recipient-new"
-          class="px-3 py-2 border border-gray-300 rounded-lg text-sm hover:bg-gray-50"
           @click="startNew"
-        >
-          New recipient
-        </button>
-      </div>
-      <div
-        v-if="suggestions.length > 0"
-        class="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-40 overflow-auto"
-      >
-        <button
-          v-for="r in suggestions"
-          :key="r.id"
-          type="button"
-          data-testid="recipient-suggestion"
-          class="w-full text-left px-3 py-2 text-sm hover:bg-blue-50"
-          @click="select(r)"
-        >
-          {{ r.name }} — {{ r.street }}, {{ r.city }}
-        </button>
+        />
       </div>
     </div>
 
-    <p
-      v-if="modelValue.id !== null"
-      data-testid="recipient-linked-hint"
-      class="text-xs text-gray-500 mb-3"
-    >
+    <p v-if="modelValue.id !== null" data-testid="recipient-linked-hint" class="muted hint">
       Linked to an existing recipient. Editing these fields updates that recipient.
     </p>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <div v-for="f in fields" :key="f.key">
-        <label :for="`recipient-${f.key}`" class="block text-sm font-medium text-gray-700 mb-1">{{
-          f.label
-        }}</label>
-        <input
+    <div class="grid-2">
+      <div v-for="f in fields" :key="f.key" class="field">
+        <label :for="`recipient-${f.key}`">{{ f.label }}</label>
+        <InputText
           :id="`recipient-${f.key}`"
           :data-testid="`recipient-${f.key}`"
-          :value="modelValue[f.key]"
-          type="text"
-          class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          @input="update(f.key, ($event.target as HTMLInputElement).value)"
+          :model-value="modelValue[f.key]"
+          fluid
+          @update:model-value="(value: string | undefined) => update(f.key, value ?? '')"
         />
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+.recipient-search {
+  flex-wrap: nowrap;
+}
+
+.recipient-search__input {
+  flex: 1;
+  min-width: 0;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+</style>

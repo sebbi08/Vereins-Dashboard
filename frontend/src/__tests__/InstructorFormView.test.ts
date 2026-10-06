@@ -4,6 +4,7 @@ import type { InstructorDto } from 'shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRoute, useRouter } from 'vue-router';
 import InstructorFormView from '../views/InstructorFormView.vue';
+import { withPrimeVue } from './helpers/primeVue';
 
 vi.mock('vue-router', () => ({
   useRoute: vi.fn(),
@@ -39,7 +40,7 @@ let templates: { type: string }[];
 
 function setup(params: Record<string, string> = {}) {
   (useRoute as ReturnType<typeof vi.fn>).mockReturnValue({ params, query: {} });
-  return mount(InstructorFormView);
+  return mount(InstructorFormView, { global: withPrimeVue() });
 }
 
 async function addMondayBlock(wrapper: VueWrapper, start: string, end: string) {
