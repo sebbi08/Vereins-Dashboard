@@ -1,14 +1,22 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
+import InputNumber from 'primevue/inputnumber';
 import type { InstructorDto } from 'shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRoute, useRouter } from 'vue-router';
+import RecipientPicker from '../components/RecipientPicker.vue';
 import InstructorFormView from '../views/InstructorFormView.vue';
 import { withPrimeVue } from './helpers/primeVue';
 
-vi.mock('vue-router', () => ({
-  useRoute: vi.fn(),
-  useRouter: vi.fn(),
+const { notify, confirmAction } = vi.hoisted(() => ({
+  notify: { success: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  confirmAction: vi.fn(),
+}));
+
+vi.mock('vue-router', () => ({ useRoute: vi.fn(), useRouter: vi.fn() }));
+vi.mock('../composables/useNotify', () => ({ useNotify: () => notify }));
+vi.mock('../composables/useConfirmAction', () => ({
+  useConfirmAction: () => ({ confirmAction }),
 }));
 
 const mockPush = vi.fn();
@@ -38,9 +46,46 @@ function jsonResponse(body: unknown, ok = true): Response {
 let fetchMock: ReturnType<typeof vi.fn>;
 let templates: { type: string }[];
 
-function setup(params: Record<string, string> = {}) {
-  (useRoute as ReturnType<typeof vi.fn>).mockReturnValue({ params, query: {} });
-  return mount(InstructorFormView, { global: withPrimeVue() });
+const defaultFetch = (url: string, init?: RequestInit): Promise<Response> => {
+  if (url === '/api/instructor/settings') {
+    return Promise.resolve(jsonResponse({ weeksPerMonth: 3.25, invoiceTemplate: null }));
+  }
+  if (url === '/api/instructor/5' && !init?.method) return Promise.resolve(jsonResponse(existing));
+  if (url === '/api/instructor' && init?.method === 'POST') {
+    return Promise.resolve(jsonResponse({ id: 9 }));
+  }
+  if (url === '/api/instructor/5' && init?.method === 'PUT') {
+    return Promise.resolve(jsonResponse({ id: 5 }));
+  }
+  if (url === '/api/instructor/5' && init?.method === 'DELETE') {
+    return Promise.resolve({ ok: true, status: 204 } as Response);
+  }
+  if (url === '/api/templates') return Promise.resolve(jsonResponse(templates));
+  return Promise.resolve(jsonResponse({}, false));
+};
+
+async function setup(params: Record<string, string> = {}) {
+  vi.mocked(useRoute).mockReturnValue({ params, query: {} } as unknown as ReturnType<
+    typeof useRoute
+  >);
+  const wrapper = mount(InstructorFormView, { attachTo: document.body, global: withPrimeVue() });
+  await flushPromises();
+  return wrapper;
+}
+
+function numberInput(wrapper: VueWrapper, testid: 'hourly-rate' | 'months') {
+  return wrapper
+    .findAllComponents(InputNumber)
+    .find((c) => c.attributes('data-testid') === testid)!;
+}
+
+async function setNumber(
+  wrapper: VueWrapper,
+  testid: 'hourly-rate' | 'months',
+  value: number | null,
+) {
+  numberInput(wrapper, testid).vm.$emit('update:modelValue', value);
+  await flushPromises();
 }
 
 async function addMondayBlock(wrapper: VueWrapper, start: string, end: string) {
@@ -51,45 +96,56 @@ async function addMondayBlock(wrapper: VueWrapper, start: string, end: string) {
   await last.find('[data-testid="block-end"]').setValue(end);
 }
 
-describe('InstructorFormView', () => {
-  beforeEach(() => {
-    fetchMock = vi.fn((url: string, init?: RequestInit) => {
-      if (url === '/api/instructor/settings') {
-        return Promise.resolve(jsonResponse({ weeksPerMonth: 3.25 }));
-      }
-      if (url === '/api/instructor/5' && !init?.method) {
-        return Promise.resolve(jsonResponse(existing));
-      }
-      if (url === '/api/instructor' && init?.method === 'POST') {
-        return Promise.resolve(jsonResponse({ id: 9 }));
-      }
-      if (url === '/api/instructor/5' && init?.method === 'DELETE') {
-        return Promise.resolve({ ok: true, status: 204 } as Response);
-      }
-      if (url === '/api/templates') return Promise.resolve(jsonResponse(templates));
-      return Promise.resolve(jsonResponse({}, false));
-    });
-    templates = [{ type: 'RECHNUNG' }];
-    vi.stubGlobal('fetch', fetchMock);
-    vi.stubGlobal(
-      'confirm',
-      vi.fn(() => true),
-    );
-    (useRouter as ReturnType<typeof vi.fn>).mockReturnValue({ push: mockPush });
-    setActivePinia(createPinia());
-    mockPush.mockReset();
-  });
+async function fillValidNew(wrapper: VueWrapper) {
+  await wrapper.find('[data-testid="recipient-name"]').setValue('Anna Alt');
+  await wrapper.find('[data-testid="recipient-street"]').setValue('Hauptstr. 1');
+  await wrapper.find('[data-testid="recipient-city"]').setValue('12345 Berlin');
+  await setNumber(wrapper, 'hourly-rate', 12.5);
+  await setNumber(wrapper, 'months', 6);
+  await addMondayBlock(wrapper, '08:00', '12:00');
+}
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
+function requestsWith(method: string) {
+  return fetchMock.mock.calls.filter(([, init]) => init?.method === method);
+}
+
+beforeEach(() => {
+  templates = [{ type: 'RECHNUNG' }];
+  fetchMock = vi.fn(defaultFetch);
+  vi.stubGlobal('fetch', fetchMock);
+  vi.mocked(useRouter).mockReturnValue({ push: mockPush } as unknown as ReturnType<
+    typeof useRouter
+  >);
+  mockPush.mockReset();
+  confirmAction.mockReset().mockResolvedValue(true);
+  Object.values(notify).forEach((fn) => fn.mockReset());
+  setActivePinia(createPinia());
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('InstructorFormView', () => {
+  it('titles the new form and shows the required-field errors', async () => {
+    const wrapper = await setup();
+    expect(wrapper.find('[data-testid="page-title"]').text()).toBe('New instructor');
+    expect(wrapper.find('[data-testid="recipient-error"]').text()).toBe(
+      'Recipient name is required',
+    );
+    expect(wrapper.find('[data-testid="hourly-rate-error"]').text()).toBe(
+      'Hourly rate must be greater than 0',
+    );
+    expect(wrapper.find('[data-testid="save"]').attributes('disabled')).toBeDefined();
   });
 
   it('updates the live summary while editing', async () => {
-    const wrapper = setup();
-    await flushPromises();
+    const wrapper = await setup();
+    expect(wrapper.text()).toContain('Summary (net, 3,25 weeks/month)');
+    expect(wrapper.find('[data-testid="summary-total"]').text()).toBe('—');
 
-    await wrapper.find('[data-testid="hourly-rate"]').setValue('12');
-    await wrapper.find('[data-testid="months"]').setValue('6');
+    await setNumber(wrapper, 'hourly-rate', 12);
+    await setNumber(wrapper, 'months', 6);
     await addMondayBlock(wrapper, '08:00', '15:30');
 
     expect(wrapper.find('[data-testid="summary-hours"]').text()).toContain('7,5');
@@ -97,11 +153,26 @@ describe('InstructorFormView', () => {
     expect(wrapper.find('[data-testid="summary-total"]').text()).toContain('1.755,00');
   });
 
+  it('stores a euro rate with decimals as cents', async () => {
+    const wrapper = await setup();
+    await setNumber(wrapper, 'hourly-rate', 12.5);
+    expect((wrapper.vm as unknown as { hourlyRateCents: number }).hourlyRateCents).toBe(1250);
+    await setNumber(wrapper, 'hourly-rate', null);
+    expect((wrapper.vm as unknown as { hourlyRateCents: number }).hourlyRateCents).toBe(0);
+  });
+
+  it('reports months below 1', async () => {
+    const wrapper = await setup();
+    await setNumber(wrapper, 'months', null);
+    expect(wrapper.find('[data-testid="months-error"]').text()).toBe(
+      'Months must be a whole number of at least 1',
+    );
+  });
+
   it('shows an overlap error and disables save', async () => {
-    const wrapper = setup();
-    await flushPromises();
+    const wrapper = await setup();
     await wrapper.find('[data-testid="recipient-name"]').setValue('Anna Alt');
-    await wrapper.find('[data-testid="hourly-rate"]').setValue('12');
+    await setNumber(wrapper, 'hourly-rate', 12);
     await addMondayBlock(wrapper, '08:00', '12:00');
     await addMondayBlock(wrapper, '11:00', '13:00');
 
@@ -109,33 +180,21 @@ describe('InstructorFormView', () => {
     expect(wrapper.find('[data-testid="save"]').attributes('disabled')).toBeDefined();
   });
 
-  it('shows a rate error for unparseable input', async () => {
-    const wrapper = setup();
-    await flushPromises();
-
-    await wrapper.find('[data-testid="hourly-rate"]').setValue('abc');
-
-    expect(wrapper.find('[data-testid="hourly-rate-error"]').text()).toBe(
-      'Hourly rate must be greater than 0',
-    );
+  it('Save is the submit button of the form so Enter saves', async () => {
+    const wrapper = await setup();
+    expect(wrapper.find('[data-testid="save"]').attributes('type')).toBe('submit');
   });
 
   it('posts the expected body for a new instructor and returns to the list', async () => {
-    const wrapper = setup();
-    await flushPromises();
-    await wrapper.find('[data-testid="recipient-name"]').setValue('Anna Alt');
-    await wrapper.find('[data-testid="recipient-street"]').setValue('Hauptstr. 1');
-    await wrapper.find('[data-testid="recipient-city"]').setValue('12345 Berlin');
-    await wrapper.find('[data-testid="hourly-rate"]').setValue('12,50');
-    await wrapper.find('[data-testid="months"]').setValue('6');
-    await addMondayBlock(wrapper, '08:00', '12:00');
+    const wrapper = await setup();
+    await fillValidNew(wrapper);
 
     await wrapper.find('form').trigger('submit');
     await flushPromises();
 
-    const post = fetchMock.mock.calls.find(([, init]) => init?.method === 'POST');
-    expect(post?.[0]).toBe('/api/instructor');
-    expect(JSON.parse(String(post?.[1]?.body))).toEqual({
+    const [post] = requestsWith('POST');
+    expect(post[0]).toBe('/api/instructor');
+    expect(JSON.parse(String(post[1].body))).toEqual({
       recipientData: {
         name: 'Anna Alt',
         street: 'Hauptstr. 1',
@@ -147,80 +206,133 @@ describe('InstructorFormView', () => {
       months: 6,
       timeBlocks: [{ weekday: 'MO', start: '08:00', end: '12:00', breaks: [] }],
     });
+    expect(notify.success).toHaveBeenCalledWith('Instructor saved');
     expect(mockPush).toHaveBeenCalledWith('/instructor');
   });
 
-  it('loads an existing instructor and offers invoice creation until edited', async () => {
-    const wrapper = setup({ id: '5' });
+  it('keeps the linked recipient id and sends the edited fields', async () => {
+    const wrapper = await setup();
+    wrapper.findComponent(RecipientPicker).vm.$emit('update:modelValue', {
+      id: 7,
+      name: 'Anna Alt',
+      street: 'Hauptstr. 1',
+      city: '12345 Berlin',
+      email: '',
+      salutation: '',
+    });
+    await flushPromises();
+    await wrapper.find('[data-testid="recipient-street"]').setValue('Neue Str. 2');
+    await setNumber(wrapper, 'hourly-rate', 12);
+    await addMondayBlock(wrapper, '08:00', '12:00');
+
+    await wrapper.find('form').trigger('submit');
     await flushPromises();
 
-    expect((wrapper.find('[data-testid="hourly-rate"]').element as HTMLInputElement).value).toBe(
-      '12,00',
+    const body = JSON.parse(String(requestsWith('POST')[0][1].body));
+    expect(body.recipientId).toBe(7);
+    expect(body.recipientData).toMatchObject({ name: 'Anna Alt', street: 'Neue Str. 2' });
+  });
+
+  it('toasts the server error when saving fails', async () => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      init?.method === 'POST'
+        ? Promise.resolve(jsonResponse({ error: 'Recipient already has an instructor' }, false))
+        : defaultFetch(url, init),
     );
+    const wrapper = await setup();
+    await fillValidNew(wrapper);
+
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    expect(notify.error).toHaveBeenCalledWith('Recipient already has an instructor');
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('loads an existing instructor and offers invoice creation until edited', async () => {
+    const wrapper = await setup({ id: '5' });
+
+    expect(wrapper.find('[data-testid="page-title"]').text()).toBe('Edit instructor');
+    expect(numberInput(wrapper, 'hourly-rate').props('modelValue')).toBe(12);
+    expect(numberInput(wrapper, 'months').props('modelValue')).toBe(6);
     const createInvoice = wrapper.find('[data-testid="create-invoice"]');
     expect(createInvoice.attributes('disabled')).toBeUndefined();
     await createInvoice.trigger('click');
     expect(mockPush).toHaveBeenCalledWith('/invoice/new?fromInstructor=5');
 
-    await wrapper.find('[data-testid="months"]').setValue('3');
-    expect(wrapper.find('[data-testid="create-invoice"]').attributes('disabled')).toBeDefined();
+    await setNumber(wrapper, 'months', 3);
+    const blocked = wrapper.find('[data-testid="create-invoice"]');
+    expect(blocked.attributes('disabled')).toBeDefined();
+    expect(blocked.attributes('title')).toBe('Save your changes first');
   });
 
-  it('Save is the submit button of the form so Enter saves', async () => {
-    const wrapper = setup();
-    await flushPromises();
-
-    expect(wrapper.find('[data-testid="save"]').attributes('type')).toBe('submit');
-  });
-
-  it('disables invoice creation without an active invoice template', async () => {
-    templates = [];
-    const wrapper = setup({ id: '5' });
-    await flushPromises();
-
-    const createInvoice = wrapper.find('[data-testid="create-invoice"]');
-    expect(createInvoice.attributes('disabled')).toBeDefined();
-    expect(createInvoice.attributes('title')).toBe('No active invoice template');
-
-    await wrapper.find('[data-testid="months"]').setValue('3');
-    expect(wrapper.find('[data-testid="create-invoice"]').attributes('title')).toBe(
-      'Save your changes first',
-    );
-  });
-
-  it('deletes after confirmation', async () => {
-    const wrapper = setup({ id: '5' });
-    await flushPromises();
-
-    await wrapper.find('[data-testid="delete"]').trigger('click');
-    await flushPromises();
-
-    expect(fetchMock).toHaveBeenCalledWith('/api/instructor/5', { method: 'DELETE' });
-    expect(mockPush).toHaveBeenCalledWith('/instructor');
-  });
-
-  it('shows the server error when saving fails', async () => {
-    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
-      if (url === '/api/instructor/settings')
-        return Promise.resolve(jsonResponse({ weeksPerMonth: 3.25 }));
-      if (init?.method === 'POST') {
-        return Promise.resolve(
-          jsonResponse({ error: 'Recipient already has an instructor' }, false),
-        );
-      }
-      return Promise.resolve(jsonResponse({}, false));
-    });
-    const wrapper = setup();
-    await flushPromises();
-    await wrapper.find('[data-testid="recipient-name"]').setValue('Anna Alt');
-    await wrapper.find('[data-testid="hourly-rate"]').setValue('12');
+  it('updates an existing instructor with PUT', async () => {
+    const wrapper = await setup({ id: '5' });
+    await setNumber(wrapper, 'months', 3);
 
     await wrapper.find('form').trigger('submit');
     await flushPromises();
 
-    expect(wrapper.find('[data-testid="form-error"]').text()).toBe(
-      'Recipient already has an instructor',
+    const [put] = requestsWith('PUT');
+    expect(put[0]).toBe('/api/instructor/5');
+    expect(JSON.parse(String(put[1].body))).toMatchObject({ recipientId: 7, months: 3 });
+  });
+
+  it('disables invoice creation without an active invoice template', async () => {
+    templates = [];
+    const wrapper = await setup({ id: '5' });
+
+    const createInvoice = wrapper.find('[data-testid="create-invoice"]');
+    expect(createInvoice.attributes('disabled')).toBeDefined();
+    expect(createInvoice.attributes('title')).toBe('No active invoice template');
+  });
+
+  it('deletes after confirmation', async () => {
+    const wrapper = await setup({ id: '5' });
+
+    await wrapper.find('[data-testid="delete"]').trigger('click');
+    await flushPromises();
+
+    expect(confirmAction).toHaveBeenCalledWith(
+      expect.objectContaining({ header: 'Delete instructor', danger: true }),
     );
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith('/api/instructor/5', { method: 'DELETE' });
+    expect(notify.success).toHaveBeenCalledWith('Instructor deleted');
+    expect(mockPush).toHaveBeenCalledWith('/instructor');
+  });
+
+  it('does not delete when the confirmation is declined', async () => {
+    confirmAction.mockResolvedValue(false);
+    const wrapper = await setup({ id: '5' });
+
+    await wrapper.find('[data-testid="delete"]').trigger('click');
+    await flushPromises();
+
+    expect(requestsWith('DELETE')).toHaveLength(0);
+  });
+
+  it('blocks saving when the instructor could not be loaded', async () => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      url === '/api/instructor/5' && !init?.method
+        ? Promise.resolve(jsonResponse({ error: 'Not found' }, false))
+        : defaultFetch(url, init),
+    );
+    const wrapper = await setup({ id: '5' });
+
+    expect(wrapper.find('[data-testid="load-error"]').text()).toContain('Instructor not found');
+    expect(wrapper.find('[data-testid="save"]').attributes('disabled')).toBeDefined();
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+    expect(requestsWith('PUT')).toHaveLength(0);
+  });
+
+  it('reports a network error while loading', async () => {
+    fetchMock.mockImplementation((url: string, init?: RequestInit) =>
+      url === '/api/instructor/5' ? Promise.reject(new Error('offline')) : defaultFetch(url, init),
+    );
+    const wrapper = await setup({ id: '5' });
+    expect(wrapper.find('[data-testid="load-error"]').text()).toContain(
+      'Network error while loading',
+    );
   });
 });

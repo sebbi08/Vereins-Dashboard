@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import Button from 'primevue/button';
+import InputNumber from 'primevue/inputnumber';
+import Message from 'primevue/message';
 import {
   calculateInstructorRent,
   DEFAULT_WEEKS_PER_MONTH,
@@ -11,9 +14,13 @@ import {
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import RecipientPicker from '../components/RecipientPicker.vue';
-import { useAppStore } from '../stores/app';
+import FormSection from '../components/ui/FormSection.vue';
+import PageHeader from '../components/ui/PageHeader.vue';
 import WeeklySchedule from '../components/WeeklySchedule.vue';
-import { centsToEuroInput, formatCents, formatHours, parseEuroToCents } from '../utils/format';
+import { useConfirmAction } from '../composables/useConfirmAction';
+import { useNotify } from '../composables/useNotify';
+import { useAppStore } from '../stores/app';
+import { formatCents, formatHours } from '../utils/format';
 import {
   emptyRecipient,
   fromRecipientDto,
@@ -24,23 +31,32 @@ import {
 const route = useRoute();
 const router = useRouter();
 const store = useAppStore();
+const notify = useNotify();
+const { confirmAction } = useConfirmAction();
 
 const instructorId = route.params.id ? Number(route.params.id) : null;
 const isEdit = instructorId !== null;
 
 const recipient = ref<RecipientFormValue>(emptyRecipient());
-const hourlyRate = ref('');
-const months = ref<number | string>(1);
+const hourlyRateCents = ref(0);
+const months = ref<number | null>(1);
 const timeBlocks = ref<TimeBlock[]>([]);
 const weeksPerMonth = ref(DEFAULT_WEEKS_PER_MONTH);
 
-const error = ref('');
+const loadError = ref('');
 const saving = ref(false);
 const savedSnapshot = ref('');
 
+const hourlyRateEuros = computed<number | null>({
+  get: () => (hourlyRateCents.value > 0 ? hourlyRateCents.value / 100 : null),
+  set: (euros) => {
+    hourlyRateCents.value = euros === null ? 0 : Math.round(euros * 100);
+  },
+});
+
 const rentInputs = computed<InstructorRentInputs>(() => ({
-  hourlyRateCents: parseEuroToCents(hourlyRate.value),
-  months: Number(months.value),
+  hourlyRateCents: hourlyRateCents.value,
+  months: months.value ?? 0,
   timeBlocks: timeBlocks.value,
 }));
 const issues = computed(() => validateInstructorRent(rentInputs.value));
@@ -50,19 +66,21 @@ const recipientError = computed(() =>
 const result = computed(() =>
   issues.value.length === 0 ? calculateInstructorRent(rentInputs.value, weeksPerMonth.value) : null,
 );
-const canSave = computed(() => issues.value.length === 0 && !recipientError.value && !saving.value);
+const canSave = computed(
+  () => issues.value.length === 0 && !recipientError.value && !saving.value && !loadError.value,
+);
+
+const pageTitle = isEdit ? 'Edit instructor' : 'New instructor';
+const summaryTitle = computed(
+  () => `Summary (net, ${String(weeksPerMonth.value).replace('.', ',')} weeks/month)`,
+);
 
 function fieldIssue(path: string): string {
   return issues.value.find((issue) => issue.path === path)?.message ?? '';
 }
 
 function snapshot(): string {
-  return JSON.stringify([
-    recipient.value,
-    hourlyRate.value,
-    Number(months.value),
-    timeBlocks.value,
-  ]);
+  return JSON.stringify([recipient.value, hourlyRateCents.value, months.value, timeBlocks.value]);
 }
 const isDirty = computed(() => snapshot() !== savedSnapshot.value);
 const createInvoiceBlockedReason = computed(() => {
@@ -76,16 +94,15 @@ async function loadSettings() {
   if (res.ok) weeksPerMonth.value = ((await res.json()) as InstructorSettingsDto).weeksPerMonth;
 }
 
-async function loadInstructor() {
-  if (!isEdit) return;
-  const res = await fetch(`/api/instructor/${instructorId}`);
+async function loadInstructor(id: number) {
+  const res = await fetch(`/api/instructor/${id}`);
   if (!res.ok) {
-    error.value = 'Instructor not found';
+    loadError.value = 'Instructor not found';
     return;
   }
   const dto = (await res.json()) as InstructorDto;
   recipient.value = fromRecipientDto(dto.recipient);
-  hourlyRate.value = centsToEuroInput(dto.hourlyRateCents);
+  hourlyRateCents.value = dto.hourlyRateCents;
   months.value = dto.months;
   timeBlocks.value = dto.timeBlocks;
   savedSnapshot.value = snapshot();
@@ -93,7 +110,6 @@ async function loadInstructor() {
 
 async function save() {
   if (!canSave.value) return;
-  error.value = '';
   saving.value = true;
   try {
     const body = {
@@ -107,25 +123,36 @@ async function save() {
       body: JSON.stringify(body),
     });
     if (!res.ok) {
-      error.value = ((await res.json()) as { error?: string }).error ?? 'Saving failed';
+      const result = (await res.json().catch(() => ({}))) as { error?: string };
+      notify.error(result.error ?? 'Saving failed');
       return;
     }
+    notify.success('Instructor saved');
     router.push('/instructor');
   } catch {
-    error.value = 'Saving failed';
+    notify.error('Saving failed');
   } finally {
     saving.value = false;
   }
 }
 
 async function remove() {
-  if (!isEdit || !confirm('Delete this instructor? The recipient is kept.')) return;
-  const res = await fetch(`/api/instructor/${instructorId}`, { method: 'DELETE' });
-  if (!res.ok) {
-    error.value = 'Deleting failed';
-    return;
+  if (!isEdit) return;
+  const confirmed = await confirmAction({
+    message: 'Delete this instructor? The recipient is kept.',
+    header: 'Delete instructor',
+    acceptLabel: 'Delete',
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    const res = await fetch(`/api/instructor/${instructorId}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('delete failed');
+    notify.success('Instructor deleted');
+    router.push('/instructor');
+  } catch {
+    notify.error('Deleting failed');
   }
-  router.push('/instructor');
 }
 
 function createInvoice() {
@@ -133,142 +160,186 @@ function createInvoice() {
 }
 
 onMounted(async () => {
-  await Promise.all([
-    loadSettings(),
-    loadInstructor(),
-    store.invoiceTemplateAvailable === null ? store.checkTemplates() : Promise.resolve(),
-  ]);
+  try {
+    await Promise.all([
+      loadSettings(),
+      instructorId !== null ? loadInstructor(instructorId) : Promise.resolve(),
+      store.invoiceTemplateAvailable === null ? store.checkTemplates() : Promise.resolve(),
+    ]);
+  } catch {
+    loadError.value = 'Network error while loading';
+  }
 });
 </script>
 
 <template>
-  <div>
-    <h2 class="text-2xl font-bold text-gray-800 mb-6">
-      {{ isEdit ? 'Edit instructor' : 'New instructor' }}
-    </h2>
+  <div class="page">
+    <PageHeader :title="pageTitle">
+      <template #actions>
+        <Button
+          label="Back"
+          icon="pi pi-arrow-left"
+          text
+          severity="secondary"
+          @click="router.push('/instructor')"
+        />
+      </template>
+    </PageHeader>
 
-    <div
-      v-if="error"
-      data-testid="form-error"
-      class="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700"
-    >
-      {{ error }}
-    </div>
+    <Message v-if="loadError" severity="error" data-testid="load-error" class="load-error">
+      {{ loadError }}
+    </Message>
 
-    <form class="space-y-6" @submit.prevent="save">
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-4">Recipient</h3>
+    <form @submit.prevent="save">
+      <FormSection title="Recipient">
         <RecipientPicker v-model="recipient" />
-        <p v-if="recipientError" class="text-xs text-red-600 mt-2">{{ recipientError }}</p>
-      </div>
+        <Message
+          v-if="recipientError"
+          severity="error"
+          size="small"
+          variant="simple"
+          data-testid="recipient-error"
+          class="recipient-error"
+        >
+          {{ recipientError }}
+        </Message>
+      </FormSection>
 
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-4">Rent</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label for="hourly-rate" class="block text-sm font-medium text-gray-700 mb-1"
-              >Hourly rate (€, net)</label
-            >
-            <input
-              id="hourly-rate"
-              v-model="hourlyRate"
+      <FormSection title="Rent">
+        <div class="grid-2">
+          <div class="field">
+            <label for="hourly-rate">Hourly rate (net)</label>
+            <InputNumber
+              v-model="hourlyRateEuros"
+              input-id="hourly-rate"
               data-testid="hourly-rate"
-              type="text"
-              inputmode="decimal"
-              placeholder="12,50"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              mode="currency"
+              currency="EUR"
+              locale="de-DE"
+              placeholder="12,50 €"
+              :invalid="!!fieldIssue('hourlyRateCents')"
+              fluid
             />
-            <p
+            <Message
               v-if="fieldIssue('hourlyRateCents')"
+              severity="error"
+              size="small"
+              variant="simple"
               data-testid="hourly-rate-error"
-              class="text-xs text-red-600 mt-1"
             >
               {{ fieldIssue('hourlyRateCents') }}
-            </p>
+            </Message>
           </div>
-          <div>
-            <label for="months" class="block text-sm font-medium text-gray-700 mb-1">Months</label>
-            <input
-              id="months"
+          <div class="field">
+            <label for="months">Months</label>
+            <InputNumber
               v-model="months"
+              input-id="months"
               data-testid="months"
-              type="number"
-              min="1"
-              step="1"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :min="1"
+              :use-grouping="false"
+              :invalid="!!fieldIssue('months')"
+              fluid
             />
-            <p
+            <Message
               v-if="fieldIssue('months')"
+              severity="error"
+              size="small"
+              variant="simple"
               data-testid="months-error"
-              class="text-xs text-red-600 mt-1"
             >
               {{ fieldIssue('months') }}
-            </p>
+            </Message>
           </div>
         </div>
-      </div>
+      </FormSection>
 
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-4">Weekly schedule</h3>
+      <FormSection title="Weekly schedule">
         <WeeklySchedule v-model="timeBlocks" :issues="issues" />
-      </div>
+      </FormSection>
 
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 class="font-semibold text-gray-800 mb-4">
-          Summary (net, {{ String(weeksPerMonth).replace('.', ',') }} weeks/month)
-        </h3>
-        <dl class="grid grid-cols-3 gap-4 text-sm">
+      <FormSection :title="summaryTitle">
+        <dl class="facts">
           <div>
-            <dt class="text-gray-500">Hours per week</dt>
-            <dd data-testid="summary-hours" class="font-medium">
+            <dt>Hours per week</dt>
+            <dd data-testid="summary-hours" class="strong">
               {{ result ? `${formatHours(result.netMinutesPerWeek)} h` : '—' }}
             </dd>
           </div>
           <div>
-            <dt class="text-gray-500">Per month</dt>
-            <dd data-testid="summary-monthly" class="font-medium">
+            <dt>Per month</dt>
+            <dd data-testid="summary-monthly" class="strong">
               {{ result ? formatCents(result.monthlyCents) : '—' }}
             </dd>
           </div>
           <div>
-            <dt class="text-gray-500">Total</dt>
-            <dd data-testid="summary-total" class="font-semibold">
+            <dt>Total</dt>
+            <dd data-testid="summary-total" class="strong total">
               {{ result ? formatCents(result.totalCents) : '—' }}
             </dd>
           </div>
         </dl>
-      </div>
+      </FormSection>
 
-      <div class="flex gap-3">
-        <button
+      <div class="form-actions">
+        <Button
           type="submit"
-          data-testid="save"
+          label="Save"
+          icon="pi pi-check"
           :disabled="!canSave"
-          class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          Save
-        </button>
-        <button
+          :loading="saving"
+          data-testid="save"
+        />
+        <Button
           v-if="isEdit"
-          type="button"
-          data-testid="create-invoice"
+          label="Create invoice"
+          icon="pi pi-file"
+          severity="secondary"
+          outlined
           :disabled="!!createInvoiceBlockedReason"
           :title="createInvoiceBlockedReason"
-          class="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+          data-testid="create-invoice"
           @click="createInvoice"
-        >
-          Create invoice
-        </button>
-        <button
+        />
+        <Button
           v-if="isEdit"
-          type="button"
+          label="Delete"
+          icon="pi pi-trash"
+          severity="danger"
+          outlined
           data-testid="delete"
-          class="px-4 py-2 border border-red-300 text-red-700 rounded-lg text-sm font-medium hover:bg-red-50 ml-auto"
+          class="form-actions__delete"
           @click="remove"
-        >
-          Delete
-        </button>
+        />
       </div>
     </form>
   </div>
 </template>
+
+<style scoped>
+.load-error {
+  margin-bottom: 1rem;
+}
+
+.recipient-error {
+  margin-top: 0.5rem;
+}
+
+.strong {
+  font-weight: 600;
+}
+
+.total {
+  font-size: 1.125rem;
+}
+
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.form-actions__delete {
+  margin-left: auto;
+}
+</style>
