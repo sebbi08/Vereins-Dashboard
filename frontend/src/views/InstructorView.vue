@@ -8,7 +8,6 @@ import DataTable, {
 } from 'primevue/datatable';
 import IconField from 'primevue/iconfield';
 import InputIcon from 'primevue/inputicon';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import Message from 'primevue/message';
 import Panel from 'primevue/panel';
@@ -22,6 +21,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import InvoiceTextSettings from '../components/InvoiceTextSettings.vue';
 import AmountRangeFilter from '../components/ui/AmountRangeFilter.vue';
+import DecimalInput from '../components/ui/DecimalInput.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
 import { useNotify } from '../composables/useNotify';
 import { useTableFilters } from '../composables/useTableFilters';
@@ -166,12 +166,10 @@ onMounted(async () => {
             <div class="row gap-sm weeks-row">
               <div class="field">
                 <label for="weeks-per-month">Weeks per month</label>
-                <InputNumber
+                <DecimalInput
                   v-model="weeksPerMonth"
                   input-id="weeks-per-month"
                   data-testid="weeks-per-month"
-                  locale="de-DE"
-                  :min-fraction-digits="0"
                   :max-fraction-digits="2"
                   :invalid="!!weeksError"
                   class="weeks-input"
@@ -333,7 +331,7 @@ onMounted(async () => {
   align-items: flex-end;
 }
 
-.weeks-input :deep(input) {
+.weeks-input {
   width: 8rem;
 }
 

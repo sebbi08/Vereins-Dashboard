@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import InputNumber from 'primevue/inputnumber';
 import type { AmountRange } from '../../utils/tableFilters';
+import DecimalInput from './DecimalInput.vue';
 
 const props = defineProps<{
   modelValue: AmountRange | undefined;
@@ -23,22 +23,16 @@ function update(index: 0 | 1, value: number | null) {
 
 <template>
   <div class="amount-range">
-    <InputNumber
+    <DecimalInput
       :model-value="modelValue?.[0] ?? null"
-      mode="currency"
-      currency="EUR"
-      locale="de-DE"
       size="small"
       placeholder="from"
       :aria-label="`${label} from`"
       data-testid="amount-from"
       @update:model-value="(value: number | null) => update(0, value)"
     />
-    <InputNumber
+    <DecimalInput
       :model-value="modelValue?.[1] ?? null"
-      mode="currency"
-      currency="EUR"
-      locale="de-DE"
       size="small"
       placeholder="to"
       :aria-label="`${label} to`"
@@ -55,13 +49,8 @@ function update(index: 0 | 1, value: number | null) {
   width: 9.5rem;
 }
 
-.amount-range :deep(.p-inputnumber) {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.amount-range :deep(input) {
-  width: 100%;
-  min-width: 0;
+.amount-range > * {
+  flex: 1;
+  min-width: 4.5rem;
 }
 </style>

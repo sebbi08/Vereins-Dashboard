@@ -1,5 +1,4 @@
 import { mount } from '@vue/test-utils';
-import InputNumber from 'primevue/inputnumber';
 import { describe, expect, it } from 'vitest';
 import AmountRangeFilter from '../components/ui/AmountRangeFilter.vue';
 import { withPrimeVue } from './helpers/primeVue';
@@ -20,21 +19,27 @@ describe('AmountRangeFilter', () => {
     expect(wrapper.html()).toContain('Amount to');
   });
 
-  it('emits the range when one end changes', () => {
+  it('emits the range when one end changes', async () => {
     const wrapper = mountFilter(null);
-    wrapper.findAllComponents(InputNumber)[0].vm.$emit('update:modelValue', 10);
+    await wrapper.find('[data-testid="amount-from"] input').setValue('10');
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([[10, null]]);
   });
 
-  it('keeps the other end', () => {
+  it('emits a decimal typed with a dot', async () => {
+    const wrapper = mountFilter(null);
+    await wrapper.find('[data-testid="amount-from"] input').setValue('12.5');
+    expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([[12.5, null]]);
+  });
+
+  it('keeps the other end', async () => {
     const wrapper = mountFilter([10, null]);
-    wrapper.findAllComponents(InputNumber)[1].vm.$emit('update:modelValue', 50);
+    await wrapper.find('[data-testid="amount-to"] input').setValue('50');
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([[10, 50]]);
   });
 
-  it('emits null when both ends are cleared', () => {
+  it('emits null when both ends are cleared', async () => {
     const wrapper = mountFilter([10, null]);
-    wrapper.findAllComponents(InputNumber)[0].vm.$emit('update:modelValue', null);
+    await wrapper.find('[data-testid="amount-from"] input').setValue('');
     expect(wrapper.emitted('update:modelValue')?.[0]).toEqual([null]);
   });
 });

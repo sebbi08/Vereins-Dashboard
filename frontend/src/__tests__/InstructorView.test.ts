@@ -1,7 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import type { DataTableFilterMeta } from 'primevue/datatable';
-import InputNumber from 'primevue/inputnumber';
 import type { InstructorListItemDto } from 'shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRouter } from 'vue-router';
@@ -86,14 +85,8 @@ function rows(wrapper: VueWrapper) {
   return wrapper.findAll('.instructor-row');
 }
 
-function weeksInput(wrapper: VueWrapper) {
-  return wrapper
-    .findAllComponents(InputNumber)
-    .find((c) => c.attributes('data-testid') === 'weeks-per-month')!;
-}
-
-async function setWeeks(wrapper: VueWrapper, value: number | null) {
-  weeksInput(wrapper).vm.$emit('update:modelValue', value);
+async function setWeeks(wrapper: VueWrapper, value: string) {
+  await wrapper.find('#weeks-per-month').setValue(value);
   await flushPromises();
 }
 
@@ -165,14 +158,14 @@ describe('InstructorView', () => {
     const panel = wrapper.find('[data-testid="calculation-settings"]');
     expect(panel.text()).toContain('Calculation settings (3,25 weeks/month)');
     expect(panel.find('[data-testid="invoice-template"]').exists()).toBe(true);
-    expect(weeksInput(wrapper).props('modelValue')).toBe(3.25);
+    expect((wrapper.find('#weeks-per-month').element as HTMLInputElement).value).toBe('3,25');
   });
 
   it('saves weeks per month, updates the header and reloads the list', async () => {
     const wrapper = await mountView();
     const listCallsBefore = fetchMock.mock.calls.filter(([u]) => u === '/api/instructor').length;
 
-    await setWeeks(wrapper, 4);
+    await setWeeks(wrapper, '4');
     await wrapper.find('[data-testid="save-settings"]').trigger('click');
     await flushPromises();
 
@@ -185,9 +178,17 @@ describe('InstructorView', () => {
     expect(listCallsAfter).toBe(listCallsBefore + 1);
   });
 
+  it('saves "3.5" weeks per month as 3.5', async () => {
+    const wrapper = await mountView();
+    await setWeeks(wrapper, '3.5');
+    await wrapper.find('[data-testid="save-settings"]').trigger('click');
+    await flushPromises();
+    expect(JSON.parse(String(puts()[0][1].body))).toEqual({ weeksPerMonth: 3.5 });
+  });
+
   it.each([
-    [0, 'Weeks per month must be greater than 0'],
-    [null, 'Weeks per month must be greater than 0'],
+    ['0', 'Weeks per month must be greater than 0'],
+    ['', 'Weeks per month must be greater than 0'],
   ])('shows an error and does not save weeks per month of %j', async (value, message) => {
     const wrapper = await mountView();
 
@@ -223,7 +224,7 @@ describe('InstructorView', () => {
     );
     const wrapper = await mountView();
 
-    await setWeeks(wrapper, 4);
+    await setWeeks(wrapper, '4');
     await wrapper.find('[data-testid="save-settings"]').trigger('click');
     await flushPromises();
 
