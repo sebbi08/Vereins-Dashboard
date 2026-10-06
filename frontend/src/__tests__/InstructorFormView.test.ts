@@ -1,6 +1,5 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
-import InputNumber from 'primevue/inputnumber';
 import type { InstructorDto } from 'shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRoute, useRouter } from 'vue-router';
@@ -73,19 +72,17 @@ async function setup(params: Record<string, string> = {}) {
   return wrapper;
 }
 
-function numberInput(wrapper: VueWrapper, testid: 'hourly-rate' | 'months') {
-  return wrapper
-    .findAllComponents(InputNumber)
-    .find((c) => c.attributes('data-testid') === testid)!;
-}
-
 async function setNumber(
   wrapper: VueWrapper,
   testid: 'hourly-rate' | 'months',
   value: number | null,
 ) {
-  numberInput(wrapper, testid).vm.$emit('update:modelValue', value);
+  await wrapper.find(`#${testid}`).setValue(value === null ? '' : String(value).replace('.', ','));
   await flushPromises();
+}
+
+function inputValue(wrapper: VueWrapper, id: 'hourly-rate' | 'months'): string {
+  return (wrapper.find(`#${id}`).element as HTMLInputElement).value;
 }
 
 async function addMondayBlock(wrapper: VueWrapper, start: string, end: string) {
@@ -253,8 +250,8 @@ describe('InstructorFormView', () => {
     const wrapper = await setup({ id: '5' });
 
     expect(wrapper.find('[data-testid="page-title"]').text()).toBe('Edit instructor');
-    expect(numberInput(wrapper, 'hourly-rate').props('modelValue')).toBe(12);
-    expect(numberInput(wrapper, 'months').props('modelValue')).toBe(6);
+    expect(inputValue(wrapper, 'hourly-rate')).toBe('12,00');
+    expect(inputValue(wrapper, 'months')).toBe('6');
     const createInvoice = wrapper.find('[data-testid="create-invoice"]');
     expect(createInvoice.attributes('disabled')).toBeUndefined();
     await createInvoice.trigger('click');
@@ -391,8 +388,24 @@ describe('InstructorFormView', () => {
     );
   });
 
-  it('parses the months field with the German locale so "1,5" is not read as 15', async () => {
+  it('updates the summary and the dirty state while typing, without leaving the field', async () => {
+    const wrapper = await setup({ id: '5' });
+    await wrapper.find('#months').trigger('focus');
+    await wrapper.find('#months').setValue('3');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="summary-total"]').text()).toContain('877,50');
+    expect(wrapper.find('[data-testid="create-invoice"]').attributes('title')).toBe(
+      'Save your changes first',
+    );
+  });
+
+  it('keeps Save disabled while the rate text is not a number', async () => {
     const wrapper = await setup();
-    expect(numberInput(wrapper, 'months').props('locale')).toBe('de-DE');
+    await fillValidNew(wrapper);
+    expect(wrapper.find('[data-testid="save"]').attributes('disabled')).toBeUndefined();
+    await wrapper.find('#hourly-rate').setValue('abc');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="save"]').attributes('disabled')).toBeDefined();
   });
 });

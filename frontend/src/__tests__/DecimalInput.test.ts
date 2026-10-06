@@ -119,6 +119,15 @@ describe('DecimalInput', () => {
     expect(wrapper.find('[data-testid="decimal-format-error"]').exists()).toBe(true);
   });
 
+  it('reports validity again when an unfocused model change replaces invalid text', async () => {
+    const wrapper = mountInput();
+    await input(wrapper).setValue('abc');
+    expect((wrapper.emitted('validity') as unknown[][]).at(-1)).toEqual([false]);
+    await wrapper.setProps({ modelValue: 5 });
+    expect((input(wrapper).element as HTMLInputElement).value).toBe('5');
+    expect((wrapper.emitted('validity') as unknown[][]).at(-1)).toEqual([true]);
+  });
+
   it('shows the suffix addon', () => {
     const wrapper = mountInput({ suffix: '€' });
     expect(wrapper.find('.p-inputgroupaddon').text()).toBe('€');

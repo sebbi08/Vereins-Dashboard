@@ -1,7 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import AutoComplete from 'primevue/autocomplete';
-import InputNumber from 'primevue/inputnumber';
 import type {
   InstructorInvoicePrefillDto,
   InvoiceDraftDto,
@@ -239,7 +238,8 @@ describe('InvoiceFormView — new invoice', () => {
 
   it('stores euro prices as cents and computes the gross amount', async () => {
     const wrapper = await mountForm();
-    wrapper.findComponent(InputNumber).vm.$emit('update:modelValue', 12.5);
+    const price = wrapper.find('[data-testid="line-item-price"] input');
+    await price.setValue('12.50');
     await flushPromises();
     expect(vm(wrapper).inputs.lineItems[0].priceInCents).toBe(1250);
     expect(wrapper.find('[data-testid="gross"]').text()).toContain('14,88');
@@ -248,9 +248,70 @@ describe('InvoiceFormView — new invoice', () => {
     await flushPromises();
     expect(wrapper.find('[data-testid="gross"]').text()).toContain('13,38');
 
-    wrapper.findComponent(InputNumber).vm.$emit('update:modelValue', null);
+    await price.setValue('');
     await flushPromises();
     expect(vm(wrapper).inputs.lineItems[0].priceInCents).toBe(0);
+  });
+
+  it('updates the gross amount live while typing, without a blur', async () => {
+    const wrapper = await mountForm();
+    await wrapper.find('[data-testid="line-item-price"] input').setValue('12,50');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="gross"]').text()).toContain('14,88');
+  });
+
+  describe('invalid price text', () => {
+    async function typeBadPrice(wrapper: VueWrapper) {
+      vm(wrapper).inputs.name = 'Neue Firma';
+      vm(wrapper).inputs.title = 'Titel';
+      vm(wrapper).inputs.lineItems[0].text = 'Leistung';
+      await wrapper.find('[data-testid="line-item-price"] input').setValue('abc');
+      await flushPromises();
+    }
+
+    it('blocks creating and shows the message', async () => {
+      const wrapper = await mountForm();
+      await typeBadPrice(wrapper);
+      await wrapper.find('form').trigger('submit');
+      await flushPromises();
+      expect(calls()).toEqual([]);
+      expect(wrapper.find('[data-testid="error-line-items"]').text()).toBe(
+        'Fix the highlighted prices',
+      );
+    });
+
+    it('blocks saving a draft and shows the message', async () => {
+      const wrapper = await mountForm();
+      await typeBadPrice(wrapper);
+      await wrapper.find('[data-testid="save-draft"]').trigger('click');
+      await flushPromises();
+      expect(calls()).toEqual([]);
+      expect(wrapper.find('[data-testid="error-line-items"]').text()).toBe(
+        'Fix the highlighted prices',
+      );
+    });
+
+    it('is unblocked by removing that line item', async () => {
+      replies['POST /api/invoice-draft'] = { status: 201, body: { draftId: 1 } };
+      const wrapper = await mountForm();
+      const add = wrapper.findAll('button').find((b) => b.text() === 'Add Line Item')!;
+      await add.trigger('click');
+      await flushPromises();
+      expect(wrapper.findAll('[data-testid="line-item-price"]')).toHaveLength(2);
+      vm(wrapper).inputs.name = 'Neue Firma';
+      await wrapper.findAll('[data-testid="line-item-price"] input')[0].setValue('abc');
+      await flushPromises();
+      await wrapper.find('[data-testid="save-draft"]').trigger('click');
+      await flushPromises();
+      expect(calls()).toEqual([]);
+
+      await wrapper.find('button[aria-label="Remove line item 1"]').trigger('click');
+      await flushPromises();
+      expect(wrapper.findAll('[data-testid="line-item-price"]')).toHaveLength(1);
+      await wrapper.find('[data-testid="save-draft"]').trigger('click');
+      await flushPromises();
+      expect(calls()).toEqual(['POST /api/invoice-draft']);
+    });
   });
 
   it('searches recipients and fills and locks the fields on selection', async () => {

@@ -5,7 +5,6 @@ import AutoComplete, {
 } from 'primevue/autocomplete';
 import Button from 'primevue/button';
 import DatePicker from 'primevue/datepicker';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import Message from 'primevue/message';
 import Select from 'primevue/select';
@@ -17,8 +16,9 @@ import type {
   InvoiceInputs,
   InvoiceRecipientDto,
 } from 'shared';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import DecimalInput from '../components/ui/DecimalInput.vue';
 import FormSection from '../components/ui/FormSection.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
 import { useConfirmAction } from '../composables/useConfirmAction';
@@ -58,6 +58,11 @@ const recipientFieldsLocked = computed(
   () => !isNewRevision && !isDraft && !!recipient.value && !newRecipient.value,
 );
 
+// Stable client keys for the line items, so inputs keep their identity when items are removed
+let nextLineItemKey = 0;
+const lineItemKeys = ref<number[]>([]);
+const invalidPriceKeys = ref(new Set<number>());
+
 const inputs = ref<InvoiceInputs>({
   salutation: '',
   name: '',
@@ -71,6 +76,16 @@ const inputs = ref<InvoiceInputs>({
   email: '',
   emailSalutation: 'Sehr geehrte Damen und Herren',
 });
+lineItemKeys.value = inputs.value.lineItems.map(() => nextLineItemKey++);
+
+// Whenever a load, copy, draft or prefill replaces the line items, they get fresh keys
+watch(
+  () => inputs.value.lineItems,
+  (items) => {
+    lineItemKeys.value = items.map(() => nextLineItemKey++);
+    invalidPriceKeys.value = new Set();
+  },
+);
 
 const VAT_OPTIONS = [
   { label: '7%', value: 7 },
@@ -137,10 +152,19 @@ function onRecipientSelect(event: AutoCompleteOptionSelectEvent) {
 
 function addLineItem() {
   inputs.value.lineItems.push({ text: '', priceInCents: 0 });
+  lineItemKeys.value.push(nextLineItemKey++);
 }
 
 function removeLineItem(index: number) {
-  if (inputs.value.lineItems.length > 1) inputs.value.lineItems.splice(index, 1);
+  if (inputs.value.lineItems.length <= 1) return;
+  inputs.value.lineItems.splice(index, 1);
+  const [key] = lineItemKeys.value.splice(index, 1);
+  invalidPriceKeys.value.delete(key);
+}
+
+function setPriceValidity(key: number, valid: boolean) {
+  if (valid) invalidPriceKeys.value.delete(key);
+  else invalidPriceKeys.value.add(key);
 }
 
 function setPrice(index: number, euros: number | null) {
@@ -259,9 +283,10 @@ function recipientRequestBody(): Record<string, unknown> {
 function validate(complete: boolean): boolean {
   const errors: Partial<Record<FieldKey, string>> = {};
   if (!inputs.value.name.trim()) errors.name = 'Name is required';
+  if (invalidPriceKeys.value.size > 0) errors.lineItems = 'Fix the highlighted prices';
   if (complete) {
     if (!inputs.value.title.trim()) errors.title = 'Title is required';
-    if (inputs.value.lineItems.some((p) => !p.text.trim())) {
+    if (!errors.lineItems && inputs.value.lineItems.some((p) => !p.text.trim())) {
       errors.lineItems = 'All line items need text';
     }
   }
@@ -551,7 +576,7 @@ function onFormSubmit() {
 
         <div class="field line-items">
           <label>Line Items</label>
-          <div v-for="(pos, idx) in inputs.lineItems" :key="idx" class="line-item">
+          <div v-for="(pos, idx) in inputs.lineItems" :key="lineItemKeys[idx]" class="line-item">
             <Textarea
               v-model="pos.text"
               data-testid="line-item-text"
@@ -560,15 +585,15 @@ function onFormSubmit() {
               :aria-label="`Line item ${idx + 1} text`"
               class="line-item__text"
             />
-            <InputNumber
+            <DecimalInput
               :model-value="pos.priceInCents / 100"
-              mode="currency"
-              currency="EUR"
-              locale="de-DE"
+              :min-fraction-digits="2"
+              suffix="€"
               :aria-label="`Line item ${idx + 1} price`"
               data-testid="line-item-price"
               class="line-item__price"
               @update:model-value="(value: number | null) => setPrice(idx, value)"
+              @validity="(valid: boolean) => setPriceValidity(lineItemKeys[idx], valid)"
             />
             <Button
               v-if="inputs.lineItems.length > 1"
@@ -715,9 +740,8 @@ function onFormSubmit() {
   min-width: 0;
 }
 
-.line-item__price :deep(input) {
-  width: 8rem;
-  text-align: right;
+.line-item__price {
+  width: 10rem;
 }
 
 .totals {

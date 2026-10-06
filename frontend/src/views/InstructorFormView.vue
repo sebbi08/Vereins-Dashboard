@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import Button from 'primevue/button';
-import InputNumber from 'primevue/inputnumber';
 import Message from 'primevue/message';
 import {
   calculateInstructorRent,
@@ -14,6 +13,7 @@ import {
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import RecipientPicker from '../components/RecipientPicker.vue';
+import DecimalInput from '../components/ui/DecimalInput.vue';
 import FormSection from '../components/ui/FormSection.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
 import WeeklySchedule from '../components/WeeklySchedule.vue';
@@ -215,16 +215,14 @@ onMounted(async () => {
         <div class="grid-2">
           <div class="field">
             <label for="hourly-rate">Hourly rate (net)</label>
-            <InputNumber
+            <DecimalInput
               v-model="hourlyRateEuros"
               input-id="hourly-rate"
               data-testid="hourly-rate"
-              mode="currency"
-              currency="EUR"
-              locale="de-DE"
-              placeholder="12,50 €"
+              :min-fraction-digits="2"
+              suffix="€"
+              placeholder="12,50"
               :invalid="!!fieldIssue('hourlyRateCents')"
-              fluid
             />
             <Message
               v-if="fieldIssue('hourlyRateCents')"
@@ -238,15 +236,12 @@ onMounted(async () => {
           </div>
           <div class="field">
             <label for="months">Months</label>
-            <InputNumber
+            <DecimalInput
               v-model="months"
               input-id="months"
               data-testid="months"
-              locale="de-DE"
-              :min="1"
-              :use-grouping="false"
+              :max-fraction-digits="0"
               :invalid="!!fieldIssue('months')"
-              fluid
             />
             <Message
               v-if="fieldIssue('months')"

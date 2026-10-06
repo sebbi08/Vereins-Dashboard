@@ -45,7 +45,9 @@ emit('validity', true);
 watch(
   () => props.modelValue,
   (value) => {
-    if (!focused.value) text.value = display(value);
+    if (focused.value) return;
+    text.value = display(value);
+    emit('validity', !formatError.value);
   },
 );
 
@@ -59,6 +61,7 @@ function onInput(value: string | undefined) {
 function onBlur() {
   focused.value = false;
   if (!formatError.value) text.value = display(props.modelValue);
+  emit('validity', !formatError.value);
 }
 </script>
 

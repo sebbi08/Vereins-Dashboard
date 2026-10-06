@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import Button from 'primevue/button';
 import DatePicker from 'primevue/datepicker';
-import InputNumber from 'primevue/inputnumber';
 import InputText from 'primevue/inputtext';
 import Message from 'primevue/message';
 import ToggleSwitch from 'primevue/toggleswitch';
@@ -9,6 +8,7 @@ import type { DonationReceiptDto, DonorDto, ReceiptInputs, SystemSettings } from
 import { computed, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import DonorAutocomplete from '../components/DonorAutocomplete.vue';
+import DecimalInput from '../components/ui/DecimalInput.vue';
 import FormSection from '../components/ui/FormSection.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
 import { useNotify } from '../composables/useNotify';
@@ -361,14 +361,12 @@ async function submit() {
         <div class="grid-2">
           <div class="field">
             <label for="amount">Amount</label>
-            <InputNumber
+            <DecimalInput
               v-model="amountEuros"
               input-id="amount"
-              mode="currency"
-              currency="EUR"
-              locale="de-DE"
+              :min-fraction-digits="2"
+              suffix="€"
               :invalid="!!fieldErrors.amount"
-              fluid
             />
             <Message
               v-if="fieldErrors.amount"

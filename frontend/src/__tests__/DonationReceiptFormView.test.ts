@@ -1,7 +1,6 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { createPinia, setActivePinia } from 'pinia';
 import DatePicker from 'primevue/datepicker';
-import InputNumber from 'primevue/inputnumber';
 import type { DonationReceiptDto, DonorDto, ReceiptInputs } from 'shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useRoute, useRouter } from 'vue-router';
@@ -139,7 +138,7 @@ function datePicker(wrapper: VueWrapper, testid: string) {
 }
 
 async function setAmount(wrapper: VueWrapper, euros: number | null) {
-  wrapper.findComponent(InputNumber).vm.$emit('update:modelValue', euros);
+  await wrapper.find('#amount').setValue(euros === null ? '' : String(euros).replace('.', ','));
   await flushPromises();
 }
 
@@ -278,6 +277,15 @@ describe('DonationReceiptFormView — new receipt', () => {
     vm(wrapper).inputs.letterSalutation = 'Liebe Freunde';
     await flushPromises();
     expect(wrapper.find('[data-testid="error-letter-salutation"]').exists()).toBe(false);
+  });
+
+  it('does not send an amount typed as invalid text', async () => {
+    const wrapper = await mountForm();
+    picker(wrapper).vm.$emit('update:modelValue', hans);
+    await wrapper.find('#amount').setValue('abc');
+    await submit(wrapper);
+    expect(calls()).toEqual(['GET /api/settings']);
+    expect(wrapper.find('[data-testid="error-amount"]').exists()).toBe(true);
   });
 
   it('requires a donation date', async () => {
