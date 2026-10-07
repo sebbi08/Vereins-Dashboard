@@ -23,6 +23,7 @@ import InvoiceTextSettings from '../components/InvoiceTextSettings.vue';
 import AmountRangeFilter from '../components/ui/AmountRangeFilter.vue';
 import DecimalInput from '../components/ui/DecimalInput.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
+import InstructorInvoiceRequests from '../components/InstructorInvoiceRequests.vue';
 import { useNotify } from '../composables/useNotify';
 import { useTableFilters } from '../composables/useTableFilters';
 import { useAppStore } from '../stores/app';
@@ -41,6 +42,9 @@ const instructors = ref<InstructorListItemDto[]>([]);
 const visibleInstructors = ref<InstructorListItemDto[]>([]);
 const loading = ref(false);
 const loadFailed = ref(false);
+
+/** The card waits for the first successful load, so it never flashes its empty state. */
+const instructorsLoaded = ref(false);
 
 watch(instructors, (all) => {
   visibleInstructors.value = all;
@@ -71,6 +75,7 @@ async function loadInstructors() {
     const res = await fetch('/api/instructor');
     if (!res.ok) throw new Error('load failed');
     instructors.value = await res.json();
+    instructorsLoaded.value = true;
   } catch {
     loadFailed.value = true;
     notify.error('Error loading instructors');
@@ -331,6 +336,7 @@ onMounted(async () => {
           </template>
         </Column>
       </DataTable>
+      <InstructorInvoiceRequests v-if="instructorsLoaded" :instructors="instructors" />
     </div>
   </div>
 </template>

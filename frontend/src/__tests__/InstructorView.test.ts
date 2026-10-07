@@ -52,6 +52,7 @@ let fetchMock: ReturnType<typeof vi.fn>;
 const push = vi.fn();
 
 const defaultFetch: FetchImpl = (url, init) => {
+  if (url.startsWith('/api/instructor/invoice-requests')) return Promise.resolve(jsonResponse([]));
   if (url === '/api/instructor') return Promise.resolve(jsonResponse(instructors));
   if (url === '/api/instructor/settings' && init?.method === 'PUT') {
     return Promise.resolve(
@@ -266,6 +267,27 @@ describe('InstructorView', () => {
     expect(push).toHaveBeenCalledWith('/instructor/2');
   });
 
+  it('shows the invoice requests card below the table with every instructor', async () => {
+    const wrapper = await mountView();
+    const card = wrapper.find('[data-testid="invoice-requests"]');
+    expect(card.exists()).toBe(true);
+    expect(card.findAll('[data-testid="invoice-request-row"]')).toHaveLength(2);
+
+    const table = wrapper.find('.p-datatable').element;
+    expect(table.compareDocumentPosition(card.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
+  it('keeps every instructor in the invoice requests card when the table is filtered', async () => {
+    const wrapper = await mountView();
+    await wrapper.find('[data-testid="global-search"]').setValue('bach');
+    await flushPromises();
+
+    expect(rows(wrapper)).toHaveLength(1);
+    expect(wrapper.findAll('[data-testid="invoice-request-row"]')).toHaveLength(2);
+  });
+
   it('uses the first instructor as preview source for the invoice text', async () => {
     await mountView();
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/instructor/1')).toBe(true);
@@ -278,6 +300,7 @@ describe('InstructorView', () => {
     const wrapper = await mountView();
     expect(notify.error).toHaveBeenCalledWith('Error loading instructors');
     expect(wrapper.find('[data-testid="list-load-error"]').text()).toContain('could not be loaded');
+    expect(wrapper.find('[data-testid="invoice-requests"]').exists()).toBe(false);
   });
 
   it('shows a load-error state when the list request returns not ok', async () => {
