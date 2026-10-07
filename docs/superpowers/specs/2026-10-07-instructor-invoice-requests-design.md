@@ -51,11 +51,11 @@ The `/invoice-requests` route must be registered before `/:id`, so `invoice-requ
 - **Header:** title "Invoice requests", then a year switcher `‹ 2026 ›`: two icon buttons labelled "Previous year" / "Next year", and the year in between. It starts at the current year.
 - **Matrix:**
   - **Rows:** one per instructor, from the instructor list the page already loaded, sorted by name. It does **not** follow the table filters above.
-  - **Columns:** the instructor name, then 12 columns with German short month names (`Jan`, `Feb`, `Mär`, `Apr`, `Mai`, `Jun`, `Jul`, `Aug`, `Sep`, `Okt`, `Nov`, `Dez`).
+  - **Columns:** the instructor name, then 12 columns with English short month names (`Jan`, `Feb`, `Mar`, `Apr`, `May`, `Jun`, `Jul`, `Aug`, `Sep`, `Oct`, `Nov`, `Dec`).
   - **Current month:** when the current year is shown, its column is visually highlighted.
 - **Cells:** each cell is a toggle button.
   - **Requested:** a check icon and a highlighted background, `aria-pressed="true"`. **Not requested:** empty, `aria-pressed="false"`.
-  - Label: `"<Name>, <Month name> <year>: requested"` / `"… not requested"`.
+  - Label: `"<Name>, <English month name> <year>: requested"` / `"… not requested"`, e.g. `"Anna Alt, October 2026: requested"`.
 - **Toggling:** a click flips the cell immediately and sends `PUT` or `DELETE`.
   - **Failure:** the cell flips back and a toast shows "Could not save the invoice request".
   - **In flight:** while a request is pending, that cell is disabled.
