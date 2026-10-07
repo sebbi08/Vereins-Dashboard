@@ -37,3 +37,54 @@ jobs:
 
       - name: Integration tests
         run: npm run test:integration
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      E2E_BACKEND_URL: http://localhost:3996
+      E2E_FRONTEND_URL: http://localhost:5179
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Invoice templates (.docx) are rendered to PDF with LibreOffice
+      - name: Install LibreOffice
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libreoffice-writer
+
+      - name: Build shared and frontend
+        run: |
+          npm run build --workspace=shared
+          npm run build --workspace=frontend
+
+      # Throwaway backend + production frontend; every spec resets this backend's data
+      - name: Start servers
+        run: |
+          PORT=3996 DATABASE_URL="file:${RUNNER_TEMP}/e2e.sqlite" DATA_DIR="${RUNNER_TEMP}/e2e-data" \
+            nohup npm run dev --workspace=backend > "${RUNNER_TEMP}/backend.log" 2>&1 &
+          VITE_API_TARGET=http://localhost:3996 \
+            nohup npx --workspace=frontend vite preview --port 5179 --strictPort > "${RUNNER_TEMP}/frontend.log" 2>&1 &
+
+      - name: E2E tests
+        working-directory: e2e
+        run: npx wdio run wdio.conf.ts
+
+      - name: Upload server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-server-logs
+          path: |
+            ${{ runner.temp }}/backend.log
+            ${{ runner.temp }}/frontend.log
