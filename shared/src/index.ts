@@ -194,6 +194,7 @@ export interface EmailSettings {
 
 export * from './instructorRent.js';
 export * from './instructorInvoiceText.js';
+export * from './instructorInvoiceRequests.js';
 
 import type { InstructorRentResult, TimeBlock } from './instructorRent.js';
 
