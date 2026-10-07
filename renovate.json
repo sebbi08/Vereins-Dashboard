@@ -3,6 +3,18 @@
   "extends": ["config:recommended"],
   "packageRules": [
     {
+      "groupName": "github-actions",
+      "matchManagers": ["github-actions"]
+    },
+    {
+      "groupName": "node",
+      "matchDepNames": ["node", "@types/node"]
+    },
+    {
+      "groupName": "primevue",
+      "matchPackageNames": ["primevue", "@primevue/**", "@primeuix/**"]
+    },
+    {
       "groupName": "patch-all",
       "matchUpdateTypes": ["patch", "digest"],
       "automerge": true
