@@ -8,6 +8,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: write
   issues: write
   pull-requests: write
@@ -23,6 +24,26 @@ jobs:
       new_release: ${{ steps.check-release.outputs.new_release }}
 
     steps:
+      # Only release a commit whose CI run (lint, unit, integration and e2e tests) succeeded.
+      # A CI run that is still in progress is waited for.
+      - name: Require a successful CI run for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" \
+            --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::No CI run found for $GITHUB_SHA. Push the commit and let CI finish before releasing."
+            exit 1
+          fi
+          gh run watch "$RUN_ID" --repo "$GITHUB_REPOSITORY" --interval 30 > /dev/null
+          CONCLUSION=$(gh run view "$RUN_ID" --repo "$GITHUB_REPOSITORY" --json conclusion --jq '.conclusion')
+          if [ "$CONCLUSION" != "success" ]; then
+            echo "::error::CI run $RUN_ID for $GITHUB_SHA finished with '$CONCLUSION'. Not releasing."
+            exit 1
+          fi
+          echo "CI run $RUN_ID for $GITHUB_SHA succeeded."
+
       - name: Check out repository
         uses: actions/checkout@v4
         with:
@@ -35,15 +56,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Unit tests
-        run: npm run test:unit
-
-      - name: Integration tests
-        run: npm run test:integration
 
       - name: Capture current latest tag
         id: prev-tag
