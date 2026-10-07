@@ -23,6 +23,14 @@ async function createInstructor(name: string) {
   });
 }
 
+function requestsOf(instructorId: number) {
+  return prisma.instructorInvoiceRequest.findMany({
+    where: { instructorId },
+    select: { month: true },
+    orderBy: { month: 'asc' },
+  });
+}
+
 describe('InstructorInvoiceRequest model', () => {
   it('stores one row per instructor and month', async () => {
     const instructor = await createInstructor('Anna Alt');
@@ -63,6 +71,123 @@ describe('InstructorInvoiceRequest model', () => {
     const res = await request.post('/api/e2e/reset');
 
     expect(res.status).toBe(200);
+    expect(await prisma.instructorInvoiceRequest.count()).toBe(0);
+  });
+});
+
+describe('GET /api/instructor/invoice-requests', () => {
+  it('returns the requests of one year ordered by instructor and month', async () => {
+    const anna = await createInstructor('Anna Alt');
+    const bernd = await createInstructor('Bernd Bach');
+    await prisma.instructorInvoiceRequest.createMany({
+      data: [
+        { instructorId: bernd.id, month: '2026-02' },
+        { instructorId: anna.id, month: '2026-12' },
+        { instructorId: anna.id, month: '2025-12' },
+        { instructorId: bernd.id, month: '2027-01' },
+        { instructorId: anna.id, month: '2026-01' },
+      ],
+    });
+
+    const res = await request.get('/api/instructor/invoice-requests?year=2026');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([
+      { instructorId: anna.id, month: '2026-01' },
+      { instructorId: anna.id, month: '2026-12' },
+      { instructorId: bernd.id, month: '2026-02' },
+    ]);
+  });
+
+  it('returns an empty list for a year without requests', async () => {
+    const res = await request.get('/api/instructor/invoice-requests?year=2026');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual([]);
+  });
+
+  it.each([
+    '',
+    '?year=',
+    '?year=abc',
+    '?year=1999',
+    '?year=2101',
+    '?year=2026.5',
+    '?year=02026',
+    '?year=2026&year=2027',
+  ])('returns 400 for the query %j', async (query) => {
+    const res = await request.get(`/api/instructor/invoice-requests${query}`);
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'Invalid year' });
+  });
+});
+
+describe.each(['put', 'delete'] as const)(
+  '%s /api/instructor/:id/invoice-requests/:month',
+  (method) => {
+    it('returns 404 for an unknown instructor', async () => {
+      const res = await request[method]('/api/instructor/999999/invoice-requests/2026-10');
+      expect(res.status).toBe(404);
+      expect(res.body).toEqual({ error: 'Instructor not found' });
+    });
+
+    it.each(['abc', '0', '-1', '1.5'])('returns 400 for the instructor id %j', async (id) => {
+      const res = await request[method](`/api/instructor/${id}/invoice-requests/2026-10`);
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: 'Invalid instructor id or month' });
+    });
+
+    it.each(['2026-13', '2026-00', '2026-1', '26-01', '1999-12', 'abc'])(
+      'returns 400 for the month %j',
+      async (month) => {
+        const instructor = await createInstructor('Anna Alt');
+        const res = await request[method](
+          `/api/instructor/${instructor.id}/invoice-requests/${month}`,
+        );
+        expect(res.status).toBe(400);
+        expect(res.body).toEqual({ error: 'Invalid instructor id or month' });
+      },
+    );
+  },
+);
+
+describe('PUT /api/instructor/:id/invoice-requests/:month', () => {
+  it('marks the month as requested and can be repeated', async () => {
+    const instructor = await createInstructor('Anna Alt');
+    const url = `/api/instructor/${instructor.id}/invoice-requests/2026-10`;
+
+    expect((await request.put(url)).status).toBe(204);
+    expect((await request.put(url)).status).toBe(204);
+
+    expect(await requestsOf(instructor.id)).toEqual([{ month: '2026-10' }]);
+  });
+});
+
+describe('DELETE /api/instructor/:id/invoice-requests/:month', () => {
+  it('removes the mark and can be repeated', async () => {
+    const instructor = await createInstructor('Anna Alt');
+    await prisma.instructorInvoiceRequest.createMany({
+      data: [
+        { instructorId: instructor.id, month: '2026-10' },
+        { instructorId: instructor.id, month: '2026-11' },
+      ],
+    });
+    const url = `/api/instructor/${instructor.id}/invoice-requests/2026-10`;
+
+    expect((await request.delete(url)).status).toBe(204);
+    expect((await request.delete(url)).status).toBe(204);
+
+    expect(await requestsOf(instructor.id)).toEqual([{ month: '2026-11' }]);
+  });
+});
+
+describe('DELETE /api/instructor/:id', () => {
+  it("also deletes the instructor's invoice requests", async () => {
+    const instructor = await createInstructor('Anna Alt');
+    await request.put(`/api/instructor/${instructor.id}/invoice-requests/2026-10`);
+
+    const res = await request.delete(`/api/instructor/${instructor.id}`);
+
+    expect(res.status).toBe(204);
     expect(await prisma.instructorInvoiceRequest.count()).toBe(0);
   });
 });

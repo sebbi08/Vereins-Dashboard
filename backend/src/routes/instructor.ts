@@ -1,7 +1,11 @@
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
 import type { InstructorSettingsDto } from 'shared';
 import type { Prisma } from '../../prisma/generated/client.js';
 import { validateInstructorRent } from '../../../shared/src/instructorRent.js';
+import {
+  isValidRequestMonth,
+  isValidRequestYear,
+} from '../../../shared/src/instructorInvoiceRequests.js';
 import { prisma } from '../prismaClient.js';
 import {
   buildInvoicePrefill,
@@ -123,6 +127,78 @@ function sendError(res: Response, err: unknown) {
   console.error(err);
   res.status(500).json({ error: 'Internal server error' });
 }
+
+// ── Invoice requests (manual "invoice requested" marks per month) ──
+
+// GET /api/instructor/invoice-requests?year=2026
+instructorRouter.get('/invoice-requests', async (req, res) => {
+  const raw = req.query.year;
+  const year = typeof raw === 'string' && /^\d{4}$/.test(raw) ? Number(raw) : Number.NaN;
+  if (!isValidRequestYear(year)) {
+    res.status(400).json({ error: 'Invalid year' });
+    return;
+  }
+  try {
+    const rows = await prisma.instructorInvoiceRequest.findMany({
+      where: { month: { startsWith: `${year}-` } },
+      select: { instructorId: true, month: true },
+      orderBy: [{ instructorId: 'asc' }, { month: 'asc' }],
+    });
+    res.json(rows);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+/** Validates `:id` and `:month`; on failure sends 400/404 and returns null. */
+async function invoiceRequestTarget(
+  req: Request,
+  res: Response,
+): Promise<{ instructorId: number; month: string } | null> {
+  const instructorId = parseId(req.params.id as string);
+  const month = req.params.month as string;
+  if (instructorId === null || !isValidRequestMonth(month)) {
+    res.status(400).json({ error: 'Invalid instructor id or month' });
+    return null;
+  }
+  const instructor = await prisma.instructor.findUnique({
+    where: { id: instructorId },
+    select: { id: true },
+  });
+  if (!instructor) {
+    res.status(404).json({ error: 'Instructor not found' });
+    return null;
+  }
+  return { instructorId, month };
+}
+
+// PUT /api/instructor/:id/invoice-requests/:month
+instructorRouter.put('/:id/invoice-requests/:month', async (req, res) => {
+  try {
+    const target = await invoiceRequestTarget(req, res);
+    if (!target) return;
+    await prisma.instructorInvoiceRequest.upsert({
+      where: { instructorId_month: target },
+      update: {},
+      create: target,
+    });
+    res.status(204).end();
+  } catch (err) {
+    sendError(res, err);
+  }
+});
+
+// DELETE /api/instructor/:id/invoice-requests/:month
+instructorRouter.delete('/:id/invoice-requests/:month', async (req, res) => {
+  try {
+    const target = await invoiceRequestTarget(req, res);
+    if (!target) return;
+    await prisma.instructorInvoiceRequest.deleteMany({ where: target });
+    res.status(204).end();
+  } catch (err) {
+    sendError(res, err);
+  }
+});
 
 /** instructorId null = create. */
 async function saveInstructor(res: Response, instructorId: number | null, body: unknown) {
