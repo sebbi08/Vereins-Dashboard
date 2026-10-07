@@ -159,12 +159,24 @@ model InvoiceDraft {
 }
 
 model Instructor {
-  id              Int              @id @default(autoincrement())
-  recipientId     Int              @unique
-  recipient       InvoiceRecipient @relation(fields: [recipientId], references: [id])
+  id              Int                        @id @default(autoincrement())
+  recipientId     Int                        @unique
+  recipient       InvoiceRecipient           @relation(fields: [recipientId], references: [id])
   hourlyRateCents Int
   months          Int
   timeBlocks      String // JSON: TimeBlock[]
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  invoiceRequests InstructorInvoiceRequest[]
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+}
+
+/// A month whose invoice has been requested from the instructor (manual mark).
+model InstructorInvoiceRequest {
+  id           Int        @id @default(autoincrement())
+  instructorId Int
+  instructor   Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  month        String // "YYYY-MM"
+  createdAt    DateTime   @default(now())
+
+  @@unique([instructorId, month])
 }

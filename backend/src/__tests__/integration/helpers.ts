@@ -6,6 +6,7 @@ import { prisma } from '../../prismaClient';
  * system settings that are seeded by initializeApp().
  */
 export async function cleanDatabase() {
+  await prisma.instructorInvoiceRequest.deleteMany();
   await prisma.instructor.deleteMany();
   await prisma.invoiceDraft.deleteMany();
   await prisma.invoiceRevision.deleteMany();

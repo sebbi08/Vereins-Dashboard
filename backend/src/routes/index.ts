@@ -32,6 +32,7 @@ router.get('/health', (_req, res) => {
 // E2E-only: reset all data to a clean state
 router.post('/e2e/reset', async (_req, res) => {
   try {
+    await prisma.instructorInvoiceRequest.deleteMany();
     await prisma.instructor.deleteMany();
     await prisma.donationReceiptRevision.deleteMany();
     await prisma.donationReceipt.deleteMany();
