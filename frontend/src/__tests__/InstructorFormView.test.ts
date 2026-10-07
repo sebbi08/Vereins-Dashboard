@@ -150,6 +150,19 @@ describe('InstructorFormView', () => {
     expect(wrapper.find('[data-testid="summary-total"]').text()).toContain('1.755,00');
   });
 
+  it('shows the gross total with 19 % VAT', async () => {
+    const wrapper = await setup();
+    expect(wrapper.text()).toContain('Total (gross, 19 % VAT)');
+    expect(wrapper.find('[data-testid="summary-gross"]').text()).toBe('—');
+
+    await setNumber(wrapper, 'hourly-rate', 12);
+    await setNumber(wrapper, 'months', 6);
+    await addMondayBlock(wrapper, '08:00', '15:30');
+
+    // 1.755,00 € net + 333,45 € VAT
+    expect(wrapper.find('[data-testid="summary-gross"]').text()).toContain('2.088,45');
+  });
+
   it('stores a euro rate with decimals as cents', async () => {
     const wrapper = await setup();
     await setNumber(wrapper, 'hourly-rate', 12.5);

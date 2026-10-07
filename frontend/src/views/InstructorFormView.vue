@@ -66,6 +66,16 @@ const recipientError = computed(() =>
 const result = computed(() =>
   issues.value.length === 0 ? calculateInstructorRent(rentInputs.value, weeksPerMonth.value) : null,
 );
+
+/** VAT on the invoice created from an instructor (the invoice form's default). */
+const INVOICE_VAT_PERCENT = 19;
+
+/** Same rounding as the invoice gross amount: net + rounded VAT. */
+const grossTotalCents = computed(() =>
+  result.value
+    ? result.value.totalCents + Math.round(result.value.totalCents * (INVOICE_VAT_PERCENT / 100))
+    : null,
+);
 const canSave = computed(
   () => issues.value.length === 0 && !recipientError.value && !saving.value && !loadError.value,
 );
@@ -279,6 +289,12 @@ onMounted(async () => {
             <dt>Total</dt>
             <dd data-testid="summary-total" class="strong total">
               {{ result ? formatCents(result.totalCents) : '—' }}
+            </dd>
+          </div>
+          <div>
+            <dt>Total (gross, {{ INVOICE_VAT_PERCENT }} % VAT)</dt>
+            <dd data-testid="summary-gross" class="strong">
+              {{ grossTotalCents !== null ? formatCents(grossTotalCents) : '—' }}
             </dd>
           </div>
         </dl>
