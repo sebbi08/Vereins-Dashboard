@@ -88,13 +88,18 @@ async function loadTemplate() {
   }
 }
 
+/** Bumped by every load; a response for an older instructor is stale. */
+let latestPreviewLoad = 0;
+
 async function loadPreviewInstructor(id: number | null) {
+  const load = ++latestPreviewLoad;
   previewSource.value = null;
   if (id === null) return;
   try {
     const res = await fetch(`/api/instructor/${id}`);
     if (!res.ok) return;
     const dto = (await res.json()) as InstructorDto;
+    if (load !== latestPreviewLoad) return;
     previewSource.value = {
       name: dto.recipient.name,
       inputs: {

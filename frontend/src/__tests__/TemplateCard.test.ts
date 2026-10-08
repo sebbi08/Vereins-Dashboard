@@ -161,6 +161,30 @@ describe('TemplateCard', () => {
     expect(document.querySelector('[data-testid="save-template"]')).toBeNull();
   });
 
+  it('does not keep a preview that finished loading after the dialog was closed', async () => {
+    let answer!: (value: unknown) => void;
+    fetchMock.mockReturnValueOnce(new Promise((resolve) => (answer = resolve)));
+    const wrapper = mountCard();
+    await wrapper.find('[data-testid="show-preview"]').trigger('click');
+
+    wrapper.findComponent({ name: 'Dialog' }).vm.$emit('hide');
+    answer({ ok: true, blob: () => Promise.resolve(new Blob(['pdf'])) });
+    await flushPromises();
+
+    expect(URL.createObjectURL).not.toHaveBeenCalled();
+  });
+
+  it('releases the preview when the card is removed', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, blob: () => Promise.resolve(new Blob(['pdf'])) });
+    const wrapper = mountCard();
+    await wrapper.find('[data-testid="show-preview"]').trigger('click');
+    await flushPromises();
+
+    wrapper.unmount();
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:preview');
+  });
+
   it('shows the current preview error inside the dialog', async () => {
     fetchMock.mockResolvedValueOnce({
       ok: false,

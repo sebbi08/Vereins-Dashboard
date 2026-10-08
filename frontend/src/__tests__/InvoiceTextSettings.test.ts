@@ -113,6 +113,31 @@ describe('InvoiceTextSettings', () => {
     expect(wrapper.find('[data-testid="invoice-template-example-caption"]').exists()).toBe(false);
   });
 
+  it('previews the newest instructor when an older one finishes loading later', async () => {
+    let answerFirst!: (value: Response) => void;
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === '/api/instructor/1') {
+        return new Promise<Response>((resolve) => (answerFirst = resolve));
+      }
+      if (url === '/api/instructor/2') {
+        return Promise.resolve(jsonResponse({ ...instructor, id: 2, months: 3 }));
+      }
+      if (url === '/api/instructor/settings' && !init?.method) {
+        return Promise.resolve(jsonResponse({ weeksPerMonth: 3.25, invoiceTemplate: null }));
+      }
+      return Promise.resolve(jsonResponse({}, false));
+    });
+    const wrapper = mountCard(1);
+    await flushPromises();
+
+    await wrapper.setProps({ previewInstructorId: 2 });
+    await flushPromises();
+    answerFirst(jsonResponse(instructor));
+    await flushPromises();
+
+    expect(preview(wrapper)).toContain('3 Monate');
+  });
+
   it('previews with example values when there is no instructor', async () => {
     const wrapper = mountCard(null);
     await flushPromises();

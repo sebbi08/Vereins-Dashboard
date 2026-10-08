@@ -5,7 +5,7 @@ import FileUpload, { type FileUploadSelectEvent } from 'primevue/fileupload';
 import Message from 'primevue/message';
 import ProgressSpinner from 'primevue/progressspinner';
 import type { TemplateDto, TemplateType } from 'shared';
-import { ref } from 'vue';
+import { onBeforeUnmount, ref } from 'vue';
 import { useNotify } from '../composables/useNotify';
 import { formatTimestampDate } from '../utils/format';
 
@@ -32,6 +32,8 @@ const busy = ref(false);
 const uploading = ref(false);
 const fileUpload = ref<{ clear: () => void } | null>(null);
 let objectUrl: string | null = null;
+/** Bumped when a preview starts or the dialog closes; an older response is dropped. */
+let previewRequest = 0;
 
 type ErrorBody = { missingRequiredFields?: string[]; error?: string } | null;
 
@@ -49,6 +51,8 @@ function releaseObjectUrl() {
   }
 }
 
+onBeforeUnmount(releaseObjectUrl);
+
 function resetPreview() {
   previewError.value = '';
   previewUrl.value = null;
@@ -56,6 +60,7 @@ function resetPreview() {
 }
 
 function closeDialog() {
+  previewRequest++;
   dialogVisible.value = false;
   pendingFile.value = null;
   resetPreview();
@@ -124,6 +129,7 @@ async function saveTemplate() {
 
 async function showCurrentPreview() {
   if (!props.template) return;
+  const request = ++previewRequest;
   resetPreview();
   pendingFile.value = null;
   previewLoading.value = true;
@@ -135,7 +141,9 @@ async function showCurrentPreview() {
       previewError.value = body?.error || 'No preview available';
       return;
     }
-    objectUrl = URL.createObjectURL(await res.blob());
+    const blob = await res.blob();
+    if (request !== previewRequest) return;
+    objectUrl = URL.createObjectURL(blob);
     previewUrl.value = objectUrl;
   } catch {
     previewError.value = 'Network error loading preview';
