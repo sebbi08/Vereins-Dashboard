@@ -13,9 +13,23 @@ import { withPrimeVue } from './helpers/primeVue';
 const { notify } = vi.hoisted(() => ({
   notify: { success: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
+const { confirmAction } = vi.hoisted(() => ({ confirmAction: vi.fn() }));
+vi.mock('../composables/useConfirmAction', () => ({
+  useConfirmAction: () => ({ confirmAction }),
+}));
 
-vi.mock('vue-router', () => ({ useRoute: vi.fn(), useRouter: vi.fn() }));
+const { leaveGuards } = vi.hoisted(() => ({ leaveGuards: [] as Array<() => unknown> }));
+vi.mock('vue-router', () => ({
+  useRoute: vi.fn(),
+  useRouter: vi.fn(),
+  onBeforeRouteLeave: (guard: () => unknown) => leaveGuards.push(guard),
+}));
 vi.mock('../composables/useNotify', () => ({ useNotify: () => notify }));
+
+/** Runs the leave guard the form registered, as the router would on navigation. */
+function tryLeave(): unknown {
+  return leaveGuards[leaveGuards.length - 1]();
+}
 
 const mockPush = vi.fn();
 const mockReplace = vi.fn();
@@ -148,6 +162,7 @@ async function submit(wrapper: VueWrapper) {
 }
 
 beforeEach(() => {
+  leaveGuards.length = 0;
   replies = { 'GET /api/settings': { status: 200, body: settings } };
   fetchMock.mockClear();
   mockPush.mockClear();
@@ -536,5 +551,41 @@ describe('DonationReceiptFormView — copy', () => {
     await submit(wrapper);
     expect(bodyOf('POST /api/donation-receipt').donorId).toBe(7);
     expect(mockPush).toHaveBeenCalledWith('/donation-receipt/13');
+  });
+});
+
+describe('DonationReceiptFormView — unsaved changes', () => {
+  beforeEach(() => {
+    confirmAction.mockReset();
+  });
+
+  it('leaves an untouched form without asking', async () => {
+    await mountForm();
+    expect(await tryLeave()).toBe(true);
+    expect(confirmAction).not.toHaveBeenCalled();
+  });
+
+  it('asks before discarding an entered amount', async () => {
+    confirmAction.mockResolvedValue(false);
+    const wrapper = await mountForm();
+    await setAmount(wrapper, 100);
+
+    expect(await tryLeave()).toBe(false);
+    expect(confirmAction).toHaveBeenCalled();
+  });
+
+  it('leaves without asking once the receipt was created', async () => {
+    replies['POST /api/donation-receipt'] = {
+      status: 201,
+      body: { receiptId: 12, pdfStatus: 'OK', donorUpdated: false },
+    };
+    const wrapper = await mountForm();
+    picker(wrapper).vm.$emit('update:modelValue', hans);
+    await setAmount(wrapper, 100);
+    await submit(wrapper);
+
+    expect(mockPush).toHaveBeenCalledWith('/donation-receipt/12');
+    expect(await tryLeave()).toBe(true);
+    expect(confirmAction).not.toHaveBeenCalled();
   });
 });

@@ -12,6 +12,7 @@ import DecimalInput from '../components/ui/DecimalInput.vue';
 import FormSection from '../components/ui/FormSection.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
 import { useNotify } from '../composables/useNotify';
+import { useUnsavedChangesGuard } from '../composables/useUnsavedChangesGuard';
 import { useAppStore } from '../stores/app';
 import { fromIsoDate, toIsoDate } from '../utils/format';
 import { errorMessage, NO_RESPONSE_ON_CREATE, requestJson } from '../utils/requestJson';
@@ -63,6 +64,13 @@ const inputs = ref<ReceiptInputs>({
   exemptionDate: '',
   assessmentPeriod: '',
 });
+
+/** Form state as last loaded or saved; anything else counts as unsaved changes. */
+function formSnapshot(): string {
+  return JSON.stringify([inputs.value, donor.value?.id ?? null]);
+}
+const savedSnapshot = ref(formSnapshot());
+const { allowLeave } = useUnsavedChangesGuard(() => formSnapshot() !== savedSnapshot.value);
 
 const pageTitle = isNewRevision
   ? 'Create New Revision'
@@ -178,6 +186,7 @@ onMounted(async () => {
   } catch {
     loadError.value = 'Network error while loading';
   }
+  savedSnapshot.value = formSnapshot();
 });
 
 function onDonorSelected(d: DonorDto | null) {
@@ -245,6 +254,7 @@ async function submit() {
       notify.success('Receipt saved successfully.');
     }
     if (result.donorUpdated) notify.info('Donor master data updated.');
+    allowLeave();
     router.push(`/donation-receipt/${(result.receiptId as number | undefined) ?? receiptId}`);
   } catch {
     notify.error(NO_RESPONSE_ON_CREATE);

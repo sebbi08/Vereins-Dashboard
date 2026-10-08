@@ -19,6 +19,7 @@ import PageHeader from '../components/ui/PageHeader.vue';
 import WeeklySchedule from '../components/WeeklySchedule.vue';
 import { useConfirmAction } from '../composables/useConfirmAction';
 import { useNotify } from '../composables/useNotify';
+import { useUnsavedChangesGuard } from '../composables/useUnsavedChangesGuard';
 import { useAppStore } from '../stores/app';
 import { formatCents, formatHours } from '../utils/format';
 import {
@@ -93,6 +94,7 @@ function snapshot(): string {
   return JSON.stringify([recipient.value, hourlyRateCents.value, months.value, timeBlocks.value]);
 }
 const isDirty = computed(() => snapshot() !== savedSnapshot.value);
+const { allowLeave } = useUnsavedChangesGuard(() => isDirty.value);
 const createInvoiceBlockedReason = computed(() => {
   if (loadError.value) return 'Instructor could not be loaded';
   if (isDirty.value) return 'Save your changes first';
@@ -144,6 +146,7 @@ async function save() {
       return;
     }
     notify.success('Instructor saved');
+    allowLeave();
     router.push('/instructor');
   } catch {
     notify.error('Saving failed');
@@ -165,6 +168,7 @@ async function remove() {
     const res = await fetch(`/api/instructor/${instructorId}`, { method: 'DELETE' });
     if (!res.ok) throw new Error('delete failed');
     notify.success('Instructor deleted');
+    allowLeave();
     router.push('/instructor');
   } catch {
     notify.error('Deleting failed');
@@ -185,6 +189,8 @@ onMounted(async () => {
   } catch {
     loadError.value = 'Network error while loading';
   }
+  // A new form starts clean; an edited one got its baseline in loadInstructor
+  if (instructorId === null) savedSnapshot.value = snapshot();
 });
 </script>
 

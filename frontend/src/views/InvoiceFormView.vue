@@ -23,6 +23,7 @@ import FormSection from '../components/ui/FormSection.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
 import { useConfirmAction } from '../composables/useConfirmAction';
 import { useNotify } from '../composables/useNotify';
+import { useUnsavedChangesGuard } from '../composables/useUnsavedChangesGuard';
 import { useAppStore } from '../stores/app';
 import { formatCents, formatDate, fromIsoDate, toIsoDate } from '../utils/format';
 import { errorMessage, NO_RESPONSE_ON_CREATE, requestJson } from '../utils/requestJson';
@@ -76,6 +77,13 @@ const inputs = ref<InvoiceInputs>({
   emailSalutation: 'Sehr geehrte Damen und Herren',
 });
 lineItemKeys.value = inputs.value.lineItems.map(() => nextLineItemKey++);
+
+/** Form state as last loaded or saved; anything else counts as unsaved changes. */
+function formSnapshot(): string {
+  return JSON.stringify([inputs.value, recipient.value?.id ?? null]);
+}
+const savedSnapshot = ref(formSnapshot());
+const { allowLeave } = useUnsavedChangesGuard(() => formSnapshot() !== savedSnapshot.value);
 
 // Whenever a load, copy, draft or prefill replaces the line items, they get fresh keys
 watch(
@@ -280,6 +288,7 @@ onMounted(async () => {
   } catch {
     loadError.value = 'Network error while loading';
   }
+  savedSnapshot.value = formSnapshot();
 });
 
 function recipientRequestBody(): Record<string, unknown> {
@@ -339,6 +348,7 @@ async function submit() {
     } else {
       notify.success('Invoice saved successfully.');
     }
+    allowLeave();
     router.push(`/invoice/${(result.invoiceId as number | undefined) ?? invoiceId}`);
   } catch {
     notify.error(NO_RESPONSE_ON_CREATE);
@@ -378,6 +388,7 @@ async function onSaveDraft() {
   const id = await saveDraft();
   if (id === null) return;
   notify.success('Draft saved.');
+  savedSnapshot.value = formSnapshot();
   if (!isDraft) router.push('/invoice');
 }
 
@@ -401,6 +412,7 @@ async function activateDraft() {
       return;
     }
     notify.success('Invoice created.');
+    allowLeave();
     router.push(`/invoice/${res.body.invoiceId as number}`);
   } catch {
     notify.error(NO_RESPONSE_ON_CREATE);
@@ -426,6 +438,7 @@ async function deleteDraft() {
       return;
     }
     notify.success('Draft deleted.');
+    allowLeave();
     router.push('/invoice');
   } catch {
     notify.error('Network error while deleting');

@@ -19,11 +19,21 @@ const { notify, confirmAction } = vi.hoisted(() => ({
   confirmAction: vi.fn(),
 }));
 
-vi.mock('vue-router', () => ({ useRoute: vi.fn(), useRouter: vi.fn() }));
+const { leaveGuards } = vi.hoisted(() => ({ leaveGuards: [] as Array<() => unknown> }));
+vi.mock('vue-router', () => ({
+  useRoute: vi.fn(),
+  useRouter: vi.fn(),
+  onBeforeRouteLeave: (guard: () => unknown) => leaveGuards.push(guard),
+}));
 vi.mock('../composables/useNotify', () => ({ useNotify: () => notify }));
 vi.mock('../composables/useConfirmAction', () => ({
   useConfirmAction: () => ({ confirmAction }),
 }));
+
+/** Runs the leave guard the form registered, as the router would on navigation. */
+function tryLeave(): unknown {
+  return leaveGuards[leaveGuards.length - 1]();
+}
 
 const mockPush = vi.fn();
 const mockReplace = vi.fn();
@@ -113,6 +123,7 @@ async function mountForm() {
 }
 
 beforeEach(() => {
+  leaveGuards.length = 0;
   replies = {};
   fetchMock.mockClear();
   mockPush.mockClear();
@@ -796,5 +807,74 @@ describe('InvoiceFormView — prefill from instructor', () => {
     replies['GET /api/instructor/5/invoice-prefill'] = { status: 404, body: {} };
     await mountForm();
     expect(notify.error).toHaveBeenCalledWith('Could not load instructor data');
+  });
+});
+
+describe('InvoiceFormView — unsaved changes', () => {
+  it('leaves an untouched new invoice without asking', async () => {
+    await mountForm();
+    expect(await tryLeave()).toBe(true);
+    expect(confirmAction).not.toHaveBeenCalled();
+  });
+
+  it('asks before discarding typed changes', async () => {
+    confirmAction.mockResolvedValue(false);
+    const wrapper = await mountForm();
+    vm(wrapper).inputs.title = 'Halbfertig';
+    await flushPromises();
+
+    expect(await tryLeave()).toBe(false);
+    expect(confirmAction).toHaveBeenCalledWith(
+      expect.objectContaining({ header: 'Unsaved changes' }),
+    );
+  });
+
+  it('does not count a loaded revision as a change', async () => {
+    setRoute({ id: '3' });
+    replies['GET /api/invoice/3'] = {
+      status: 200,
+      body: {
+        id: 3,
+        recipient: anna,
+        activeRevision: { inputs: { ...draftDto.inputs, invoiceDate: '2026-01-15' } },
+      },
+    };
+    await mountForm();
+    expect(await tryLeave()).toBe(true);
+    expect(confirmAction).not.toHaveBeenCalled();
+  });
+
+  it('leaves without asking once the invoice was created', async () => {
+    replies['POST /api/invoice'] = { status: 201, body: { invoiceId: 9, pdfStatus: 'PENDING' } };
+    const wrapper = await mountForm();
+    Object.assign(vm(wrapper).inputs, {
+      name: 'Bernd Bach',
+      street: 'Weg 2',
+      city: '54321 Bonn',
+      title: 'Miete',
+    });
+    vm(wrapper).inputs.lineItems[0] = { text: 'Raum', priceInCents: 1000 };
+    await flushPromises();
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    expect(mockPush).toHaveBeenCalledWith('/invoice/9');
+    expect(await tryLeave()).toBe(true);
+    expect(confirmAction).not.toHaveBeenCalled();
+  });
+
+  it('treats a draft saved in place as unchanged', async () => {
+    setRoute({ draftId: '42' });
+    replies['GET /api/invoice-draft/42'] = { status: 200, body: draftDto };
+    replies['PUT /api/invoice-draft/42'] = { status: 200, body: { draftId: 42 } };
+    const wrapper = await mountForm();
+    vm(wrapper).inputs.title = 'Geändert';
+    await flushPromises();
+
+    await wrapper.find('[data-testid="save-draft"]').trigger('click');
+    await flushPromises();
+
+    expect(await tryLeave()).toBe(true);
+    expect(confirmAction).not.toHaveBeenCalled();
   });
 });

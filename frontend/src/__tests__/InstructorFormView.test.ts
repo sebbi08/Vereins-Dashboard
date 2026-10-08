@@ -12,7 +12,12 @@ const { notify, confirmAction } = vi.hoisted(() => ({
   confirmAction: vi.fn(),
 }));
 
-vi.mock('vue-router', () => ({ useRoute: vi.fn(), useRouter: vi.fn() }));
+const { leaveGuards } = vi.hoisted(() => ({ leaveGuards: [] as Array<() => unknown> }));
+vi.mock('vue-router', () => ({
+  useRoute: vi.fn(),
+  useRouter: vi.fn(),
+  onBeforeRouteLeave: (guard: () => unknown) => leaveGuards.push(guard),
+}));
 vi.mock('../composables/useNotify', () => ({ useNotify: () => notify }));
 vi.mock('../composables/useConfirmAction', () => ({
   useConfirmAction: () => ({ confirmAction }),
@@ -102,11 +107,17 @@ async function fillValidNew(wrapper: VueWrapper) {
   await addMondayBlock(wrapper, '08:00', '12:00');
 }
 
+/** Runs the leave guard the form registered, as the router would on navigation. */
+function tryLeave(): unknown {
+  return leaveGuards[leaveGuards.length - 1]();
+}
+
 function requestsWith(method: string) {
   return fetchMock.mock.calls.filter(([, init]) => init?.method === method);
 }
 
 beforeEach(() => {
+  leaveGuards.length = 0;
   templates = [{ type: 'RECHNUNG' }];
   fetchMock = vi.fn(defaultFetch);
   vi.stubGlobal('fetch', fetchMock);
@@ -420,5 +431,36 @@ describe('InstructorFormView', () => {
     await wrapper.find('#hourly-rate').setValue('abc');
     await flushPromises();
     expect(wrapper.find('[data-testid="save"]').attributes('disabled')).toBeDefined();
+  });
+});
+
+describe('InstructorFormView — unsaved changes', () => {
+  it('leaves an untouched new form without asking', async () => {
+    await setup();
+    expect(await tryLeave()).toBe(true);
+    expect(confirmAction).not.toHaveBeenCalled();
+  });
+
+  it('asks before discarding entered data', async () => {
+    confirmAction.mockResolvedValue(false);
+    const wrapper = await setup();
+    await wrapper.find('[data-testid="recipient-name"]').setValue('Anna Alt');
+
+    expect(await tryLeave()).toBe(false);
+    expect(confirmAction).toHaveBeenCalledWith(
+      expect.objectContaining({ header: 'Unsaved changes' }),
+    );
+  });
+
+  it('leaves without asking once the instructor was saved', async () => {
+    const wrapper = await setup();
+    await fillValidNew(wrapper);
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    expect(mockPush).toHaveBeenCalledWith('/instructor');
+    confirmAction.mockClear();
+    expect(await tryLeave()).toBe(true);
+    expect(confirmAction).not.toHaveBeenCalled();
   });
 });
