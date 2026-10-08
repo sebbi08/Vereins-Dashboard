@@ -14,6 +14,7 @@ import PageHeader from '../components/ui/PageHeader.vue';
 import { useNotify } from '../composables/useNotify';
 import { useAppStore } from '../stores/app';
 import { fromIsoDate, toIsoDate } from '../utils/format';
+import { errorMessage, NO_RESPONSE_ON_CREATE, requestJson } from '../utils/requestJson';
 
 const router = useRouter();
 const route = useRoute();
@@ -221,30 +222,32 @@ async function submit() {
   sending.value = true;
   try {
     const res = isNewRevision
-      ? await fetch(`/api/donation-receipt/${receiptId}/revision`, {
+      ? await requestJson(`/api/donation-receipt/${receiptId}/revision`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ inputs: inputs.value }),
         })
-      : await fetch('/api/donation-receipt', {
+      : await requestJson('/api/donation-receipt', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(donorRequestBody()),
         });
-    const result = await res.json();
     if (!res.ok) {
-      notify.error(result.error || 'Unknown error');
+      notify.error(errorMessage(res));
       return;
     }
+    const result = res.body;
     if (result.pdfStatus === 'FAILED') {
-      notify.warn(result.pdfError || 'PDF could not be generated. Please try again.');
+      notify.warn(
+        (result.pdfError as string | null) || 'PDF could not be generated. Please try again.',
+      );
     } else {
       notify.success('Receipt saved successfully.');
     }
     if (result.donorUpdated) notify.info('Donor master data updated.');
-    router.push(`/donation-receipt/${result.receiptId ?? receiptId}`);
+    router.push(`/donation-receipt/${(result.receiptId as number | undefined) ?? receiptId}`);
   } catch {
-    notify.error('Network error while saving');
+    notify.error(NO_RESPONSE_ON_CREATE);
   } finally {
     sending.value = false;
   }

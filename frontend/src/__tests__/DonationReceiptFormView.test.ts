@@ -395,6 +395,36 @@ describe('DonationReceiptFormView — new receipt', () => {
     expect(mockPush).not.toHaveBeenCalled();
   });
 
+  it('reports a server error page as a server error, not a network error', async () => {
+    const wrapper = await mountForm();
+    picker(wrapper).vm.$emit('update:modelValue', hans);
+    await setAmount(wrapper, 100);
+    fetchMock.mockImplementationOnce(
+      async () =>
+        ({
+          ok: false,
+          status: 502,
+          json: () => Promise.reject(new SyntaxError('Unexpected token <')),
+        }) as Response,
+    );
+    await submit(wrapper);
+
+    expect(notify.error).toHaveBeenCalledWith('Server error (502)');
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('warns that the receipt may exist when the server does not answer', async () => {
+    const wrapper = await mountForm();
+    picker(wrapper).vm.$emit('update:modelValue', hans);
+    await setAmount(wrapper, 100);
+    fetchMock.mockImplementationOnce(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    await submit(wrapper);
+
+    expect(notify.error).toHaveBeenCalledWith(expect.stringContaining('check the list'));
+  });
+
   it('reports a network error while loading', async () => {
     replies = {};
     const wrapper = await mountForm();

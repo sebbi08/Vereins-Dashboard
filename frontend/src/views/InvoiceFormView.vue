@@ -25,6 +25,7 @@ import { useConfirmAction } from '../composables/useConfirmAction';
 import { useNotify } from '../composables/useNotify';
 import { useAppStore } from '../stores/app';
 import { formatCents, formatDate, fromIsoDate, toIsoDate } from '../utils/format';
+import { errorMessage, NO_RESPONSE_ON_CREATE, requestJson } from '../utils/requestJson';
 
 const router = useRouter();
 const route = useRoute();
@@ -318,29 +319,29 @@ async function submit() {
   sending.value = true;
   try {
     const res = isNewRevision
-      ? await fetch(`/api/invoice/${invoiceId}/revision`, {
+      ? await requestJson(`/api/invoice/${invoiceId}/revision`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ inputs: inputs.value }),
         })
-      : await fetch('/api/invoice', {
+      : await requestJson('/api/invoice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(recipientRequestBody()),
         });
-    const result = await res.json();
     if (!res.ok) {
-      notify.error(result.error || 'Unknown error');
+      notify.error(errorMessage(res));
       return;
     }
+    const result = res.body;
     if (result.pdfStatus === 'FAILED') {
-      notify.warn(result.pdfError || 'PDF could not be generated.');
+      notify.warn((result.pdfError as string | null) || 'PDF could not be generated.');
     } else {
       notify.success('Invoice saved successfully.');
     }
-    router.push(`/invoice/${result.invoiceId ?? invoiceId}`);
+    router.push(`/invoice/${(result.invoiceId as number | undefined) ?? invoiceId}`);
   } catch {
-    notify.error('Network error while saving');
+    notify.error(NO_RESPONSE_ON_CREATE);
   } finally {
     sending.value = false;
   }
@@ -352,17 +353,19 @@ async function saveDraft(): Promise<number | null> {
   if (!validate(false)) return null;
   sending.value = true;
   try {
-    const res = await fetch(isDraft ? `/api/invoice-draft/${draftId}` : '/api/invoice-draft', {
-      method: isDraft ? 'PUT' : 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(recipientRequestBody()),
-    });
-    const result = await res.json();
+    const res = await requestJson(
+      isDraft ? `/api/invoice-draft/${draftId}` : '/api/invoice-draft',
+      {
+        method: isDraft ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(recipientRequestBody()),
+      },
+    );
     if (!res.ok) {
-      notify.error(result.error || 'Unknown error');
+      notify.error(errorMessage(res));
       return null;
     }
-    return result.draftId as number;
+    return res.body.draftId as number;
   } catch {
     notify.error('Network error while saving');
     return null;
@@ -392,16 +395,15 @@ async function activateDraft() {
 
   sending.value = true;
   try {
-    const res = await fetch(`/api/invoice-draft/${draftId}/activate`, { method: 'POST' });
-    const result = await res.json();
+    const res = await requestJson(`/api/invoice-draft/${draftId}/activate`, { method: 'POST' });
     if (!res.ok) {
-      notify.error(result.error || 'Unknown error');
+      notify.error(errorMessage(res));
       return;
     }
     notify.success('Invoice created.');
-    router.push(`/invoice/${result.invoiceId}`);
+    router.push(`/invoice/${res.body.invoiceId as number}`);
   } catch {
-    notify.error('Network error while activating');
+    notify.error(NO_RESPONSE_ON_CREATE);
   } finally {
     sending.value = false;
   }

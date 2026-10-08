@@ -208,6 +208,47 @@ describe('InvoiceFormView — new invoice', () => {
     expect(mockPush).toHaveBeenCalledWith('/invoice/77');
   });
 
+  async function fillValidInvoice(wrapper: VueWrapper) {
+    Object.assign(vm(wrapper).inputs, {
+      name: 'Bernd Bach',
+      street: 'Weg 2',
+      city: '54321 Bonn',
+      title: 'Miete',
+    });
+    vm(wrapper).inputs.lineItems[0] = { text: 'Raum', priceInCents: 1000 };
+    await flushPromises();
+  }
+
+  it('reports a server error page as a server error, not a network error', async () => {
+    const wrapper = await mountForm();
+    await fillValidInvoice(wrapper);
+    fetchMock.mockImplementationOnce(
+      async () =>
+        ({
+          ok: false,
+          status: 504,
+          json: () => Promise.reject(new SyntaxError('Unexpected token <')),
+        }) as Response,
+    );
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    expect(notify.error).toHaveBeenCalledWith('Server error (504)');
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
+  it('warns that the invoice may exist when the server does not answer', async () => {
+    const wrapper = await mountForm();
+    await fillValidInvoice(wrapper);
+    fetchMock.mockImplementationOnce(async () => {
+      throw new TypeError('Failed to fetch');
+    });
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    expect(notify.error).toHaveBeenCalledWith(expect.stringContaining('check the list'));
+  });
+
   it('warns when the PDF failed after saving', async () => {
     replies['POST /api/invoice'] = {
       status: 201,
