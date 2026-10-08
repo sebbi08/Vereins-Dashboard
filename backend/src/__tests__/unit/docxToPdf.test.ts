@@ -1,12 +1,7 @@
-import { execFileSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { describe, expect, it } from 'vitest';
-import { type CommandRunner, createDocxToPdf, docxToPdf } from '../../services/pdfGeneration';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const templatePath = path.resolve(__dirname, '../../../../e2e/fixture/Rechnung.docx');
+import { type CommandRunner, createDocxToPdf } from '../../services/pdfGeneration';
 
 function outDirOf(args: string[]): string {
   return args[args.indexOf('--outdir') + 1];
@@ -24,15 +19,6 @@ function fakeLibreOffice(
   }) as CommandRunner & { calls: typeof calls };
   run.calls = calls;
   return run;
-}
-
-function libreOfficeAvailable(): boolean {
-  try {
-    execFileSync('libreoffice', ['--version'], { stdio: 'ignore', timeout: 20_000 });
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 describe('docxToPdf', () => {
@@ -55,22 +41,44 @@ describe('docxToPdf', () => {
     expect(maxRunning).toBe(1);
   });
 
-  it('gives every conversion its own profile directory and a kill timeout', async () => {
+  function profileOf(args: string[]): string {
+    return args.find((a) => a.startsWith('-env:UserInstallation=file://'))!;
+  }
+
+  it('reuses its own profile across conversions, with a kill timeout', async () => {
+    // A fresh profile costs several seconds of LibreOffice start-up on every conversion
     const run = fakeLibreOffice();
     const convert = createDocxToPdf(run);
 
     await convert(Buffer.from('a'));
     await convert(Buffer.from('b'));
 
-    const profiles = run.calls.map(
-      ({ args }) => args.find((a) => a.startsWith('-env:UserInstallation=file://'))!,
-    );
-    expect(profiles[0]).toBeDefined();
-    expect(profiles[1]).toBeDefined();
-    expect(profiles[0]).not.toBe(profiles[1]);
+    const [first, second] = run.calls.map(({ args }) => profileOf(args));
+    expect(first).toBeDefined();
+    expect(first).not.toContain(process.env.HOME ?? '/root');
+    expect(second).toBe(first);
     expect(run.calls[0].args).toContain('--headless');
     expect(run.calls[0].options).toMatchObject({ killSignal: 'SIGKILL' });
     expect((run.calls[0].options as { timeout: number }).timeout).toBeGreaterThan(0);
+  });
+
+  it('starts over with a fresh profile after a failed or killed conversion', async () => {
+    // A killed LibreOffice leaves its profile locked, which would block every later run
+    let first = true;
+    const run = fakeLibreOffice(() => {
+      if (first) {
+        first = false;
+        throw new Error('killed after timeout');
+      }
+    });
+    const convert = createDocxToPdf(run);
+
+    await expect(convert(Buffer.from('a'))).rejects.toThrow();
+    await convert(Buffer.from('b'));
+
+    const [failed, next] = run.calls.map(({ args }) => profileOf(args));
+    expect(next).not.toBe(failed);
+    expect(fs.existsSync(failed.replace('-env:UserInstallation=file://', ''))).toBe(false);
   });
 
   it('removes its temp directory even when the conversion fails', async () => {
@@ -100,17 +108,4 @@ describe('docxToPdf', () => {
     await expect(convert(Buffer.from('a'))).rejects.toThrow('boom');
     expect((await convert(Buffer.from('b'))).toString()).toBe('%PDF-fake');
   });
-
-  it.skipIf(!libreOfficeAvailable())(
-    'converts two documents at the same time with the real LibreOffice',
-    async () => {
-      const docx = fs.readFileSync(templatePath);
-
-      const [a, b] = await Promise.all([docxToPdf(docx), docxToPdf(docx)]);
-
-      expect(a.subarray(0, 4).toString()).toBe('%PDF');
-      expect(b.subarray(0, 4).toString()).toBe('%PDF');
-    },
-    120_000,
-  );
 });

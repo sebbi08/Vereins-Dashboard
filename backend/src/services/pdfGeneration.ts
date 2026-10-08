@@ -168,14 +168,18 @@ export type CommandRunner = (
 ) => Promise<unknown>;
 
 /**
- * Builds the DOCX → PDF converter. Conversions run one at a time, each with its own LibreOffice
- * profile: instances sharing a profile hand off to each other or exit with an error, and a
- * profile left locked by a killed instance would otherwise block every later conversion.
+ * Builds the DOCX → PDF converter. Conversions run one at a time: LibreOffice instances that
+ * share a profile hand off to each other or exit with an error. The converter keeps its own
+ * profile (not the one in $HOME) and reuses it, because setting up a fresh profile adds several
+ * seconds to every conversion. After a failed or killed conversion the profile is discarded, so
+ * a lock left behind cannot block later conversions.
  */
 export function createDocxToPdf(run: CommandRunner): (docxBuffer: Buffer) => Promise<Buffer> {
   let queue: Promise<unknown> = Promise.resolve();
+  let profileDir: string | null = null;
 
   async function convert(docxBuffer: Buffer): Promise<Buffer> {
+    profileDir ??= await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lo-profile-'));
     const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lo-'));
     const docxPath = path.join(tmpDir, 'input.docx');
     const pdfPath = path.join(tmpDir, 'input.pdf');
@@ -188,7 +192,7 @@ export function createDocxToPdf(run: CommandRunner): (docxBuffer: Buffer) => Pro
           '--headless',
           '--norestore',
           '--nofirststartwizard',
-          `-env:UserInstallation=file://${path.join(tmpDir, 'profile')}`,
+          `-env:UserInstallation=file://${profileDir}`,
           '--convert-to',
           'pdf',
           '--outdir',
@@ -196,7 +200,12 @@ export function createDocxToPdf(run: CommandRunner): (docxBuffer: Buffer) => Pro
           docxPath,
         ],
         { timeout: LIBREOFFICE_TIMEOUT_MS, killSignal: 'SIGKILL' },
-      );
+      ).catch(async (err: unknown) => {
+        const broken = profileDir;
+        profileDir = null;
+        if (broken) await fs.promises.rm(broken, { recursive: true, force: true });
+        throw err;
+      });
       return await fs.promises.readFile(pdfPath);
     } finally {
       await fs.promises.rm(tmpDir, { recursive: true, force: true });
