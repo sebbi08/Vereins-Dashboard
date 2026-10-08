@@ -2,8 +2,6 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 
 export const useAppStore = defineStore('app', () => {
-  const appName = ref('MV Dashboard');
-
   // true = active receipt template present, false = none, null = not yet checked
   const receiptTemplateAvailable = ref<boolean | null>(null);
   const invoiceTemplateAvailable = ref<boolean | null>(null);
@@ -29,5 +27,5 @@ export const useAppStore = defineStore('app', () => {
     invoiceTemplateAvailable.value = false;
   }
 
-  return { appName, receiptTemplateAvailable, invoiceTemplateAvailable, checkTemplates };
+  return { receiptTemplateAvailable, invoiceTemplateAvailable, checkTemplates };
 });

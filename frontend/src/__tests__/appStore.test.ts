@@ -9,7 +9,6 @@ describe('useAppStore', () => {
 
   it('has correct initial state', () => {
     const store = useAppStore();
-    expect(store.appName).toBe('MV Dashboard');
     expect(store.receiptTemplateAvailable).toBeNull();
   });
 
