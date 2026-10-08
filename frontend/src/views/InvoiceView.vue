@@ -46,6 +46,14 @@ const loading = ref(false);
 const loadFailed = ref(false);
 const selection = ref<InvoiceListItem[]>([]);
 
+/** Rows hidden by a filter leave the selection, so "Download selected" only takes what is shown. */
+function keepVisibleSelection(visible: InvoiceListItem[]) {
+  const shown = new Set(visible.map((row) => row.id));
+  if (selection.value.some((row) => !shown.has(row.id))) {
+    selection.value = selection.value.filter((row) => shown.has(row.id));
+  }
+}
+
 function defaultFilters(): DataTableFilterMeta {
   return {
     ...globalFilter(),
@@ -90,7 +98,8 @@ async function loadInvoices() {
 async function loadDrafts() {
   try {
     const res = await fetch('/api/invoice-draft');
-    if (res.ok) drafts.value = await res.json();
+    if (!res.ok) throw new Error('load failed');
+    drafts.value = await res.json();
   } catch {
     notify.error('Error loading drafts');
   }
@@ -198,6 +207,7 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
         :loading="loading"
         row-hover
         :row-class="() => 'invoice-row'"
+        @value-change="keepVisibleSelection"
         @row-click="onInvoiceRowClick"
       >
         <template #header>

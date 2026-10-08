@@ -37,6 +37,14 @@ const loading = ref(false);
 const loadFailed = ref(false);
 const selection = ref<DonationReceiptListItem[]>([]);
 
+/** Rows hidden by a filter leave the selection, so "Download selected" only takes what is shown. */
+function keepVisibleSelection(visible: DonationReceiptListItem[]) {
+  const shown = new Set(visible.map((row) => row.id));
+  if (selection.value.some((row) => !shown.has(row.id))) {
+    selection.value = selection.value.filter((row) => shown.has(row.id));
+  }
+}
+
 function defaultFilters(): DataTableFilterMeta {
   return {
     ...globalFilter(),
@@ -141,6 +149,7 @@ function onRowClick(event: DataTableRowClickEvent<DonationReceiptListItem>) {
         :loading="loading"
         row-hover
         :row-class="() => 'receipt-row'"
+        @value-change="keepVisibleSelection"
         @row-click="onRowClick"
       >
         <template #header>

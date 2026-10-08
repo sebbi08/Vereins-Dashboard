@@ -258,6 +258,19 @@ describe('InvoiceView', () => {
     expect(vm(wrapper).selection.map((i) => i.id)).toEqual([1]);
   });
 
+  it('drops selected invoices that a filter hides, so they are not downloaded unseen', async () => {
+    const wrapper = await mountView();
+    const anna = invoices.find((i) => i.recipientName === 'Anna Alt')!;
+    const bernd = invoices.find((i) => i.recipientName === 'Bernd Bach')!;
+    vm(wrapper).selection = [anna, bernd];
+    await flushPromises();
+
+    await wrapper.find('[data-testid="global-search"]').setValue('bach');
+    await flushPromises();
+
+    expect(vm(wrapper).selection.map((i) => i.id)).toEqual([bernd.id]);
+  });
+
   it('disables download without a selection', async () => {
     const wrapper = await mountView();
     expect(wrapper.find('[data-testid="download-selected"]').attributes('disabled')).toBeDefined();
@@ -297,6 +310,20 @@ describe('InvoiceView', () => {
     const link = wrapper.findComponent('[data-testid="drafts-section"] .draft-row a');
     expect(link.exists()).toBe(true);
     expect(link.text()).toBe('Dora Drei');
+  });
+
+  it('reports drafts that could not be loaded', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url === '/api/invoice?withCancelled=true') {
+          return Promise.resolve(jsonResponse(invoices));
+        }
+        return Promise.resolve(jsonResponse({}, false));
+      }),
+    );
+    await mountView();
+    expect(notify.error).toHaveBeenCalledWith('Error loading drafts');
   });
 
   it('has no drafts section without drafts', async () => {

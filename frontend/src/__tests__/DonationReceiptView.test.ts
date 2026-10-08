@@ -279,4 +279,17 @@ describe('DonationReceiptView', () => {
     expect(notify.error).toHaveBeenCalledWith('Error loading receipts');
     expect(wrapper.find('[data-testid="list-load-error"]').text()).toContain('could not be loaded');
   });
+
+  it('drops selected receipts that a filter hides, so they are not downloaded unseen', async () => {
+    const wrapper = await mountView();
+    const anna = receipts.find((r) => r.donorName === 'Anna Alt')!;
+    const bernd = receipts.find((r) => r.donorName === 'Bernd Bach')!;
+    vm(wrapper).selection = [anna, bernd];
+    await flushPromises();
+
+    await wrapper.find('[data-testid="global-search"]').setValue('bach');
+    await flushPromises();
+
+    expect(vm(wrapper).selection.map((r) => r.id)).toEqual([bernd.id]);
+  });
 });
