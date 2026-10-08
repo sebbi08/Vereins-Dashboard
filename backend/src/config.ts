@@ -22,22 +22,25 @@ function resolveSqliteFilePath(databaseUrl: string): string | null {
 
 export const DATABASE_FILE_PATH = resolveSqliteFilePath(DATABASE_URL);
 
-export const TEMPLATES_DIR = path.join(DATA_DIR, 'templates');
-export const RECEIPTS_DIR = path.join(DATA_DIR, 'receipts');
-export const INVOICES_DIR = path.join(DATA_DIR, 'invoices');
+// Always absolute, so a file written here and later passed to toRelativePath is stored relative
+// to the data dir even when DATA_DIR itself was given as a relative path.
+export const TEMPLATES_DIR = path.join(ABSOLUTE_DATA_DIR, 'templates');
+export const RECEIPTS_DIR = path.join(ABSOLUTE_DATA_DIR, 'receipts');
+export const INVOICES_DIR = path.join(ABSOLUTE_DATA_DIR, 'invoices');
 
 /**
- * Converts an absolute file path to a relative path based on ABSOLUTE_DATA_DIR
+ * Converts a file path to a path relative to the data dir, so the stored value stays valid when
+ * the data dir moves. Paths outside the data dir are returned unchanged (made absolute).
  */
-export function toRelativePath(absolutePath: string): string {
-  const normalized = path.normalize(absolutePath);
-  const dataDir = path.normalize(ABSOLUTE_DATA_DIR);
+export function toRelativePath(filePath: string): string {
+  const absolute = path.resolve(filePath);
+  const dataDir = ABSOLUTE_DATA_DIR;
 
-  if (normalized.startsWith(dataDir)) {
-    return path.relative(dataDir, normalized);
+  if (absolute === dataDir || absolute.startsWith(dataDir + path.sep)) {
+    return path.relative(dataDir, absolute);
   }
 
-  return normalized;
+  return absolute;
 }
 
 /**
