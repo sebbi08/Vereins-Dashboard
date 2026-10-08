@@ -17,13 +17,16 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import TemplateCard from '../components/TemplateCard.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
+import { useConfirmAction } from '../composables/useConfirmAction';
 import { useNotify } from '../composables/useNotify';
+import { errorMessage, requestJson } from '../utils/requestJson';
 import { useAppStore } from '../stores/app';
 import { fromIsoDate, toIsoDate } from '../utils/format';
 
 const router = useRouter();
 const store = useAppStore();
 const notify = useNotify();
+const { confirmAction } = useConfirmAction();
 
 // ── Association data ─────────────────────────────
 const settings = ref<SystemSettings>({
@@ -153,6 +156,28 @@ async function loadDonors() {
     notify.error('Error loading donors');
   } finally {
     donorLoading.value = false;
+  }
+}
+
+/** Only donors without documents can be deleted; the server explains when one is in use. */
+async function deleteDonor(item: { id: number; name: string }) {
+  const confirmed = await confirmAction({
+    message: `Delete donor ${item.name}? This cannot be undone.`,
+    header: 'Delete donor',
+    acceptLabel: 'Delete',
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    const res = await requestJson(`/api/donor/${item.id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      notify.error(errorMessage(res));
+      return;
+    }
+    donors.value = donors.value.filter((entry) => entry.id !== item.id);
+    notify.success('Donor deleted');
+  } catch {
+    notify.error('Network error while deleting');
   }
 }
 
@@ -314,6 +339,19 @@ onMounted(() => {
               </template>
             </Column>
             <Column :row-editor="true" header-style="width: 7rem" body-style="text-align: right" />
+            <Column header-style="width: 3rem" body-style="text-align: right">
+              <template #body="{ data }">
+                <Button
+                  icon="pi pi-trash"
+                  text
+                  rounded
+                  severity="danger"
+                  :aria-label="`Delete ${data.name}`"
+                  :data-testid="`delete-donor-${data.id}`"
+                  @click="deleteDonor(data)"
+                />
+              </template>
+            </Column>
           </DataTable>
         </TabPanel>
 

@@ -15,6 +15,10 @@ const { notify } = vi.hoisted(() => ({
 
 vi.mock('vue-router', () => ({ useRouter: vi.fn() }));
 vi.mock('../composables/useNotify', () => ({ useNotify: () => notify }));
+const { confirmAction } = vi.hoisted(() => ({ confirmAction: vi.fn() }));
+vi.mock('../composables/useConfirmAction', () => ({
+  useConfirmAction: () => ({ confirmAction }),
+}));
 
 interface ViewVM {
   emailSettings: EmailSettings;
@@ -88,6 +92,7 @@ beforeEach(() => {
     'GET /api/invoice-recipient?all=true': { status: 200, body: recipients },
   };
   fetchMock.mockClear();
+  confirmAction.mockReset().mockResolvedValue(true);
   Object.values(notify).forEach((fn) => fn.mockReset());
   vi.stubGlobal('fetch', fetchMock);
   vi.mocked(useRouter).mockReturnValue({ back: vi.fn() } as unknown as ReturnType<
@@ -286,5 +291,38 @@ describe('InvoiceSettingsView', () => {
     });
     await flushPromises();
     expect(notify.error).toHaveBeenCalledWith('Error saving recipient');
+  });
+
+  describe('deleting a recipient', () => {
+    it('deletes a recipient after confirmation and removes the row', async () => {
+      replies['DELETE /api/invoice-recipient/2'] = { status: 204 };
+      const wrapper = await mountView();
+      const name = recipients[1].name;
+
+      await wrapper.find('[data-testid="delete-recipient-2"]').trigger('click');
+      await flushPromises();
+
+      expect(confirmAction).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining(name) }),
+      );
+      expect(wrapper.findAll('.recipient-row')).toHaveLength(1);
+      expect(notify.success).toHaveBeenCalledWith('Recipient deleted');
+    });
+
+    it('explains why a recipient in use is kept', async () => {
+      replies['DELETE /api/invoice-recipient/1'] = {
+        status: 409,
+        body: { error: 'This recipient has invoices and cannot be deleted' },
+      };
+      const wrapper = await mountView();
+
+      await wrapper.find('[data-testid="delete-recipient-1"]').trigger('click');
+      await flushPromises();
+
+      expect(notify.error).toHaveBeenCalledWith(
+        'This recipient has invoices and cannot be deleted',
+      );
+      expect(wrapper.findAll('.recipient-row')).toHaveLength(2);
+    });
   });
 });

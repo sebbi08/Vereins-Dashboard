@@ -19,12 +19,15 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import TemplateCard from '../components/TemplateCard.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
+import { useConfirmAction } from '../composables/useConfirmAction';
 import { useNotify } from '../composables/useNotify';
+import { errorMessage, requestJson } from '../utils/requestJson';
 import { useAppStore } from '../stores/app';
 
 const router = useRouter();
 const store = useAppStore();
 const notify = useNotify();
+const { confirmAction } = useConfirmAction();
 
 // ── Template ─────────────────────────────
 const template = ref<TemplateDto | null>(null);
@@ -152,6 +155,28 @@ async function loadRecipients() {
     notify.error('Error loading recipients');
   } finally {
     recLoading.value = false;
+  }
+}
+
+/** Only recipients without documents can be deleted; the server explains when one is in use. */
+async function deleteRecipient(item: { id: number; name: string }) {
+  const confirmed = await confirmAction({
+    message: `Delete recipient ${item.name}? This cannot be undone.`,
+    header: 'Delete recipient',
+    acceptLabel: 'Delete',
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    const res = await requestJson(`/api/invoice-recipient/${item.id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      notify.error(errorMessage(res));
+      return;
+    }
+    recipients.value = recipients.value.filter((entry) => entry.id !== item.id);
+    notify.success('Recipient deleted');
+  } catch {
+    notify.error('Network error while deleting');
   }
 }
 
@@ -395,6 +420,19 @@ onMounted(() => {
               </template>
             </Column>
             <Column :row-editor="true" header-style="width: 7rem" body-style="text-align: right" />
+            <Column header-style="width: 3rem" body-style="text-align: right">
+              <template #body="{ data }">
+                <Button
+                  icon="pi pi-trash"
+                  text
+                  rounded
+                  severity="danger"
+                  :aria-label="`Delete ${data.name}`"
+                  :data-testid="`delete-recipient-${data.id}`"
+                  @click="deleteRecipient(data)"
+                />
+              </template>
+            </Column>
           </DataTable>
         </TabPanel>
       </TabPanels>

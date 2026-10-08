@@ -16,6 +16,10 @@ const { notify } = vi.hoisted(() => ({
 
 vi.mock('vue-router', () => ({ useRouter: vi.fn() }));
 vi.mock('../composables/useNotify', () => ({ useNotify: () => notify }));
+const { confirmAction } = vi.hoisted(() => ({ confirmAction: vi.fn() }));
+vi.mock('../composables/useConfirmAction', () => ({
+  useConfirmAction: () => ({ confirmAction }),
+}));
 
 interface ViewVM {
   settings: SystemSettings;
@@ -103,6 +107,7 @@ beforeEach(() => {
     'GET /api/donor?all=true': { status: 200, body: donors },
   };
   fetchMock.mockClear();
+  confirmAction.mockReset().mockResolvedValue(true);
   Object.values(notify).forEach((fn) => fn.mockReset());
   vi.stubGlobal('fetch', fetchMock);
   vi.mocked(useRouter).mockReturnValue({ back: vi.fn() } as unknown as ReturnType<
@@ -301,5 +306,48 @@ describe('SettingsView', () => {
     });
     await flushPromises();
     expect(notify.error).toHaveBeenCalledWith('Error saving donor');
+  });
+
+  describe('deleting a donor', () => {
+    it('deletes a donor after confirmation and removes the row', async () => {
+      replies['DELETE /api/donor/2'] = { status: 204 };
+      const wrapper = await mountView();
+
+      await wrapper.find('[data-testid="delete-donor-2"]').trigger('click');
+      await flushPromises();
+
+      expect(confirmAction).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.stringContaining('Maria Müller') }),
+      );
+      expect(wrapper.findAll('.donor-row')).toHaveLength(1);
+      expect(notify.success).toHaveBeenCalledWith('Donor deleted');
+    });
+
+    it('does nothing when the confirmation is declined', async () => {
+      confirmAction.mockResolvedValue(false);
+      const wrapper = await mountView();
+
+      await wrapper.find('[data-testid="delete-donor-2"]').trigger('click');
+      await flushPromises();
+
+      expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+      expect(wrapper.findAll('.donor-row')).toHaveLength(2);
+    });
+
+    it('explains why a donor with receipts is kept', async () => {
+      replies['DELETE /api/donor/1'] = {
+        status: 409,
+        body: { error: 'This donor has donation receipts and cannot be deleted' },
+      };
+      const wrapper = await mountView();
+
+      await wrapper.find('[data-testid="delete-donor-1"]').trigger('click');
+      await flushPromises();
+
+      expect(notify.error).toHaveBeenCalledWith(
+        'This donor has donation receipts and cannot be deleted',
+      );
+      expect(wrapper.findAll('.donor-row')).toHaveLength(2);
+    });
   });
 });

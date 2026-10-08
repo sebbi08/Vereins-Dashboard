@@ -47,3 +47,40 @@ invoiceRecipientRouter.patch('/:id', async (req, res) => {
   });
   res.json(recipient);
 });
+
+// DELETE /api/invoice-recipient/:id — only recipients not used by invoices, drafts or instructors
+invoiceRecipientRouter.delete('/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id) || id <= 0) {
+    res.status(400).json({ error: 'Invalid ID' });
+    return;
+  }
+
+  const outcome = await prisma.$transaction(async (tx) => {
+    const recipient = await tx.invoiceRecipient.findUnique({
+      where: { id },
+      select: { id: true, instructor: { select: { id: true } } },
+    });
+    if (!recipient) return { status: 404, error: 'Recipient not found' };
+    if ((await tx.invoice.count({ where: { recipientId: id } })) > 0) {
+      return { status: 409, error: 'This recipient has invoices and cannot be deleted' };
+    }
+    if ((await tx.invoiceDraft.count({ where: { recipientId: id } })) > 0) {
+      return { status: 409, error: 'This recipient has invoice drafts and cannot be deleted' };
+    }
+    if (recipient.instructor) {
+      return {
+        status: 409,
+        error: 'This recipient belongs to an instructor and cannot be deleted',
+      };
+    }
+    await tx.invoiceRecipient.delete({ where: { id } });
+    return null;
+  });
+
+  if (outcome) {
+    res.status(outcome.status).json({ error: outcome.error });
+  } else {
+    res.status(204).end();
+  }
+});
