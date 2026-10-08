@@ -7,18 +7,19 @@ concurrency:
   group: semantic-release
   cancel-in-progress: false
 
-permissions:
-  actions: read
-  contents: write
-  issues: write
-  pull-requests: write
-  packages: write
+# Each job gets only what it needs (see the job-level permissions below)
+permissions: {}
 
 jobs:
   release:
     # Releases are only cut from master; a manual run on another branch is skipped
     if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
+    permissions:
+      actions: read # read the CI run of this commit
+      contents: write # tag and GitHub release
+      issues: write # semantic-release comments on released issues
+      pull-requests: write # and pull requests
     outputs:
       released_version: ${{ steps.get-version.outputs.version }}
       new_release: ${{ steps.check-release.outputs.new_release }}
@@ -85,6 +86,9 @@ jobs:
     needs: release
     if: needs.release.outputs.new_release == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # push the image to GHCR
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
