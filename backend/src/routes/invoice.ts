@@ -1,10 +1,8 @@
-import { ZipArchive } from 'archiver';
 import { Router } from 'express';
 import type { InvoiceInputs, InvoiceLineItem, InvoiceListItem, PdfStatus } from 'shared';
 import type { Prisma } from '../../prisma/generated/client.js';
-import fs from 'fs';
-import { toAbsolutePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
+import { fileStem, sendDocumentBatch, sendPdf } from '../services/documentDownloads.js';
 import { sendInvoiceEmail } from '../services/emailService.js';
 import { createSendLock } from '../services/sendLock.js';
 import {
@@ -20,15 +18,6 @@ import {
   parseInvoiceRevisionBody,
   todayAsCalendarDay,
 } from '../services/requestParsing.js';
-
-async function fileExists(storedPath: string): Promise<boolean> {
-  try {
-    await fs.promises.access(toAbsolutePath(storedPath));
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export const invoiceRouter = Router();
 
@@ -132,92 +121,18 @@ invoiceRouter.get('/', async (req, res) => {
 // POST /api/invoice/download-batch
 // NOTE: This route MUST come before /:id to avoid matching "download-batch" as an id
 invoiceRouter.post('/download-batch', async (req, res) => {
-  const ids: unknown = req.body?.ids;
-  if (
-    !Array.isArray(ids) ||
-    ids.length === 0 ||
-    !ids.every((id: unknown) => typeof id === 'number' && Number.isFinite(id))
-  ) {
-    res.status(400).json({ error: 'MISSING_IDS', ids: [] });
-    return;
-  }
-
-  // Validate all IDs first — collect problems
-  const notFound: number[] = [];
-  const cancelled: number[] = [];
-  const notReady: number[] = [];
-  const validEntries: { number: string; revisionNumber: number; filePath: string }[] = [];
-
-  for (const id of ids) {
-    const invoice = await prisma.invoice.findUnique({
-      where: { id },
-      include: {
-        revisions: {
-          where: { status: 'AKTIV' },
-          orderBy: { revisionNumber: 'desc' },
-          take: 1,
+  await sendDocumentBatch(res, req.body?.ids, {
+    zipName: 'rechnungen',
+    load: async (id) => {
+      const invoice = await prisma.invoice.findUnique({
+        where: { id },
+        include: {
+          revisions: { where: { status: 'AKTIV' }, orderBy: { revisionNumber: 'desc' }, take: 1 },
         },
-      },
-    });
-
-    if (!invoice) {
-      notFound.push(id);
-      continue;
-    }
-
-    if (invoice.status === 'STORNIERT') {
-      cancelled.push(id);
-      continue;
-    }
-
-    const rev = invoice.revisions[0];
-    // A PDF missing on disk would otherwise be left out of the ZIP without a word
-    if (!rev || !rev.filePath || rev.pdfStatus !== 'OK' || !(await fileExists(rev.filePath))) {
-      notReady.push(id);
-      continue;
-    }
-
-    validEntries.push({
-      number: invoice.number,
-      revisionNumber: rev.revisionNumber,
-      filePath: rev.filePath,
-    });
-  }
-
-  if (notFound.length > 0 || cancelled.length > 0 || notReady.length > 0) {
-    const allProblemIds = [...notFound, ...cancelled, ...notReady];
-    if (notFound.length > 0) {
-      res.status(400).json({ error: 'NOT_FOUND', ids: allProblemIds });
-    } else if (cancelled.length > 0) {
-      res.status(400).json({ error: 'CANCELLED', ids: allProblemIds });
-    } else {
-      res.status(400).json({ error: 'PDF_NOT_READY', ids: allProblemIds });
-    }
-    return;
-  }
-
-  // All valid — build ZIP
-  const dateStr = new Date().toISOString().slice(0, 10);
-  res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="rechnungen-${dateStr}.zip"`);
-
-  const archive = new ZipArchive({ zlib: { level: 9 } });
-  archive.on('error', () => {
-    // If headers not yet sent, send error; otherwise the stream is already broken
-    if (!res.headersSent) {
-      res.status(500).json({ error: 'Server error during ZIP creation' });
-    }
+      });
+      return invoice && { ...invoice, revision: invoice.revisions[0] ?? null };
+    },
   });
-
-  archive.pipe(res);
-
-  for (const entry of validEntries) {
-    const safeNum = entry.number.replace(/\s*\/\s*/g, '-');
-    const name = `${safeNum}-R${entry.revisionNumber}.pdf`;
-    archive.file(toAbsolutePath(entry.filePath), { name });
-  }
-
-  await archive.finalize();
 });
 
 // GET /api/invoice/revision/:revisionId/download
@@ -244,15 +159,10 @@ invoiceRouter.get('/revision/:revisionId/download', async (req, res) => {
     return;
   }
 
-  const safeNum = revision.invoice.number.replace(/\s*\/\s*/g, '-');
-  const fileName = `${safeNum}-R${revision.revisionNumber}.pdf`;
-  res.sendFile(
-    toAbsolutePath(revision.filePath),
-    { headers: { 'Content-Disposition': `inline; filename="${fileName}"` } },
-    (err) => {
-      // A file missing on disk must not take the process down with an unhandled stream error.
-      if (err && !res.headersSent) res.status(404).json({ error: 'File not available' });
-    },
+  sendPdf(
+    res,
+    revision.filePath,
+    `${fileStem(revision.invoice.number)}-R${revision.revisionNumber}.pdf`,
   );
 });
 
