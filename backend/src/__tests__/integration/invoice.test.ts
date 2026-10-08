@@ -105,6 +105,34 @@ describe('GET /api/invoice', () => {
     });
   });
 
+  it('lists the newest invoice number first, comparing numbers as numbers', async () => {
+    const { recipient } = await seedRecipientAndInvoice();
+    for (const [year, runningNumber] of [
+      [2026, 9],
+      [2026, 10],
+      [2025, 12],
+    ]) {
+      await prisma.invoice.create({
+        data: {
+          number: `${runningNumber} / ${year}`,
+          year,
+          runningNumber,
+          recipientId: recipient.id,
+          invoiceDate: new Date(`${year}-06-01`),
+        },
+      });
+    }
+
+    const res = await request.get('/api/invoice');
+
+    expect(res.body.map((i: { number: string }) => i.number)).toEqual([
+      '10 / 2026',
+      '9 / 2026',
+      '1 / 2026',
+      '12 / 2025',
+    ]);
+  });
+
   it('excludes cancelled invoices by default', async () => {
     const { invoice } = await seedRecipientAndInvoice();
     await prisma.invoice.update({

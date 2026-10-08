@@ -285,6 +285,34 @@ describe('sendInvoiceEmail — dev override', () => {
     expect(result.error).toBe('SMTP settings are not configured');
   });
 
+  it.each([
+    ['two addresses pasted into one field', 'a@example.org, b@example.org'],
+    ['an address without a domain', 'max@'],
+    ['text that is no address', 'Max Mustermann'],
+  ])('refuses a real send to %s', async (_label, email) => {
+    process.env.NODE_ENV = 'production';
+
+    const result = await sendInvoiceEmail(buildPrismaMock({ revision: { ...revision, email } }), 1);
+
+    expect(result).toEqual({
+      success: false,
+      error: `The recipient email address is not valid: ${email}`,
+    });
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  it('refuses a real send when the invoice has no email address', async () => {
+    process.env.NODE_ENV = 'production';
+
+    const result = await sendInvoiceEmail(
+      buildPrismaMock({ revision: { ...revision, email: '  ' } }),
+      1,
+    );
+
+    expect(result).toEqual({ success: false, error: 'This invoice has no email address' });
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
   it('returns error when the invoice is canceled', async () => {
     process.env.NODE_ENV = 'production';
 

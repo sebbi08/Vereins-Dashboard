@@ -25,6 +25,7 @@ import { useNotify } from '../composables/useNotify';
 import { useTableFilters } from '../composables/useTableFilters';
 import { useAppStore } from '../stores/app';
 import { formatCents, formatDate, formatTimestampDate } from '../utils/format';
+import { invoiceNumberSortKey } from '../utils/invoiceNumberSort';
 import {
   DOCUMENT_STATUS_FILTER_OPTIONS,
   documentStatusTag,
@@ -240,6 +241,7 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
           field="number"
           header="Number"
           sortable
+          :sort-field="(row: InvoiceListItem) => invoiceNumberSortKey(row.number)"
           :show-filter-menu="false"
           class="col-number"
         >

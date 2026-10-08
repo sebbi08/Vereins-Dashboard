@@ -5,6 +5,7 @@ import type { Prisma } from '../../prisma/generated/client.js';
 import { toAbsolutePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
 import { sendInvoiceEmail } from '../services/emailService.js';
+import { createSendLock } from '../services/sendLock.js';
 import {
   calculateGross,
   createInvoiceWithFirstRevision,
@@ -22,6 +23,7 @@ import {
 export const invoiceRouter = Router();
 
 const runningRetries = new Set<number>();
+const sendLock = createSendLock();
 
 function revisionToDto(rev: {
   id: number;
@@ -109,7 +111,8 @@ invoiceRouter.get('/', async (req, res) => {
         take: 1,
       },
     },
-    orderBy: { number: 'desc' },
+    // number is text ("9 / 2026"); sort by its parts so 10 comes before 9
+    orderBy: [{ year: 'desc' }, { runningNumber: 'desc' }],
   });
 
   const list: InvoiceListItem[] = invoices.map((r) => ({
@@ -326,7 +329,12 @@ invoiceRouter.post('/revision/:revisionId/send-email', async (req, res) => {
     return;
   }
 
-  const result = await sendInvoiceEmail(prisma, id);
+  const locked = await sendLock(id, () => sendInvoiceEmail(prisma, id));
+  if (locked.busy) {
+    res.status(409).json({ error: 'This invoice is already being sent' });
+    return;
+  }
+  const result = locked.value;
   if (result.success) {
     res.json({ emailStatus: 'SENT' as const, emailError: null });
   } else {

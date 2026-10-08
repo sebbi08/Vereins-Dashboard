@@ -14,6 +14,14 @@ export function replaceVariables(template: string, vars: Record<string, string>)
   return result;
 }
 
+/**
+ * True for exactly one plain address. Nodemailer reads "a@x.de, b@y.de" as two recipients, so a
+ * pasted list would send the invoice to everyone in it.
+ */
+export function isSingleEmailAddress(value: string): boolean {
+  return /^[^\s@,;<>"]+@[^\s@,;<>"]+\.[^\s@,;<>"]+$/.test(value);
+}
+
 export async function sendInvoiceEmail(
   prisma: PrismaClient,
   revisionId: number,
@@ -34,6 +42,16 @@ export async function sendInvoiceEmail(
 
   if (revision.invoice.status === 'STORNIERT') {
     return { success: false, error: 'Canceled invoices cannot be sent by email' };
+  }
+
+  const forceTestAddress = options?.forceTestAddress === true;
+  // Test sends go to the configured test address; only a real send needs the invoice's address
+  if (!forceTestAddress) {
+    const email = revision.email.trim();
+    if (!email) return { success: false, error: 'This invoice has no email address' };
+    if (!isSingleEmailAddress(email)) {
+      return { success: false, error: `The recipient email address is not valid: ${email}` };
+    }
   }
 
   const settings = await prisma.systemSetting.findMany();
@@ -61,10 +79,9 @@ export async function sendInvoiceEmail(
     email: revision.email,
   };
 
-  let to = revision.email;
+  let to = revision.email.trim();
   let body = replaceVariables(emailBody, vars);
   const subject = replaceVariables(emailSubject, vars);
-  const forceTestAddress = options?.forceTestAddress === true;
 
   if (forceTestAddress) {
     if (!testAddress) {
