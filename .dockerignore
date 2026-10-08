@@ -1,13 +1,18 @@
-.git
-node_modules
-frontend/node_modules
-backend/node_modules
-shared/node_modules
-frontend/dist
-backend/dist
-shared/dist
-data/
-*.sqlite
-.env
-dev-data
-e2e/.browser-cache
+# Allow-list: the image is built from the workspace manifests and sources only. Anything else
+# (local data with personal documents, browser caches, agent worktrees) never enters the context.
+*
+!package.json
+!package-lock.json
+!frontend/
+!backend/
+!shared/
+
+# Never needed inside the allowed folders
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+**/*.sqlite
+backend/prisma/generated
+frontend/src/__tests__
+backend/src/__tests__

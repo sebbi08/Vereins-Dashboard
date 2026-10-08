@@ -24,8 +24,15 @@ RUN npm run build
 # Production stage
 FROM node:22-alpine
 
-# Install LibreOffice for DOCX → PDF conversion
-RUN apk add --no-cache libreoffice ttf-freefont
+# LibreOffice renders DOCX templates to PDF. Liberation (Arial, Times New Roman, Courier New)
+# and Carlito (Calibri) are metric-compatible with the fonts the templates use, so line and
+# page breaks match what was laid out in Word. tzdata lets TZ below take effect.
+RUN apk add --no-cache libreoffice ttf-freefont font-liberation font-carlito tzdata
+
+# Dates such as "today" on documents and the year of a new invoice number follow the club's
+# local day, not UTC.
+ENV TZ=Europe/Berlin
+ENV NODE_ENV=production
 
 WORKDIR /app
 
@@ -35,10 +42,10 @@ COPY --from=builder /app/frontend/package*.json ./frontend/
 COPY --from=builder /app/backend/package*.json ./backend/
 COPY --from=builder /app/shared/package*.json ./shared/
 
-# Install runtime dependencies (including Prisma CLI for deploy-time migrations)
+# Install runtime dependencies only (the Prisma CLI is one, for deploy-time migrations).
 # Remove prepare script so husky doesn't run (not available in production)
 # --ignore-scripts would also skip @prisma/client postinstall, so we target only prepare
-RUN npm pkg delete scripts.prepare && npm ci --workspace=backend
+RUN npm pkg delete scripts.prepare && npm ci --workspace=backend --omit=dev
 
 # Copy backend build and its dependencies
 COPY --from=builder /app/backend/dist ./backend/dist
@@ -52,16 +59,19 @@ COPY --from=builder /app/frontend/dist ./frontend/dist
 RUN mkdir -p /app/backend/dist \
 	&& ln -s /app/frontend /app/backend/dist/frontend
 
-# Create data directories
-RUN mkdir -p /app/data/vorlagen /app/data/quittungen
-
-WORKDIR /app
+# Data directory (database, templates, generated PDFs); mount a volume here
+RUN mkdir -p /app/data
+VOLUME /app/data
 
 EXPOSE 3000
 
-ENV NODE_ENV=production
 ENV DATABASE_URL="file:/app/data/db.sqlite"
 ENV PORT=3000
 ENV DATA_DIR=/app/data
 
-CMD ["sh", "-lc", "cd /app/backend && npx prisma migrate deploy && cd /app && node backend/dist/backend/src/index.js"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+	CMD wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1
+
+# Before migrating, keep a copy of the database as it was (overwritten on every start), so a
+# failed migration never leaves the only copy half-migrated.
+CMD ["sh", "-lc", "if [ -f /app/data/db.sqlite ]; then cp /app/data/db.sqlite /app/data/db.sqlite.before-migrate; fi && cd /app/backend && npx prisma migrate deploy && cd /app && node backend/dist/backend/src/index.js"]

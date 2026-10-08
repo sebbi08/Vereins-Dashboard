@@ -89,3 +89,46 @@ jobs:
           path: |
             ${{ runner.temp }}/backend.log
             ${{ runner.temp }}/frontend.log
+
+  # Builds the production image and starts it, so a broken Dockerfile fails CI before a release
+  # (the release workflow only runs for commits whose CI run succeeded).
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build --build-arg VERSION=ci --tag mv-dashboard:ci .
+
+      - name: Start container
+        run: |
+          mkdir -p "${RUNNER_TEMP}/data"
+          chmod 777 "${RUNNER_TEMP}/data"
+          docker run --detach --name mv-dashboard -p 3995:3000 \
+            -v "${RUNNER_TEMP}/data:/app/data" mv-dashboard:ci
+
+      - name: Wait for the health check
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:3995/api/health; then echo; exit 0; fi
+            sleep 2
+          done
+          echo "::error::The container did not become healthy"
+          exit 1
+
+      - name: Smoke-test the running image
+        run: |
+          curl -fsS http://localhost:3995/ | grep -qi '<div id="app"' \
+            || { echo "::error::The frontend is not served"; exit 1; }
+          test -f "${RUNNER_TEMP}/data/db.sqlite" \
+            || { echo "::error::No database was created on the data volume"; exit 1; }
+          docker exec mv-dashboard sh -c \
+            'find /usr/share/fonts -iname "*carlito*" | grep -q . && find /usr/share/fonts -iname "*liberation*" | grep -q .' \
+            || { echo "::error::Template fonts are missing in the image"; exit 1; }
+          docker exec mv-dashboard sh -c 'libreoffice --version'
+
+      - name: Container logs
+        if: always()
+        run: docker logs mv-dashboard || true
