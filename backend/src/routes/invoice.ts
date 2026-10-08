@@ -3,8 +3,9 @@ import type { InvoiceInputs, InvoiceLineItem, InvoiceListItem, PdfStatus } from 
 import type { Prisma } from '../../prisma/generated/client.js';
 import { prisma } from '../prismaClient.js';
 import { fileStem, sendDocumentBatch, sendPdf } from '../services/documentDownloads.js';
+import { createRetryPdfHandler } from '../services/documentPdf.js';
 import { sendInvoiceEmail } from '../services/emailService.js';
-import { createSendLock } from '../services/sendLock.js';
+import { createRevisionLock } from '../services/revisionLock.js';
 import {
   calculateGross,
   createInvoiceWithFirstRevision,
@@ -21,8 +22,7 @@ import {
 
 export const invoiceRouter = Router();
 
-const runningRetries = new Set<number>();
-const sendLock = createSendLock();
+const sendLock = createRevisionLock();
 
 function revisionToDto(rev: {
   id: number;
@@ -167,48 +167,13 @@ invoiceRouter.get('/revision/:revisionId/download', async (req, res) => {
 });
 
 // POST /api/invoice/revision/:revisionId/retry-pdf
-invoiceRouter.post('/revision/:revisionId/retry-pdf', async (req, res) => {
-  const id = parseInt(req.params.revisionId);
-  if (isNaN(id)) {
-    res.status(400).json({ error: 'Invalid revision ID' });
-    return;
-  }
-
-  const revision = await prisma.invoiceRevision.findUnique({ where: { id } });
-  if (!revision) {
-    res.status(404).json({ error: 'Revision not found' });
-    return;
-  }
-
-  if (revision.status !== 'AKTIV') {
-    res.status(400).json({ error: 'Retry is only allowed for active revisions' });
-    return;
-  }
-
-  if (revision.pdfStatus !== 'FAILED') {
-    res.status(400).json({ error: 'Retry is only possible for failed PDFs' });
-    return;
-  }
-
-  if (runningRetries.has(id)) {
-    res.status(409).json({ error: 'A retry is already running for this revision' });
-    return;
-  }
-
-  runningRetries.add(id);
-  try {
-    const pdf = await attemptInvoicePdfGeneration(id);
-    res.json({
-      revisionId: id,
-      pdfStatus: pdf.pdfStatus,
-      pdfError: pdf.pdfError,
-      pdfTechError: pdf.pdfTechError,
-      filePath: pdf.filePath,
-    });
-  } finally {
-    runningRetries.delete(id);
-  }
-});
+invoiceRouter.post(
+  '/revision/:revisionId/retry-pdf',
+  createRetryPdfHandler({
+    findRevision: (id) => prisma.invoiceRevision.findUnique({ where: { id } }),
+    attempt: attemptInvoicePdfGeneration,
+  }),
+);
 
 // POST /api/invoice/revision/:revisionId/send-email
 // NOTE: This route MUST come before /:id to avoid matching "send-email" as an id

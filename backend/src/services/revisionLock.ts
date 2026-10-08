@@ -1,10 +1,10 @@
 export type LockResult<T> = { busy: true } | { busy: false; value: T };
 
 /**
- * Allows one running send per revision. A double click on "Send" would otherwise mail the
- * invoice twice; the second request gets `{ busy: true }` while the first is still running.
+ * Allows one running action per revision, e.g. sending an invoice or regenerating a PDF. A double
+ * click would otherwise run it twice; the second call gets `{ busy: true }` while the first runs.
  */
-export function createSendLock() {
+export function createRevisionLock() {
   const running = new Set<number>();
   return async function withLock<T>(id: number, send: () => Promise<T>): Promise<LockResult<T>> {
     if (running.has(id)) return { busy: true };
