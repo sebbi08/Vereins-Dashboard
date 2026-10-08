@@ -429,7 +429,7 @@ onMounted(() => {
                 <InputText v-model="data[field]" size="small" fluid />
               </template>
             </Column>
-            <Column field="email" header="E-Mail">
+            <Column field="email" header="Email">
               <template #body="{ data }">{{ data.email ?? '–' }}</template>
               <template #editor="{ data, field }">
                 <InputText v-model="data[field]" type="email" size="small" fluid />

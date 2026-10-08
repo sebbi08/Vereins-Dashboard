@@ -239,7 +239,7 @@ describe('DonationReceiptFormView — new receipt', () => {
 
   it('starts a new donor with the typed name and a default letter salutation', async () => {
     const wrapper = await mountForm();
-    picker(wrapper).vm.$emit('neu', { name: 'Neue Person', street: '', city: '' });
+    picker(wrapper).vm.$emit('new-donor', { name: 'Neue Person', street: '', city: '' });
     await flushPromises();
     expect(vm(wrapper).inputs.name).toBe('Neue Person');
     expect(vm(wrapper).inputs.letterSalutation).toBe('Sehr geehrte Damen und Herren');
@@ -250,7 +250,7 @@ describe('DonationReceiptFormView — new receipt', () => {
     const wrapper = await mountForm();
     picker(wrapper).vm.$emit('update:modelValue', hans);
     await flushPromises();
-    picker(wrapper).vm.$emit('neu', { name: 'Maria Meier', street: '', city: '' });
+    picker(wrapper).vm.$emit('new-donor', { name: 'Maria Meier', street: '', city: '' });
     await flushPromises();
 
     expect(vm(wrapper).inputs.name).toBe('Maria Meier');
@@ -277,7 +277,7 @@ describe('DonationReceiptFormView — new receipt', () => {
 
   it('requires an amount and a letter salutation for a cover letter', async () => {
     const wrapper = await mountForm();
-    picker(wrapper).vm.$emit('neu', { name: 'Neue Person', street: '', city: '' });
+    picker(wrapper).vm.$emit('new-donor', { name: 'Neue Person', street: '', city: '' });
     await flushPromises();
     vm(wrapper).inputs.letterSalutation = '';
 
@@ -324,7 +324,7 @@ describe('DonationReceiptFormView — new receipt', () => {
       body: { receiptId: 12, pdfStatus: 'OK' },
     };
     const wrapper = await mountForm();
-    picker(wrapper).vm.$emit('neu', { name: 'Neue Person', street: '', city: '' });
+    picker(wrapper).vm.$emit('new-donor', { name: 'Neue Person', street: '', city: '' });
     await flushPromises();
     Object.assign(vm(wrapper).inputs, { letterSalutation: '', withCoverLetter: false });
     await setAmount(wrapper, 50);
@@ -359,7 +359,7 @@ describe('DonationReceiptFormView — new receipt', () => {
       body: { receiptId: 12, pdfStatus: 'OK' },
     };
     const wrapper = await mountForm();
-    picker(wrapper).vm.$emit('neu', { name: 'Neue Person', street: '', city: '' });
+    picker(wrapper).vm.$emit('new-donor', { name: 'Neue Person', street: '', city: '' });
     await flushPromises();
     await wrapper.find('#street').setValue('Weg 1');
     await wrapper.find('#city').setValue('Stadt');

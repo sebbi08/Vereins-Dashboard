@@ -726,7 +726,7 @@ function onFormSubmit() {
       <FormSection title="Email">
         <div class="grid-2">
           <div class="field">
-            <label for="email">E-Mail</label>
+            <label for="email">Email</label>
             <InputText id="email" v-model="inputs.email" type="email" fluid />
           </div>
           <div class="field">

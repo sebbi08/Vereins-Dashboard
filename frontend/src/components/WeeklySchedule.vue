@@ -23,13 +23,24 @@ const emit = defineEmits<{
 }>();
 
 const DAY_LABELS: Record<Weekday, string> = {
-  MO: 'Mo',
-  DI: 'Di',
-  MI: 'Mi',
-  DO: 'Do',
-  FR: 'Fr',
-  SA: 'Sa',
-  SO: 'So',
+  MO: 'Mon',
+  DI: 'Tue',
+  MI: 'Wed',
+  DO: 'Thu',
+  FR: 'Fri',
+  SA: 'Sat',
+  SO: 'Sun',
+};
+
+/** Full day names for screen readers: every control says which day and block it belongs to. */
+const DAY_NAMES: Record<Weekday, string> = {
+  MO: 'Monday',
+  DI: 'Tuesday',
+  MI: 'Wednesday',
+  DO: 'Thursday',
+  FR: 'Friday',
+  SA: 'Saturday',
+  SO: 'Sunday',
 };
 
 /** PrimeVue look for the native time inputs (spec: values stay "HH:MM"). */
@@ -40,6 +51,7 @@ const days = computed(() =>
   WEEKDAYS.map((weekday) => ({
     weekday,
     label: DAY_LABELS[weekday],
+    name: DAY_NAMES[weekday],
     blocks: props.modelValue
       .map((block, index) => ({ block, index }))
       .filter(({ block }) => block.weekday === weekday),
@@ -107,7 +119,7 @@ function inputValue(event: Event): string {
     >
       <div class="stack gap-sm">
         <div
-          v-for="{ block, index } in day.blocks"
+          v-for="({ block, index }, position) in day.blocks"
           :key="index"
           data-testid="block"
           class="schedule__block"
@@ -117,7 +129,7 @@ function inputValue(event: Event): string {
               data-testid="block-start"
               type="time"
               :value="block.start"
-              aria-label="Start"
+              :aria-label="`${day.name} block ${position + 1} start`"
               :class="TIME_INPUT_CLASS"
               @input="updateBlock(index, 'start', inputValue($event))"
             />
@@ -126,7 +138,7 @@ function inputValue(event: Event): string {
               data-testid="block-end"
               type="time"
               :value="block.end"
-              aria-label="End"
+              :aria-label="`${day.name} block ${position + 1} end`"
               :class="TIME_INPUT_CLASS"
               @input="updateBlock(index, 'end', inputValue($event))"
             />
@@ -135,7 +147,7 @@ function inputValue(event: Event): string {
             >
             <span class="schedule__spacer"></span>
             <Button
-              label="Pause"
+              label="Break"
               icon="pi pi-plus"
               size="small"
               text
@@ -158,12 +170,12 @@ function inputValue(event: Event): string {
             :key="breakIndex"
             class="row gap-sm schedule__break"
           >
-            <span class="muted schedule__break-label">Pause</span>
+            <span class="muted schedule__break-label">Break</span>
             <input
               data-testid="break-start"
               type="time"
               :value="brk.start"
-              aria-label="Break start"
+              :aria-label="`${day.name} block ${position + 1} break start`"
               :class="TIME_INPUT_CLASS"
               @input="updateBreak(index, breakIndex, 'start', inputValue($event))"
             />
@@ -172,7 +184,7 @@ function inputValue(event: Event): string {
               data-testid="break-end"
               type="time"
               :value="brk.end"
-              aria-label="Break end"
+              :aria-label="`${day.name} block ${position + 1} break end`"
               :class="TIME_INPUT_CLASS"
               @input="updateBreak(index, breakIndex, 'end', inputValue($event))"
             />
@@ -205,6 +217,7 @@ function inputValue(event: Event): string {
             icon="pi pi-plus"
             size="small"
             text
+            :aria-label="`Add block on ${day.name}`"
             :data-testid="`add-block-${day.weekday}`"
             @click="addBlock(day.weekday)"
           />

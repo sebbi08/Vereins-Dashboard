@@ -16,7 +16,7 @@ function lastEmitted(wrapper: ReturnType<typeof mountSchedule>): TimeBlock[] {
 }
 
 describe('WeeklySchedule', () => {
-  it('renders seven day fieldsets Mo to So', () => {
+  it('renders seven day fieldsets Mon to Sun', () => {
     const wrapper = mountSchedule([]);
     const days = ['MO', 'DI', 'MI', 'DO', 'FR', 'SA', 'SO'];
     for (const day of days) {
@@ -25,14 +25,32 @@ describe('WeeklySchedule', () => {
       expect(fieldset.element.tagName).toBe('FIELDSET');
     }
     expect(wrapper.findAll('legend').map((l) => l.text())).toEqual([
-      'Mo',
-      'Di',
-      'Mi',
-      'Do',
-      'Fr',
-      'Sa',
-      'So',
+      'Mon',
+      'Tue',
+      'Wed',
+      'Thu',
+      'Fri',
+      'Sat',
+      'Sun',
     ]);
+  });
+
+  it('names the day in every control for screen readers', () => {
+    const wrapper = mountSchedule([{ ...monday, breaks: [{ start: '10:00', end: '10:15' }] }]);
+    const day = wrapper.find('[data-testid="day-MO"]');
+    expect(day.find('[data-testid="add-block-MO"]').attributes('aria-label')).toBe(
+      'Add block on Monday',
+    );
+    expect(day.find('[data-testid="block-start"]').attributes('aria-label')).toBe(
+      'Monday block 1 start',
+    );
+    expect(day.find('[data-testid="block-end"]').attributes('aria-label')).toBe(
+      'Monday block 1 end',
+    );
+    expect(day.find('[data-testid="break-start"]').attributes('aria-label')).toBe(
+      'Monday block 1 break start',
+    );
+    expect(day.find('[data-testid="add-break"]').text()).toBe('Break');
   });
 
   it('shows blocks under their weekday', () => {

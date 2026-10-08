@@ -13,7 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [value: DonorDto | null];
-  neu: [daten: { name: string; street: string; city: string }];
+  'new-donor': [data: { name: string; street: string; city: string }];
 }>();
 
 /** Pseudo option at the end of the list: create a new donor from the typed name. */
@@ -65,7 +65,7 @@ function onSelect(event: AutoCompleteOptionSelectEvent) {
   const donor = event.value as DonorDto;
   query.value = donor.name;
   if (donor.id === NEW_DONOR_ID) {
-    emit('neu', { name: donor.name, street: '', city: '' });
+    emit('new-donor', { name: donor.name, street: '', city: '' });
   } else {
     emit('update:modelValue', donor);
   }

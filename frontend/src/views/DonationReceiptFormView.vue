@@ -307,7 +307,7 @@ async function submit() {
             :model-value="donor"
             input-id="donor-search-input"
             @update:model-value="onDonorSelected"
-            @neu="onNewDonor"
+            @new-donor="onNewDonor"
           />
         </div>
 

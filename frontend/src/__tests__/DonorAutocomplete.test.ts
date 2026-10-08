@@ -142,7 +142,7 @@ describe('DonorAutocomplete', () => {
     expect(input(wrapper).value).toBe('Hans Schmidt');
   });
 
-  it('emits "neu" with the typed name for the new-donor option', async () => {
+  it('emits "new-donor" with the typed name for the new-donor option', async () => {
     const wrapper = mountPicker();
     await complete(wrapper, 'Neue Person');
     autocomplete(wrapper).vm.$emit('option-select', {
@@ -150,7 +150,7 @@ describe('DonorAutocomplete', () => {
       value: newDonorOption('Neue Person'),
     });
     await flushPromises();
-    expect(wrapper.emitted('neu')).toEqual([[{ name: 'Neue Person', street: '', city: '' }]]);
+    expect(wrapper.emitted('new-donor')).toEqual([[{ name: 'Neue Person', street: '', city: '' }]]);
     expect(wrapper.emitted('update:modelValue')).toBeUndefined();
   });
 });
