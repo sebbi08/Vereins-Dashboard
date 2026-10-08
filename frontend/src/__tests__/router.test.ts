@@ -11,4 +11,13 @@ describe('router', () => {
     expect(router.resolve('/invoice/new').name).not.toBe('not-found');
     expect(router.resolve('/settings').name).not.toBe('not-found');
   });
+
+  it('loads every page except the start page only when it is opened', () => {
+    const lazy = router
+      .getRoutes()
+      .filter((route) => route.name !== 'home' && route.components?.default)
+      .map((route) => [route.path, typeof route.components!.default]);
+    expect(lazy.length).toBeGreaterThan(5);
+    expect(lazy.filter(([, kind]) => kind !== 'function')).toEqual([]);
+  });
 });

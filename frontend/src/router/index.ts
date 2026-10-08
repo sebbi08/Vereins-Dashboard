@@ -1,15 +1,4 @@
-import DonationReceiptDetailView from '@/views/DonationReceiptDetailView.vue';
-import DonationReceiptFormView from '@/views/DonationReceiptFormView.vue';
-import DonationReceiptView from '@/views/DonationReceiptView.vue';
 import HomeView from '@/views/HomeView.vue';
-import InstructorFormView from '@/views/InstructorFormView.vue';
-import InstructorView from '@/views/InstructorView.vue';
-import InvoiceDetailView from '@/views/InvoiceDetailView.vue';
-import InvoiceFormView from '@/views/InvoiceFormView.vue';
-import InvoiceSettingsView from '@/views/InvoiceSettingsView.vue';
-import InvoiceView from '@/views/InvoiceView.vue';
-import NotFoundView from '@/views/NotFoundView.vue';
-import SettingsView from '@/views/SettingsView.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
 const router = createRouter({
@@ -19,62 +8,78 @@ const router = createRouter({
     {
       path: '/donation-receipt',
       name: 'donation-receipt',
-      component: DonationReceiptView,
+      component: () => import('@/views/DonationReceiptView.vue'),
     },
     {
       path: '/donation-receipt/new',
       name: 'donation-receipt-new',
-      component: DonationReceiptFormView,
+      component: () => import('@/views/DonationReceiptFormView.vue'),
     },
     {
       path: '/donation-receipt/:id',
       name: 'donation-receipt-detail',
-      component: DonationReceiptDetailView,
+      component: () => import('@/views/DonationReceiptDetailView.vue'),
     },
     {
       path: '/donation-receipt/:id/revision',
       name: 'donation-receipt-revision',
-      component: DonationReceiptFormView,
+      component: () => import('@/views/DonationReceiptFormView.vue'),
     },
-    { path: '/invoice', name: 'invoice', component: InvoiceView },
+    { path: '/invoice', name: 'invoice', component: () => import('@/views/InvoiceView.vue') },
     {
       path: '/invoice/new',
       name: 'invoice-new',
-      component: InvoiceFormView,
+      component: () => import('@/views/InvoiceFormView.vue'),
     },
     {
       path: '/invoice/draft/:draftId',
       name: 'invoice-draft',
-      component: InvoiceFormView,
+      component: () => import('@/views/InvoiceFormView.vue'),
     },
     {
       path: '/invoice/:id',
       name: 'invoice-detail',
-      component: InvoiceDetailView,
+      component: () => import('@/views/InvoiceDetailView.vue'),
     },
     {
       path: '/invoice/:id/revision',
       name: 'invoice-revision',
-      component: InvoiceFormView,
+      component: () => import('@/views/InvoiceFormView.vue'),
     },
     {
       path: '/invoice/settings',
       name: 'invoice-settings',
-      component: InvoiceSettingsView,
+      component: () => import('@/views/InvoiceSettingsView.vue'),
     },
     {
       path: '/donation-receipt/settings',
       name: 'donation-receipt-settings',
-      component: SettingsView,
+      component: () => import('@/views/SettingsView.vue'),
     },
-    { path: '/instructor', name: 'instructor', component: InstructorView },
-    { path: '/instructor/new', name: 'instructor-new', component: InstructorFormView },
-    { path: '/instructor/:id', name: 'instructor-detail', component: InstructorFormView },
+    {
+      path: '/instructor',
+      name: 'instructor',
+      component: () => import('@/views/InstructorView.vue'),
+    },
+    {
+      path: '/instructor/new',
+      name: 'instructor-new',
+      component: () => import('@/views/InstructorFormView.vue'),
+    },
+    {
+      path: '/instructor/:id',
+      name: 'instructor-detail',
+      component: () => import('@/views/InstructorFormView.vue'),
+    },
     {
       path: '/settings',
       redirect: '/donation-receipt/settings',
     },
-    { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView },
+    {
+      path: '/:pathMatch(.*)*',
+      name: 'not-found',
+      component: () => import('@/views/NotFoundView.vue'),
+    },
   ],
 });
 
