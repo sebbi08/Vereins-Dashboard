@@ -49,14 +49,10 @@ type FieldKey = 'name' | 'title' | 'lineItems';
 const fieldErrors = ref<Partial<Record<FieldKey, string>>>({});
 
 const recipient = ref<InvoiceRecipientDto | null>(null);
-const newRecipient = ref(false);
 const recipientSearch = ref('');
 const recipientSuggestions = ref<InvoiceRecipientDto[]>([]);
 const recipientSearched = ref(false);
 
-const recipientFieldsLocked = computed(
-  () => !isNewRevision && !isDraft && !!recipient.value && !newRecipient.value,
-);
 /** True when a revision's address fields were replaced by newer recipient master data. */
 const defaultsHint = ref(false);
 
@@ -151,10 +147,18 @@ function recipientFieldsOf(i: InvoiceInputs): string[] {
 
 function selectRecipient(e: InvoiceRecipientDto) {
   recipient.value = e;
-  newRecipient.value = false;
   recipientSearch.value = e.name;
   recipientSuggestions.value = [];
   fillRecipientFields(e);
+}
+
+/** Unlinks the selected recipient so the fields describe a new one. */
+function startNewRecipient() {
+  recipient.value = null;
+  recipientSearch.value = '';
+  recipientSuggestions.value = [];
+  recipientSearched.value = false;
+  fillRecipientFields({ id: 0, name: '', street: '', city: '', email: null, salutation: null });
 }
 
 function onRecipientSelect(event: AutoCompleteOptionSelectEvent) {
@@ -222,7 +226,6 @@ async function copyFromInvoice() {
   if (data.recipient) {
     recipient.value = data.recipient;
     recipientSearch.value = data.recipient.name;
-    newRecipient.value = false;
     fillRecipientFields(data.recipient);
   }
 }
@@ -238,7 +241,6 @@ async function loadDraft() {
   inputs.value = { ...data.inputs, invoiceDate: inputs.value.invoiceDate };
   recipient.value = data.recipient;
   recipientSearch.value = data.recipient.name;
-  newRecipient.value = false;
   draftLoaded.value = true;
 }
 
@@ -281,7 +283,7 @@ onMounted(async () => {
 
 function recipientRequestBody(): Record<string, unknown> {
   const body: Record<string, unknown> = { inputs: inputs.value };
-  if (recipient.value && !newRecipient.value) {
+  if (recipient.value) {
     body.recipientId = recipient.value.id;
   } else {
     body.recipientData = {
@@ -472,23 +474,34 @@ function onFormSubmit() {
         </Message>
         <div v-if="!isNewRevision" class="field recipient-search">
           <label for="recipient-search">Search or create recipient</label>
-          <AutoComplete
-            :model-value="recipientSearch"
-            input-id="recipient-search"
-            data-testid="recipient-search"
-            :suggestions="recipientSuggestions"
-            option-label="name"
-            placeholder="Enter name…"
-            :delay="300"
-            fluid
-            @complete="searchRecipient"
-            @option-select="onRecipientSelect"
-            @update:model-value="onRecipientInput"
-          >
-            <template #option="{ option }">
-              {{ option.name }} — {{ option.street }}, {{ option.city }}
-            </template>
-          </AutoComplete>
+          <div class="row gap-sm recipient-search__row">
+            <AutoComplete
+              :model-value="recipientSearch"
+              input-id="recipient-search"
+              data-testid="recipient-search"
+              :suggestions="recipientSuggestions"
+              option-label="name"
+              placeholder="Enter name…"
+              :delay="300"
+              fluid
+              @complete="searchRecipient"
+              @option-select="onRecipientSelect"
+              @update:model-value="onRecipientInput"
+            >
+              <template #option="{ option }">
+                {{ option.name }} — {{ option.street }}, {{ option.city }}
+              </template>
+            </AutoComplete>
+            <Button
+              v-if="recipient"
+              label="New recipient"
+              icon="pi pi-user-plus"
+              severity="secondary"
+              outlined
+              data-testid="recipient-new"
+              @click="startNewRecipient"
+            />
+          </div>
           <small
             v-if="
               recipientSearch &&
@@ -505,12 +518,7 @@ function onFormSubmit() {
         <div class="grid-2">
           <div class="field">
             <label for="salutation">Salutation</label>
-            <InputText
-              id="salutation"
-              v-model="inputs.salutation"
-              :disabled="recipientFieldsLocked"
-              fluid
-            />
+            <InputText id="salutation" v-model="inputs.salutation" fluid />
           </div>
           <div class="field">
             <label for="name">Name</label>
@@ -518,7 +526,6 @@ function onFormSubmit() {
               id="name"
               v-model="inputs.name"
               required
-              :disabled="recipientFieldsLocked"
               :invalid="!!fieldErrors.name"
               fluid
             />
@@ -534,28 +541,16 @@ function onFormSubmit() {
           </div>
           <div class="field">
             <label for="street">Street</label>
-            <InputText
-              id="street"
-              v-model="inputs.street"
-              required
-              :disabled="recipientFieldsLocked"
-              fluid
-            />
+            <InputText id="street" v-model="inputs.street" required fluid />
           </div>
           <div class="field">
             <label for="city">City</label>
-            <InputText
-              id="city"
-              v-model="inputs.city"
-              required
-              :disabled="recipientFieldsLocked"
-              fluid
-            />
+            <InputText id="city" v-model="inputs.city" required fluid />
           </div>
         </div>
 
-        <p v-if="isNewRevision || isDraft" class="muted hint">
-          Editing these recipient fields updates the linked recipient record for this invoice.
+        <p v-if="recipient" data-testid="recipient-linked-hint" class="muted hint">
+          Linked to an existing recipient. Editing these fields updates that recipient.
         </p>
       </FormSection>
 
@@ -739,6 +734,15 @@ function onFormSubmit() {
 
 .hint-message {
   margin-bottom: 1rem;
+}
+
+.recipient-search__row {
+  flex-wrap: nowrap;
+}
+
+.recipient-search__row > :first-child {
+  flex: 1;
+  min-width: 0;
 }
 
 .recipient-search {

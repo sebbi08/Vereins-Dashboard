@@ -21,6 +21,8 @@ const NEW_DONOR_ID = -1;
 
 const query = ref(props.modelValue?.name ?? '');
 const suggestions = ref<DonorDto[]>([]);
+/** Bumped by every search; a response from an older search is stale. */
+let latestSearch = 0;
 
 watch(
   () => props.modelValue,
@@ -35,6 +37,7 @@ function newDonorOption(name: string): DonorDto {
 
 async function search(event: AutoCompleteCompleteEvent) {
   const q = event.query.trim();
+  const searchId = ++latestSearch;
   if (q.length < 2) {
     suggestions.value = [];
     return;
@@ -46,14 +49,15 @@ async function search(event: AutoCompleteCompleteEvent) {
   } catch {
     // offer "new donor" only
   }
+  if (searchId !== latestSearch) return;
   suggestions.value = [...donors, newDonorOption(q)];
 }
 
 function onInput(value: string | DonorDto | null) {
-  // Picking an option also emits the object here; onSelect handles that case
+  // Picking an option also emits the object here; onSelect handles that case. Typing only
+  // searches: the selected donor stays linked until another donor or "new donor" is picked.
   if (typeof value === 'string' || value === null) {
     query.value = value ?? '';
-    emit('update:modelValue', null);
   }
 }
 

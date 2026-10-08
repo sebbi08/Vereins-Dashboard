@@ -100,11 +100,34 @@ describe('DonorAutocomplete', () => {
     expect(autocomplete(wrapper).props('suggestions')).toEqual([newDonorOption('Han')]);
   });
 
-  it('clears the selection while the user types', async () => {
+  it('keeps the selected donor while the user types in the search', async () => {
+    // Unlinking on every keystroke silently turned a typo fix into a duplicate donor
     const wrapper = mountPicker(donors[0]);
     autocomplete(wrapper).vm.$emit('update:modelValue', 'Hans S');
     await flushPromises();
-    expect(wrapper.emitted('update:modelValue')).toEqual([[null]]);
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined();
+  });
+
+  it('ignores a search response that arrives after a newer one', async () => {
+    let answerFirst!: (value: unknown) => void;
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answerFirst = resolve;
+          }),
+      )
+      .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([donors[1]]) });
+    vi.stubGlobal('fetch', fetchMock);
+    const wrapper = mountPicker();
+
+    autocomplete(wrapper).vm.$emit('complete', { originalEvent: new Event('input'), query: 'Ha' });
+    await complete(wrapper, 'Mar');
+    answerFirst({ ok: true, json: () => Promise.resolve([donors[0]]) });
+    await flushPromises();
+
+    expect(autocomplete(wrapper).props('suggestions')).toEqual([donors[1], newDonorOption('Mar')]);
   });
 
   it('emits the picked donor', async () => {

@@ -314,7 +314,7 @@ describe('InvoiceFormView — new invoice', () => {
     });
   });
 
-  it('searches recipients and fills and locks the fields on selection', async () => {
+  it('searches recipients and fills the fields on selection, keeping them editable', async () => {
     replies['GET /api/invoice/recipient?search=An'] = { status: 200, body: [anna] };
     const wrapper = await mountForm();
     const autocomplete = wrapper.findComponent(AutoComplete);
@@ -334,7 +334,55 @@ describe('InvoiceFormView — new invoice', () => {
       email: 'anna@example.org',
       salutation: 'Frau',
     });
-    expect(wrapper.find('#name').attributes('disabled')).toBeDefined();
+    // Linked fields stay editable; saving updates that recipient (docs/RECIPIENT_MANAGEMENT.md)
+    expect(wrapper.find('#name').attributes('disabled')).toBeUndefined();
+    expect(wrapper.find('#street').attributes('disabled')).toBeUndefined();
+    expect(wrapper.find('[data-testid="recipient-linked-hint"]').exists()).toBe(true);
+  });
+
+  async function selectAnna(wrapper: VueWrapper) {
+    const autocomplete = wrapper.findComponent(AutoComplete);
+    autocomplete.vm.$emit('option-select', { originalEvent: new Event('click'), value: anna });
+    await flushPromises();
+  }
+
+  it('"New recipient" unlinks the selected recipient and empties the address', async () => {
+    const wrapper = await mountForm();
+    await selectAnna(wrapper);
+
+    await wrapper.find('[data-testid="recipient-new"]').trigger('click');
+
+    expect(vm(wrapper).recipient).toBeNull();
+    expect(vm(wrapper).inputs).toMatchObject({
+      name: '',
+      street: '',
+      city: '',
+      email: '',
+      salutation: '',
+    });
+    expect(wrapper.find('[data-testid="recipient-linked-hint"]').exists()).toBe(false);
+  });
+
+  it('creates the invoice for a new recipient after "New recipient"', async () => {
+    replies['POST /api/invoice'] = { status: 201, body: { invoiceId: 9, pdfStatus: 'PENDING' } };
+    const wrapper = await mountForm();
+    await selectAnna(wrapper);
+    await wrapper.find('[data-testid="recipient-new"]').trigger('click');
+    Object.assign(vm(wrapper).inputs, {
+      name: 'Bernd Bach',
+      street: 'Weg 2',
+      city: '54321 Bonn',
+      title: 'Miete',
+    });
+    vm(wrapper).inputs.lineItems[0] = { text: 'Raum', priceInCents: 1000 };
+    await flushPromises();
+
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    const body = bodyOf('POST /api/invoice');
+    expect(body.recipientId).toBeUndefined();
+    expect(body.recipientData).toMatchObject({ name: 'Bernd Bach', street: 'Weg 2' });
   });
 });
 
@@ -692,6 +740,15 @@ describe('InvoiceFormView — prefill from instructor', () => {
     expect(vm(wrapper).inputs.lineItems).toEqual(prefill.lineItems);
     expect(vm(wrapper).inputs.invoiceDate).toBe(today);
     expect(wrapper.find('[data-testid="save-draft"]').exists()).toBe(true);
+  });
+
+  it('lets the user add a street the instructor recipient is missing', async () => {
+    replies['GET /api/instructor/5/invoice-prefill'] = {
+      status: 200,
+      body: { ...prefill, recipient: { ...anna, street: '' } },
+    };
+    const wrapper = await mountForm();
+    expect(wrapper.find('#street').attributes('disabled')).toBeUndefined();
   });
 
   it('reports a failed prefill', async () => {
