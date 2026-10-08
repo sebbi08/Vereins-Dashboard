@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import Docxtemplater from 'docxtemplater';
 import fs from 'fs';
 import os from 'os';
@@ -10,8 +10,6 @@ import { promisify } from 'util';
 import type { PrismaClient } from '../../prisma/generated/client.js';
 import { INVOICES_DIR, RECEIPTS_DIR, toAbsolutePath, toRelativePath } from '../config.js';
 import { amountInWords, formatAmount, formatDate, formatEuroNumber } from './amountInWords.js';
-
-const execAsync = promisify(exec);
 
 export interface CoverLetterData {
   BriefAnrede: string;
@@ -158,21 +156,61 @@ async function fillCoverLetterTemplate(
   return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
 }
 
-async function docxToPdf(docxBuffer: Buffer): Promise<Buffer> {
-  const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lo-'));
-  const docxPath = path.join(tmpDir, 'input.docx');
-  const pdfPath = path.join(tmpDir, 'input.pdf');
+const execFileAsync = promisify(execFile);
 
-  try {
-    await fs.promises.writeFile(docxPath, docxBuffer);
-    await execAsync(
-      `libreoffice --headless --norestore --nofirststartwizard --convert-to pdf --outdir "${tmpDir}" "${docxPath}"`,
-    );
-    return await fs.promises.readFile(pdfPath);
-  } finally {
-    await fs.promises.rm(tmpDir, { recursive: true, force: true });
+/** How long one LibreOffice conversion may take before it is killed. */
+const LIBREOFFICE_TIMEOUT_MS = 60_000;
+
+export type CommandRunner = (
+  file: string,
+  args: string[],
+  options: { timeout: number; killSignal: NodeJS.Signals },
+) => Promise<unknown>;
+
+/**
+ * Builds the DOCX → PDF converter. Conversions run one at a time, each with its own LibreOffice
+ * profile: instances sharing a profile hand off to each other or exit with an error, and a
+ * profile left locked by a killed instance would otherwise block every later conversion.
+ */
+export function createDocxToPdf(run: CommandRunner): (docxBuffer: Buffer) => Promise<Buffer> {
+  let queue: Promise<unknown> = Promise.resolve();
+
+  async function convert(docxBuffer: Buffer): Promise<Buffer> {
+    const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'lo-'));
+    const docxPath = path.join(tmpDir, 'input.docx');
+    const pdfPath = path.join(tmpDir, 'input.pdf');
+
+    try {
+      await fs.promises.writeFile(docxPath, docxBuffer);
+      await run(
+        'libreoffice',
+        [
+          '--headless',
+          '--norestore',
+          '--nofirststartwizard',
+          `-env:UserInstallation=file://${path.join(tmpDir, 'profile')}`,
+          '--convert-to',
+          'pdf',
+          '--outdir',
+          tmpDir,
+          docxPath,
+        ],
+        { timeout: LIBREOFFICE_TIMEOUT_MS, killSignal: 'SIGKILL' },
+      );
+      return await fs.promises.readFile(pdfPath);
+    } finally {
+      await fs.promises.rm(tmpDir, { recursive: true, force: true });
+    }
   }
+
+  return (docxBuffer) => {
+    const result = queue.then(() => convert(docxBuffer));
+    queue = result.catch(() => undefined);
+    return result;
+  };
 }
+
+export const docxToPdf = createDocxToPdf(execFileAsync);
 
 async function fillPdfForm(templateBuffer: Buffer, data: PdfFormData): Promise<Buffer> {
   const pdfDoc = await PDFDocument.load(templateBuffer);
