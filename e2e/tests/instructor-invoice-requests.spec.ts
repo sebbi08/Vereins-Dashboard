@@ -23,6 +23,7 @@ async function createInstructor(name: string): Promise<number> {
 
 async function requestedMonths(year: number, instructorId: number): Promise<string[]> {
   const res = await fetch(`${BACKEND_URL}/api/instructor/invoice-requests?year=${year}`);
+  if (!res.ok) throw new Error(`Loading the invoice requests failed (${res.status})`);
   const rows = (await res.json()) as { instructorId: number; month: string }[];
   return rows.filter((r) => r.instructorId === instructorId).map((r) => r.month);
 }

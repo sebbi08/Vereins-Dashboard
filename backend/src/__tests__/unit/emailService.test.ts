@@ -13,7 +13,7 @@ vi.mock('nodemailer', () => ({
   default: { createTransport: createTransportMock },
 }));
 
-vi.mock('../config.js', () => ({
+vi.mock('../../config.js', () => ({
   toAbsolutePath: vi.fn((p: string) => `/data/${p}`),
   ABSOLUTE_DATA_DIR: '/data',
   DATA_DIR: '/data',
@@ -181,6 +181,16 @@ describe('sendInvoiceEmail — dev override', () => {
     );
     expect(mailOpts.text).toContain('Herr');
     expect(mailOpts.text).toContain('Rechnung 2024-001');
+  });
+
+  it('attaches the revision PDF from the data directory', async () => {
+    process.env.NODE_ENV = 'production';
+
+    await sendInvoiceEmail(buildPrismaMock(), 1);
+
+    expect(sendMailMock.mock.calls[0][0].attachments).toEqual([
+      { filename: '2024-001.pdf', path: '/data/invoices/1/r1/doc.pdf' },
+    ]);
   });
 
   it('does NOT redirect when NODE_ENV is production', async () => {
