@@ -357,6 +357,76 @@ describe('InvoiceFormView — copy and revision', () => {
     expect(vm(wrapper).recipient?.id).toBe(7);
   });
 
+  // The source invoice was issued before the recipient moved: the revision snapshot is stale.
+  const movedInvoiceDto = {
+    ...invoiceDto,
+    activeRevision: {
+      inputs: {
+        ...invoiceDto.activeRevision.inputs,
+        street: 'Alte Str. 9',
+        city: '99999 Altstadt',
+        email: 'old@example.org',
+        salutation: 'Herr',
+      },
+    },
+  };
+
+  function recipientFields(wrapper: VueWrapper) {
+    const { inputs } = vm(wrapper);
+    return [inputs.name, inputs.street, inputs.city, inputs.email, inputs.salutation];
+  }
+
+  it('copies the recipient’s current master data, not the archived address', async () => {
+    setRoute({}, { copyFrom: '3' });
+    replies['GET /api/invoice/3'] = { status: 200, body: movedInvoiceDto };
+    const wrapper = await mountForm();
+    expect(recipientFields(wrapper)).toEqual([
+      'Anna Alt',
+      'Hauptstr. 1',
+      '12345 Berlin',
+      'anna@example.org',
+      'Frau',
+    ]);
+    expect(vm(wrapper).inputs.title).toBe('Draft Titel');
+    expect(wrapper.find('[data-testid="defaults-hint"]').exists()).toBe(false);
+  });
+
+  it('pre-fills a revision with the current master data and says so', async () => {
+    setRoute({ id: '3' });
+    replies['GET /api/invoice/3'] = { status: 200, body: movedInvoiceDto };
+    const wrapper = await mountForm();
+    expect(recipientFields(wrapper)).toEqual([
+      'Anna Alt',
+      'Hauptstr. 1',
+      '12345 Berlin',
+      'anna@example.org',
+      'Frau',
+    ]);
+    expect(wrapper.find('[data-testid="defaults-hint"]').text()).toContain(
+      'current recipient master data',
+    );
+  });
+
+  it('shows no hint when the revision snapshot matches the master data', async () => {
+    setRoute({ id: '3' });
+    const unchangedInvoiceDto = {
+      ...invoiceDto,
+      activeRevision: {
+        inputs: {
+          ...invoiceDto.activeRevision.inputs,
+          name: anna.name,
+          street: anna.street,
+          city: anna.city,
+          email: anna.email,
+          salutation: anna.salutation,
+        },
+      },
+    };
+    replies['GET /api/invoice/3'] = { status: 200, body: unchangedInvoiceDto };
+    const wrapper = await mountForm();
+    expect(wrapper.find('[data-testid="defaults-hint"]').exists()).toBe(false);
+  });
+
   it('shows an error when the copy source cannot be loaded', async () => {
     setRoute({}, { copyFrom: '3' });
     replies['GET /api/invoice/3'] = { status: 404, body: { error: 'Not found' } };

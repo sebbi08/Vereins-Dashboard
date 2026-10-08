@@ -57,6 +57,8 @@ const recipientSearched = ref(false);
 const recipientFieldsLocked = computed(
   () => !isNewRevision && !isDraft && !!recipient.value && !newRecipient.value,
 );
+/** True when a revision's address fields were replaced by newer recipient master data. */
+const defaultsHint = ref(false);
 
 // Stable client keys for the line items, so inputs keep their identity when items are removed
 let nextLineItemKey = 0;
@@ -134,16 +136,25 @@ function onRecipientInput(value: string | InvoiceRecipientDto | null) {
   recipientSearch.value = typeof value === 'string' ? value : (value?.name ?? '');
 }
 
+/** Copies the recipient master record into the address fields. */
+function fillRecipientFields(r: InvoiceRecipientDto) {
+  inputs.value.name = r.name;
+  inputs.value.street = r.street;
+  inputs.value.city = r.city;
+  inputs.value.email = r.email ?? '';
+  inputs.value.salutation = r.salutation ?? '';
+}
+
+function recipientFieldsOf(i: InvoiceInputs): string[] {
+  return [i.name, i.street, i.city, i.email, i.salutation];
+}
+
 function selectRecipient(e: InvoiceRecipientDto) {
   recipient.value = e;
   newRecipient.value = false;
   recipientSearch.value = e.name;
   recipientSuggestions.value = [];
-  inputs.value.name = e.name;
-  inputs.value.street = e.street;
-  inputs.value.city = e.city;
-  inputs.value.email = e.email ?? '';
-  inputs.value.salutation = e.salutation ?? '';
+  fillRecipientFields(e);
 }
 
 function onRecipientSelect(event: AutoCompleteOptionSelectEvent) {
@@ -189,6 +200,10 @@ async function loadRevision() {
   if (data.recipient) {
     recipient.value = data.recipient;
     recipientSearch.value = data.recipient.name;
+    // The revision snapshot may predate an address change; the master record is current.
+    const before = recipientFieldsOf(inputs.value).join('\n');
+    fillRecipientFields(data.recipient);
+    defaultsHint.value = before !== recipientFieldsOf(inputs.value).join('\n');
   }
 }
 
@@ -208,6 +223,7 @@ async function copyFromInvoice() {
     recipient.value = data.recipient;
     recipientSearch.value = data.recipient.name;
     newRecipient.value = false;
+    fillRecipientFields(data.recipient);
   }
 }
 
@@ -445,6 +461,15 @@ function onFormSubmit() {
 
     <form :novalidate="isDraft" @submit.prevent="onFormSubmit">
       <FormSection title="Recipient">
+        <Message
+          v-if="isNewRevision && defaultsHint"
+          severity="info"
+          size="small"
+          data-testid="defaults-hint"
+          class="hint-message"
+        >
+          This revision was pre-filled with the current recipient master data.
+        </Message>
         <div v-if="!isNewRevision" class="field recipient-search">
           <label for="recipient-search">Search or create recipient</label>
           <AutoComplete
@@ -709,6 +734,10 @@ function onFormSubmit() {
 
 <style scoped>
 .load-error {
+  margin-bottom: 1rem;
+}
+
+.hint-message {
   margin-bottom: 1rem;
 }
 
