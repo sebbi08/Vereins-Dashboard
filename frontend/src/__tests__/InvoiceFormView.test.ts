@@ -208,8 +208,7 @@ describe('InvoiceFormView — new invoice', () => {
   it('creates the invoice and opens it', async () => {
     replies['POST /api/invoice'] = { status: 201, body: { invoiceId: 77, pdfStatus: 'OK' } };
     const wrapper = await mountForm();
-    Object.assign(vm(wrapper).inputs, { name: 'Neue Firma', title: 'Miete' });
-    vm(wrapper).inputs.lineItems[0].text = 'Raum';
+    await fillValidInvoice(wrapper);
 
     await wrapper.find('form').trigger('submit');
     await flushPromises();
@@ -229,6 +228,68 @@ describe('InvoiceFormView — new invoice', () => {
     vm(wrapper).inputs.lineItems[0] = { text: 'Raum', priceInCents: 1000 };
     await flushPromises();
   }
+
+  async function submitForm(wrapper: VueWrapper) {
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+  }
+
+  function posts(): string[] {
+    return calls().filter((c) => c.startsWith('POST'));
+  }
+
+  it('requires an invoice date', async () => {
+    const wrapper = await mountForm();
+    await fillValidInvoice(wrapper);
+    vm(wrapper).inputs.invoiceDate = '';
+    await submitForm(wrapper);
+
+    expect(wrapper.find('[data-testid="error-invoice-date"]').text()).toBe(
+      'Invoice Date is required',
+    );
+    expect(posts()).toEqual([]);
+  });
+
+  it('requires street and city with its own messages', async () => {
+    const wrapper = await mountForm();
+    await fillValidInvoice(wrapper);
+    Object.assign(vm(wrapper).inputs, { street: ' ', city: '' });
+    await submitForm(wrapper);
+
+    expect(wrapper.find('[data-testid="error-street"]').text()).toBe('Street is required');
+    expect(wrapper.find('[data-testid="error-city"]').text()).toBe('City is required');
+    expect(posts()).toEqual([]);
+  });
+
+  it('requires a price above 0 for every line item', async () => {
+    const wrapper = await mountForm();
+    await fillValidInvoice(wrapper);
+    vm(wrapper).inputs.lineItems[0].priceInCents = 0;
+    await submitForm(wrapper);
+
+    expect(wrapper.find('[data-testid="error-line-items"]').text()).toBe(
+      'Every line item needs a price above 0',
+    );
+    expect(posts()).toEqual([]);
+  });
+
+  it('stays where the user went when the invoice is created after leaving the form', async () => {
+    let answer!: (value: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+    const wrapper = await mountForm();
+    await fillValidInvoice(wrapper);
+    await wrapper.find('form').trigger('submit');
+
+    wrapper.unmount();
+    answer({
+      ok: true,
+      status: 201,
+      json: () => Promise.resolve({ invoiceId: 9, pdfStatus: 'PENDING' }),
+    } as unknown as Response);
+    await flushPromises();
+
+    expect(mockPush).not.toHaveBeenCalled();
+  });
 
   it('reports a server error page as a server error, not a network error', async () => {
     const wrapper = await mountForm();
@@ -266,8 +327,7 @@ describe('InvoiceFormView — new invoice', () => {
       body: { invoiceId: 77, pdfStatus: 'FAILED', pdfError: 'LibreOffice missing' },
     };
     const wrapper = await mountForm();
-    Object.assign(vm(wrapper).inputs, { name: 'Neue Firma', title: 'Miete' });
-    vm(wrapper).inputs.lineItems[0].text = 'Raum';
+    await fillValidInvoice(wrapper);
     await wrapper.find('form').trigger('submit');
     await flushPromises();
     expect(notify.warn).toHaveBeenCalledWith('LibreOffice missing');

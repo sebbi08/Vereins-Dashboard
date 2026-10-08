@@ -16,7 +16,7 @@ import type {
   InvoiceInputs,
   InvoiceRecipientDto,
 } from 'shared';
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import DecimalInput from '../components/ui/DecimalInput.vue';
 import FormSection from '../components/ui/FormSection.vue';
@@ -47,7 +47,7 @@ const fromInstructorId = route.query.fromInstructor
 
 const sending = ref(false);
 const loadError = ref('');
-type FieldKey = 'name' | 'title' | 'lineItems';
+type FieldKey = 'name' | 'street' | 'city' | 'invoiceDate' | 'title' | 'lineItems';
 const fieldErrors = ref<Partial<Record<FieldKey, string>>>({});
 
 const recipient = ref<InvoiceRecipientDto | null>(null);
@@ -84,6 +84,19 @@ function formSnapshot(): string {
 }
 const savedSnapshot = ref(formSnapshot());
 const { allowLeave } = useUnsavedChangesGuard(() => formSnapshot() !== savedSnapshot.value);
+
+// A request that finishes after the user left the form must not pull them back
+let leftForm = false;
+onBeforeUnmount(() => {
+  leftForm = true;
+});
+
+/** Leaves the form after a successful save, unless the user already went elsewhere. */
+function leaveTo(path: string) {
+  if (leftForm) return;
+  allowLeave();
+  router.push(path);
+}
 
 // Whenever a load, copy, draft or prefill replaces the line items, they get fresh keys
 watch(
@@ -319,9 +332,15 @@ function validate(complete: boolean): boolean {
   if (!inputs.value.name.trim()) errors.name = 'Name is required';
   if (invalidPriceKeys.value.size > 0) errors.lineItems = 'Fix the highlighted prices';
   if (complete) {
+    if (!inputs.value.street.trim()) errors.street = 'Street is required';
+    if (!inputs.value.city.trim()) errors.city = 'City is required';
+    if (!isDraft && !inputs.value.invoiceDate) errors.invoiceDate = 'Invoice Date is required';
     if (!inputs.value.title.trim()) errors.title = 'Title is required';
     if (!errors.lineItems && inputs.value.lineItems.some((p) => !p.text.trim())) {
       errors.lineItems = 'All line items need text';
+    }
+    if (!errors.lineItems && inputs.value.lineItems.some((p) => p.priceInCents <= 0)) {
+      errors.lineItems = 'Every line item needs a price above 0';
     }
   }
   fieldErrors.value = errors;
@@ -354,8 +373,7 @@ async function submit() {
     } else {
       notify.success('Invoice saved successfully.');
     }
-    allowLeave();
-    router.push(`/invoice/${(result.invoiceId as number | undefined) ?? invoiceId}`);
+    leaveTo(`/invoice/${(result.invoiceId as number | undefined) ?? invoiceId}`);
   } catch {
     notify.error(NO_RESPONSE_ON_CREATE);
   } finally {
@@ -418,8 +436,7 @@ async function activateDraft() {
       return;
     }
     notify.success('Invoice created.');
-    allowLeave();
-    router.push(`/invoice/${res.body.invoiceId as number}`);
+    leaveTo(`/invoice/${res.body.invoiceId as number}`);
   } catch {
     notify.error(NO_RESPONSE_ON_CREATE);
   } finally {
@@ -444,8 +461,7 @@ async function deleteDraft() {
       return;
     }
     notify.success('Draft deleted.');
-    allowLeave();
-    router.push('/invoice');
+    leaveTo('/invoice');
   } catch {
     notify.error('Network error while deleting');
   } finally {
@@ -543,13 +559,7 @@ function onFormSubmit() {
           </div>
           <div class="field">
             <label for="name">Name</label>
-            <InputText
-              id="name"
-              v-model="inputs.name"
-              required
-              :invalid="!!fieldErrors.name"
-              fluid
-            />
+            <InputText id="name" v-model="inputs.name" :invalid="!!fieldErrors.name" fluid />
             <Message
               v-if="fieldErrors.name"
               severity="error"
@@ -562,11 +572,29 @@ function onFormSubmit() {
           </div>
           <div class="field">
             <label for="street">Street</label>
-            <InputText id="street" v-model="inputs.street" required fluid />
+            <InputText id="street" v-model="inputs.street" :invalid="!!fieldErrors.street" fluid />
+            <Message
+              v-if="fieldErrors.street"
+              severity="error"
+              size="small"
+              variant="simple"
+              data-testid="error-street"
+            >
+              {{ fieldErrors.street }}
+            </Message>
           </div>
           <div class="field">
             <label for="city">City</label>
-            <InputText id="city" v-model="inputs.city" required fluid />
+            <InputText id="city" v-model="inputs.city" :invalid="!!fieldErrors.city" fluid />
+            <Message
+              v-if="fieldErrors.city"
+              severity="error"
+              size="small"
+              variant="simple"
+              data-testid="error-city"
+            >
+              {{ fieldErrors.city }}
+            </Message>
           </div>
         </div>
 
@@ -604,8 +632,18 @@ function onFormSubmit() {
               data-testid="invoice-date"
               date-format="dd.mm.yy"
               show-icon
+              :invalid="!!fieldErrors.invoiceDate"
               fluid
             />
+            <Message
+              v-if="fieldErrors.invoiceDate"
+              severity="error"
+              size="small"
+              variant="simple"
+              data-testid="error-invoice-date"
+            >
+              {{ fieldErrors.invoiceDate }}
+            </Message>
           </div>
           <div v-else class="field">
             <label>Invoice Date</label>

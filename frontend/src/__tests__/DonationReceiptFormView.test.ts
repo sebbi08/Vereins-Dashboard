@@ -455,6 +455,25 @@ describe('DonationReceiptFormView — new receipt', () => {
     expect(notify.error).toHaveBeenCalledWith(expect.stringContaining('check the list'));
   });
 
+  it('stays where the user went when the receipt is created after leaving the form', async () => {
+    let answer!: (value: Response) => void;
+    const wrapper = await mountForm();
+    picker(wrapper).vm.$emit('update:modelValue', hans);
+    await setAmount(wrapper, 100);
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+    await wrapper.find('form').trigger('submit');
+
+    wrapper.unmount();
+    answer({
+      ok: true,
+      status: 201,
+      json: () => Promise.resolve({ receiptId: 12, pdfStatus: 'OK' }),
+    } as unknown as Response);
+    await flushPromises();
+
+    expect(mockPush).not.toHaveBeenCalled();
+  });
+
   it('reports a network error while loading', async () => {
     replies = {};
     const wrapper = await mountForm();

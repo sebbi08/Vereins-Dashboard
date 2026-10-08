@@ -5,7 +5,7 @@ import InputText from 'primevue/inputtext';
 import Message from 'primevue/message';
 import ToggleSwitch from 'primevue/toggleswitch';
 import type { DonationReceiptDto, DonorDto, ReceiptInputs, SystemSettings } from 'shared';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import DonorAutocomplete from '../components/DonorAutocomplete.vue';
 import DecimalInput from '../components/ui/DecimalInput.vue';
@@ -71,6 +71,12 @@ function formSnapshot(): string {
 }
 const savedSnapshot = ref(formSnapshot());
 const { allowLeave } = useUnsavedChangesGuard(() => formSnapshot() !== savedSnapshot.value);
+
+// A request that finishes after the user left the form must not pull them back
+let leftForm = false;
+onBeforeUnmount(() => {
+  leftForm = true;
+});
 
 const pageTitle = isNewRevision
   ? 'Create New Revision'
@@ -264,6 +270,7 @@ async function submit() {
       notify.success('Receipt saved successfully.');
     }
     if (result.donorUpdated) notify.info('Donor master data updated.');
+    if (leftForm) return;
     allowLeave();
     router.push(`/donation-receipt/${(result.receiptId as number | undefined) ?? receiptId}`);
   } catch {
