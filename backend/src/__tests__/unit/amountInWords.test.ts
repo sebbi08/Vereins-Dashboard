@@ -2,36 +2,35 @@ import { describe, expect, it } from 'vitest';
 import { amountInWords, formatAmount, formatDate } from '../../services/amountInWords';
 
 describe('amountInWords', () => {
-  it('converts whole euro amounts', () => {
-    // to-words de-DE: 1 → "Eins"
-    expect(amountInWords(100)).toBe('Eins Euro');
+  it.each([
+    [100, 'Ein Euro'],
+    [101, 'Ein Euro und ein Cent'],
+    [150, 'Ein Euro und fünfzig Cent'],
+    [200, 'Zwei Euro'],
+    [2121, 'Einundzwanzig Euro und einundzwanzig Cent'],
+    [5001, 'Fünfzig Euro und ein Cent'],
+    [10000, 'Einhundert Euro'],
+    [10100, 'Einhunderteins Euro'],
+    [123456, 'Eintausendzweihundertvierunddreißig Euro und sechsundfünfzig Cent'],
+    [1000000, 'Zehntausend Euro'],
+    [100000000, 'Eine Million Euro'],
+    [250000000, 'Zwei Millionen fünfhunderttausend Euro'],
+  ])('writes %i cents as %j', (cents, expected) => {
+    expect(amountInWords(cents)).toBe(expected);
   });
 
-  it('converts amounts with cents', () => {
-    expect(amountInWords(150)).toBe('Eins Euro und Fünfzig Cent');
+  it('writes the amount as one word per number, joined the German way', () => {
+    expect(amountInWords(123456)).not.toMatch(/Tausend Zwei|Hundert Vier/);
   });
 
-  it('converts two euro amounts', () => {
-    expect(amountInWords(200)).toBe('Zwei Euro');
+  it('does not add a cent part for whole euro amounts', () => {
+    expect(amountInWords(500)).not.toContain('Cent');
   });
 
-  it('converts large amounts', () => {
-    expect(amountInWords(10000)).toBe('Hundert Euro');
-  });
-
-  it('capitalises the first letter', () => {
-    const result = amountInWords(200);
-    expect(result.charAt(0)).toBe(result.charAt(0).toUpperCase());
-  });
-
-  it('handles zero cents (no cent suffix)', () => {
-    const result = amountInWords(500);
-    expect(result).not.toContain('Cent');
-  });
-
-  it('includes cent suffix when cents are present', () => {
-    const result = amountInWords(501);
-    expect(result).toContain('Cent');
+  it('does not lose precision on amounts that are inexact as floats', () => {
+    // 0.1 + 0.2 style values: 1,10 € must not become 1,09 € or 1,11 €
+    expect(amountInWords(110)).toBe('Ein Euro und zehn Cent');
+    expect(amountInWords(29)).toBe('Neunundzwanzig Cent');
   });
 });
 

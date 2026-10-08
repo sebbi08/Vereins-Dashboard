@@ -1,19 +1,16 @@
-import { ToWords } from 'to-words';
+import { toCurrency } from 'n2words/de';
 
-const converter = new ToWords({
-  localeCode: 'de-DE',
-});
-
+/**
+ * Writes an amount in cents as German words for the "Betrag in Buchstaben"
+ * field of a donation receipt, e.g. 123456 → "Eintausendzweihundertvierunddreißig
+ * Euro und sechsundfünfzig Cent". The amount is passed as a decimal string, so
+ * no float rounding can creep in.
+ */
 export function amountInWords(cents: number): string {
-  const euro = Math.floor(cents / 100);
-  const cent = cents % 100;
-
-  let result = converter.convert(euro) + ' Euro';
-  if (cent > 0) {
-    result += ' und ' + converter.convert(cent) + ' Cent';
-  }
-
-  return result.charAt(0).toUpperCase() + result.slice(1);
+  const euros = Math.floor(cents / 100);
+  const rest = cents % 100;
+  const words = toCurrency(`${euros}.${String(rest).padStart(2, '0')}`, { currency: 'EUR' });
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 export function formatAmount(cents: number): string {

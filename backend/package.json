@@ -24,10 +24,10 @@
     "dotenv": "^16.4.7",
     "express": "^4.21.0",
     "multer": "^2.1.1",
+    "n2words": "^6.3.0",
     "nodemailer": "^9.0.1",
     "pdf-lib": "^1.17.1",
-    "pizzip": "^3.2.0",
-    "to-words": "^5.5.0"
+    "pizzip": "^3.2.0"
   },
   "devDependencies": {
     "@types/archiver": "^8.0.0",
