@@ -39,9 +39,9 @@ const receiptInputs = {
   withCoverLetter: false,
   treasurer: '',
   charitablePurpose: '',
-  taxOfficeName: '',
-  taxNumber: '',
-  exemptionDate: '',
+  taxOfficeName: 'Finanzamt Teststadt',
+  taxNumber: '12/345/67890',
+  exemptionDate: '2024-01-01',
   assessmentPeriod: '',
 };
 
@@ -145,6 +145,33 @@ describe('donation receipt bodies', () => {
         .post('/api/donation-receipt')
         .send({ donorData, inputs: { ...receiptInputs, donationDate } });
       await expect400(res, 'Invalid donation date');
+    },
+  );
+
+  const requiredTaxFields = [
+    ['taxOfficeName', 'Tax office is required'],
+    ['taxNumber', 'Tax number is required'],
+    ['exemptionDate', 'Exemption date is required'],
+  ] as const;
+
+  it.each(requiredTaxFields)(
+    'POST /api/donation-receipt requires %s on the tax document',
+    async (field, error) => {
+      const res = await request
+        .post('/api/donation-receipt')
+        .send({ donorData, inputs: { ...receiptInputs, [field]: '  ' } });
+      await expect400(res, error);
+      expect(await prisma.donationReceipt.count()).toBe(0);
+    },
+  );
+
+  it.each(requiredTaxFields)(
+    'POST /api/donation-receipt/:id/revision requires %s',
+    async (field, error) => {
+      const res = await request
+        .post('/api/donation-receipt/1/revision')
+        .send({ inputs: { ...receiptInputs, [field]: '' } });
+      await expect400(res, error);
     },
   );
 

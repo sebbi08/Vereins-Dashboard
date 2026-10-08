@@ -69,7 +69,7 @@ describe('Create Donation Receipt', () => {
             charitablePurpose: 'Förderung des E2E-Tests',
             taxOfficeName: 'Finanzamt Teststadt',
             taxNumber: '123/456/789',
-            exemptionDate: '',
+            exemptionDate: '2024-01-01',
             assessmentPeriod: '2025',
           },
           donorData: {
@@ -121,7 +121,7 @@ describe('Create Donation Receipt Revision', () => {
             charitablePurpose: 'Förderung des E2E-Tests',
             taxOfficeName: 'Finanzamt Teststadt',
             taxNumber: '123/456/789',
-            exemptionDate: '',
+            exemptionDate: '2024-01-01',
             assessmentPeriod: '2025',
           },
           donorData: {
@@ -160,7 +160,7 @@ describe('Create Donation Receipt Revision', () => {
             charitablePurpose: 'Förderung des E2E-Tests',
             taxOfficeName: 'Finanzamt Teststadt',
             taxNumber: '123/456/789',
-            exemptionDate: '',
+            exemptionDate: '2024-01-01',
             assessmentPeriod: '2025',
           },
         }),

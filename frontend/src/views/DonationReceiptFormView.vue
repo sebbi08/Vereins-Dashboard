@@ -78,7 +78,13 @@ const pageTitle = isNewRevision
     ? 'Duplicate Receipt'
     : 'New Donation Receipt';
 
-type FieldKey = 'letterSalutation' | 'amount' | 'donationDate';
+type FieldKey =
+  | 'letterSalutation'
+  | 'amount'
+  | 'donationDate'
+  | 'taxOfficeName'
+  | 'taxNumber'
+  | 'exemptionDate';
 
 /** Shown after the first submit attempt and kept up to date while the user fixes them. */
 const fieldErrors = computed<Partial<Record<FieldKey, string>>>(() => {
@@ -89,6 +95,10 @@ const fieldErrors = computed<Partial<Record<FieldKey, string>>>(() => {
   }
   if (inputs.value.donationAmountCents <= 0) errors.amount = 'Amount is required';
   if (!inputs.value.donationDate) errors.donationDate = 'Donation Date is required';
+  // Required on the tax document; normally pre-filled from the settings
+  if (!inputs.value.taxOfficeName.trim()) errors.taxOfficeName = 'Tax Office is required';
+  if (!inputs.value.taxNumber.trim()) errors.taxNumber = 'Tax Number is required';
+  if (!inputs.value.exemptionDate) errors.exemptionDate = 'Exemption Date is required';
   return errors;
 });
 
@@ -436,11 +446,39 @@ async function submit() {
           </div>
           <div class="field">
             <label for="tax-office">Tax Office</label>
-            <InputText id="tax-office" v-model="inputs.taxOfficeName" fluid />
+            <InputText
+              id="tax-office"
+              v-model="inputs.taxOfficeName"
+              :invalid="!!fieldErrors.taxOfficeName"
+              fluid
+            />
+            <Message
+              v-if="fieldErrors.taxOfficeName"
+              severity="error"
+              size="small"
+              variant="simple"
+              data-testid="error-tax-office"
+            >
+              {{ fieldErrors.taxOfficeName }}
+            </Message>
           </div>
           <div class="field">
             <label for="tax-number">Tax Number</label>
-            <InputText id="tax-number" v-model="inputs.taxNumber" fluid />
+            <InputText
+              id="tax-number"
+              v-model="inputs.taxNumber"
+              :invalid="!!fieldErrors.taxNumber"
+              fluid
+            />
+            <Message
+              v-if="fieldErrors.taxNumber"
+              severity="error"
+              size="small"
+              variant="simple"
+              data-testid="error-tax-number"
+            >
+              {{ fieldErrors.taxNumber }}
+            </Message>
           </div>
           <div class="field">
             <label for="exemption-date">Exemption Date</label>
@@ -451,8 +489,18 @@ async function submit() {
               date-format="dd.mm.yy"
               show-icon
               show-clear
+              :invalid="!!fieldErrors.exemptionDate"
               fluid
             />
+            <Message
+              v-if="fieldErrors.exemptionDate"
+              severity="error"
+              size="small"
+              variant="simple"
+              data-testid="error-exemption-date"
+            >
+              {{ fieldErrors.exemptionDate }}
+            </Message>
           </div>
           <div class="field">
             <label for="assessment-period">Assessment Period</label>

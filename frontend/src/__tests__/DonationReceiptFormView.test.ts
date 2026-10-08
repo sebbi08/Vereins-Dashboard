@@ -399,6 +399,21 @@ describe('DonationReceiptFormView — new receipt', () => {
     expect(mockPush).toHaveBeenCalledWith('/donation-receipt/12');
   });
 
+  it.each([
+    ['taxOfficeName', 'Tax Office is required', 'error-tax-office'],
+    ['taxNumber', 'Tax Number is required', 'error-tax-number'],
+    ['exemptionDate', 'Exemption Date is required', 'error-exemption-date'],
+  ])('requires %s before issuing the receipt', async (field, message, testId) => {
+    replies['GET /api/settings'] = { status: 200, body: { ...settings, [field]: '' } };
+    const wrapper = await mountForm();
+    picker(wrapper).vm.$emit('update:modelValue', hans);
+    await setAmount(wrapper, 100);
+    await submit(wrapper);
+
+    expect(wrapper.find(`[data-testid="${testId}"]`).text()).toBe(message);
+    expect(calls()).not.toContain('POST /api/donation-receipt');
+  });
+
   it('shows server errors and stays on the form', async () => {
     replies['POST /api/donation-receipt'] = { status: 400, body: { error: 'Street is required' } };
     const wrapper = await mountForm();

@@ -212,6 +212,10 @@ function receiptInputs(raw: unknown): { inputs: ReceiptInputs; donationDate: Dat
   }
   const donationDate = parseCalendarDay(inputs.donationDate);
   if (!donationDate) throw new BodyError('Invalid donation date');
+  // Without these the Zuwendungsbestätigung is not valid for the tax office
+  if (!inputs.taxOfficeName.trim()) throw new BodyError('Tax office is required');
+  if (!inputs.taxNumber.trim()) throw new BodyError('Tax number is required');
+  if (!inputs.exemptionDate.trim()) throw new BodyError('Exemption date is required');
   return { inputs, donationDate };
 }
 
