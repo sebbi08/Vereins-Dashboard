@@ -8,7 +8,6 @@ import DatePicker from 'primevue/datepicker';
 import InputText from 'primevue/inputtext';
 import Message from 'primevue/message';
 import Select from 'primevue/select';
-import Textarea from 'primevue/textarea';
 import ToggleSwitch from 'primevue/toggleswitch';
 import type {
   InstructorInvoicePrefillDto,
@@ -17,10 +16,10 @@ import type {
   InvoiceRecipientDto,
 } from 'shared';
 import { calculateInvoiceTotals, INVOICE_VAT_PERCENT } from 'shared';
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import DecimalInput from '../components/ui/DecimalInput.vue';
 import FormSection from '../components/ui/FormSection.vue';
+import LineItemsEditor from '../components/LineItemsEditor.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
 import { useConfirmAction } from '../composables/useConfirmAction';
 import { useNotify } from '../composables/useNotify';
@@ -59,10 +58,8 @@ const recipientSearched = ref(false);
 /** True when a revision's address fields were replaced by newer recipient master data. */
 const defaultsHint = ref(false);
 
-// Stable client keys for the line items, so inputs keep their identity when items are removed
-let nextLineItemKey = 0;
-const lineItemKeys = ref<number[]>([]);
-const invalidPriceKeys = ref(new Set<number>());
+/** True while a line item price holds text that is not a valid amount (see LineItemsEditor). */
+const hasInvalidPrices = ref(false);
 
 const inputs = ref<InvoiceInputs>({
   salutation: '',
@@ -77,7 +74,6 @@ const inputs = ref<InvoiceInputs>({
   email: '',
   emailSalutation: 'Sehr geehrte Damen und Herren',
 });
-lineItemKeys.value = inputs.value.lineItems.map(() => nextLineItemKey++);
 
 /** Form state as last loaded or saved; anything else counts as unsaved changes. */
 function formSnapshot(): string {
@@ -98,15 +94,6 @@ function leaveTo(path: string) {
   allowLeave();
   router.push(path);
 }
-
-// Whenever a load, copy, draft or prefill replaces the line items, they get fresh keys
-watch(
-  () => inputs.value.lineItems,
-  (items) => {
-    lineItemKeys.value = items.map(() => nextLineItemKey++);
-    invalidPriceKeys.value = new Set();
-  },
-);
 
 const VAT_OPTIONS = [
   { label: '7%', value: 7 },
@@ -191,27 +178,6 @@ function startNewRecipient() {
 
 function onRecipientSelect(event: AutoCompleteOptionSelectEvent) {
   selectRecipient(event.value as InvoiceRecipientDto);
-}
-
-function addLineItem() {
-  inputs.value.lineItems.push({ text: '', priceInCents: 0 });
-  lineItemKeys.value.push(nextLineItemKey++);
-}
-
-function removeLineItem(index: number) {
-  if (inputs.value.lineItems.length <= 1) return;
-  inputs.value.lineItems.splice(index, 1);
-  const [key] = lineItemKeys.value.splice(index, 1);
-  invalidPriceKeys.value.delete(key);
-}
-
-function setPriceValidity(key: number, valid: boolean) {
-  if (valid) invalidPriceKeys.value.delete(key);
-  else invalidPriceKeys.value.add(key);
-}
-
-function setPrice(index: number, euros: number | null) {
-  inputs.value.lineItems[index].priceInCents = euros === null ? 0 : Math.round(euros * 100);
 }
 
 async function loadRevision() {
@@ -330,7 +296,7 @@ function recipientRequestBody(): Record<string, unknown> {
 function validate(complete: boolean): boolean {
   const errors: Partial<Record<FieldKey, string>> = {};
   if (!inputs.value.name.trim()) errors.name = 'Name is required';
-  if (invalidPriceKeys.value.size > 0) errors.lineItems = 'Fix the highlighted prices';
+  if (hasInvalidPrices.value) errors.lineItems = 'Fix the highlighted prices';
   if (complete) {
     if (!inputs.value.street.trim()) errors.street = 'Street is required';
     if (!inputs.value.city.trim()) errors.city = 'City is required';
@@ -646,56 +612,18 @@ function onFormSubmit() {
             </Message>
           </div>
           <div v-else class="field">
-            <label>Invoice Date</label>
+            <span class="field-label">Invoice Date</span>
             <p data-testid="draft-date-hint" class="muted draft-date-hint">
               Invoice date is set on activation
             </p>
           </div>
         </div>
 
-        <div class="field line-items">
-          <label>Line Items</label>
-          <div v-for="(pos, idx) in inputs.lineItems" :key="lineItemKeys[idx]" class="line-item">
-            <Textarea
-              v-model="pos.text"
-              data-testid="line-item-text"
-              rows="1"
-              auto-resize
-              :aria-label="`Line item ${idx + 1} text`"
-              class="line-item__text"
-            />
-            <DecimalInput
-              :model-value="pos.priceInCents / 100"
-              :min-fraction-digits="2"
-              suffix="€"
-              :aria-label="`Line item ${idx + 1} price`"
-              data-testid="line-item-price"
-              class="line-item__price"
-              @update:model-value="(value: number | null) => setPrice(idx, value)"
-              @validity="(valid: boolean) => setPriceValidity(lineItemKeys[idx], valid)"
-            />
-            <Button
-              v-if="inputs.lineItems.length > 1"
-              icon="pi pi-times"
-              text
-              severity="danger"
-              :aria-label="`Remove line item ${idx + 1}`"
-              @click="removeLineItem(idx)"
-            />
-          </div>
-          <Message
-            v-if="fieldErrors.lineItems"
-            severity="error"
-            size="small"
-            variant="simple"
-            data-testid="error-line-items"
-          >
-            {{ fieldErrors.lineItems }}
-          </Message>
-          <div>
-            <Button label="Add Line Item" icon="pi pi-plus" text @click="addLineItem" />
-          </div>
-        </div>
+        <LineItemsEditor
+          v-model="inputs.lineItems"
+          v-model:invalid="hasInvalidPrices"
+          :error="fieldErrors.lineItems"
+        />
 
         <div class="totals">
           <div class="field">
@@ -717,7 +645,7 @@ function onFormSubmit() {
             </div>
           </div>
           <div class="field">
-            <label>Gross Amount</label>
+            <span class="field-label">Gross Amount</span>
             <p data-testid="gross" class="gross">{{ formatCents(grossCents) }}</p>
           </div>
         </div>
@@ -815,25 +743,6 @@ function onFormSubmit() {
 
 .draft-date-hint {
   margin: 0.5rem 0 0;
-}
-
-.line-items {
-  margin: 1rem 0;
-}
-
-.line-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-}
-
-.line-item__text {
-  flex: 1;
-  min-width: 0;
-}
-
-.line-item__price {
-  width: 10rem;
 }
 
 .totals {

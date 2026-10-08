@@ -155,7 +155,9 @@ body {
   gap: 0.375rem;
 }
 
-.field > label {
+/* .field-label: the same look for a caption that is not a <label> (a group or a value) */
+.field > label,
+.field > .field-label {
   font-size: 0.875rem;
   font-weight: 500;
 }
