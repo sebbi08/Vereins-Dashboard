@@ -1,8 +1,4 @@
 import { Router } from 'express';
-import fs from 'fs';
-import { INVOICES_DIR, RECEIPTS_DIR, TEMPLATES_DIR } from '../config.js';
-import { initializeApp } from '../init.js';
-import { prisma } from '../prismaClient.js';
 import { donationReceiptRouter } from './donationReceipt.js';
 import { donorRouter } from './donor.js';
 import { emailSettingsRouter } from './emailSettings.js';
@@ -27,40 +23,4 @@ router.use('/templates', templatesRouter);
 
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
-});
-
-// E2E-only: reset all data to a clean state
-router.post('/e2e/reset', async (_req, res) => {
-  try {
-    await prisma.instructorInvoiceRequest.deleteMany();
-    await prisma.instructor.deleteMany();
-    await prisma.donationReceiptRevision.deleteMany();
-    await prisma.donationReceipt.deleteMany();
-    await prisma.invoiceRevision.deleteMany();
-    await prisma.invoice.deleteMany();
-    await prisma.invoiceDraft.deleteMany();
-    await prisma.invoiceRecipient.deleteMany();
-    await prisma.donor.deleteMany();
-    await prisma.template.deleteMany();
-    await prisma.systemSetting.deleteMany();
-
-    // Clear generated files
-    for (const dir of [TEMPLATES_DIR, RECEIPTS_DIR, INVOICES_DIR]) {
-      try {
-        const files = await fs.promises.readdir(dir);
-        await Promise.all(
-          files.map((f) => fs.promises.rm(`${dir}/${f}`, { recursive: true, force: true })),
-        );
-      } catch {
-        // dir may not exist yet
-      }
-    }
-
-    // Re-initialize default settings
-    await initializeApp();
-
-    res.json({ status: 'ok', message: 'E2E data reset complete' });
-  } catch (err) {
-    res.status(500).json({ error: 'Reset failed', details: String(err) });
-  }
 });

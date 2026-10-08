@@ -9,6 +9,7 @@ export default defineConfig({
     env: {
       DATABASE_URL: 'file:/tmp/mv-dashboard-integration-test.sqlite',
       DATA_DIR: '/tmp/mv-dashboard-integration-test-data',
+      E2E_RESET_ENABLED: 'true',
     },
     globalSetup: ['./src/__tests__/integration/globalSetup.ts'],
     testTimeout: 30000,
