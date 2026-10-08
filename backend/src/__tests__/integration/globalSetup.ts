@@ -6,19 +6,21 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const backendDir = path.resolve(__dirname, '../../../');
 
-const DB_PATH = '/tmp/mv-dashboard-integration-test.sqlite';
-const DATA_DIR = '/tmp/mv-dashboard-integration-test-data';
+/** Created per run by vitest.integration.config.ts. */
+function runDir(): string {
+  const dir = process.env.MV_INTEGRATION_DIR;
+  if (!dir) throw new Error('MV_INTEGRATION_DIR is not set; run via vitest.integration.config.ts');
+  return dir;
+}
 
 export async function setup() {
-  // Ensure test database is clean
-  if (fs.existsSync(DB_PATH)) {
-    fs.unlinkSync(DB_PATH);
-  }
+  const dbPath = path.join(runDir(), 'test.sqlite');
+  const dataDir = path.join(runDir(), 'data');
 
   // Create required data directories
-  fs.mkdirSync(path.join(DATA_DIR, 'templates'), { recursive: true });
-  fs.mkdirSync(path.join(DATA_DIR, 'receipts'), { recursive: true });
-  fs.mkdirSync(path.join(DATA_DIR, 'invoices'), { recursive: true });
+  fs.mkdirSync(path.join(dataDir, 'templates'), { recursive: true });
+  fs.mkdirSync(path.join(dataDir, 'receipts'), { recursive: true });
+  fs.mkdirSync(path.join(dataDir, 'invoices'), { recursive: true });
 
   // Generate the Prisma client (needed if not yet built)
   execSync('npx prisma generate', {
@@ -32,15 +34,12 @@ export async function setup() {
     cwd: backendDir,
     env: {
       ...process.env,
-      DATABASE_URL: `file:${DB_PATH}`,
+      DATABASE_URL: `file:${dbPath}`,
     },
     stdio: 'pipe',
   });
 }
 
 export async function teardown() {
-  if (fs.existsSync(DB_PATH)) {
-    fs.unlinkSync(DB_PATH);
-  }
-  fs.rmSync(DATA_DIR, { recursive: true, force: true });
+  fs.rmSync(runDir(), { recursive: true, force: true });
 }

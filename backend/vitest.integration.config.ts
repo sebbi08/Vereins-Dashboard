@@ -1,4 +1,13 @@
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { defineConfig } from 'vitest/config';
+
+// Every run gets its own database and data dir, so runs in parallel (e.g. from several
+// worktrees) cannot delete each other's files. globalSetup reads the dir from the environment
+// and removes it in teardown.
+process.env.MV_INTEGRATION_DIR ??= fs.mkdtempSync(path.join(os.tmpdir(), 'mv-dashboard-int-'));
+const runDir = process.env.MV_INTEGRATION_DIR;
 
 export default defineConfig({
   test: {
@@ -7,8 +16,8 @@ export default defineConfig({
     environment: 'node',
     fileParallelism: false,
     env: {
-      DATABASE_URL: 'file:/tmp/mv-dashboard-integration-test.sqlite',
-      DATA_DIR: '/tmp/mv-dashboard-integration-test-data',
+      DATABASE_URL: `file:${path.join(runDir, 'test.sqlite')}`,
+      DATA_DIR: path.join(runDir, 'data'),
       E2E_RESET_ENABLED: 'true',
     },
     globalSetup: ['./src/__tests__/integration/globalSetup.ts'],
