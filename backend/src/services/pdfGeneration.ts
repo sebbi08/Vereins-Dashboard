@@ -9,7 +9,7 @@ import type { TemplateType } from 'shared';
 import { promisify } from 'util';
 import type { PrismaClient } from '../../prisma/generated/client.js';
 import { INVOICES_DIR, RECEIPTS_DIR, toAbsolutePath, toRelativePath } from '../config.js';
-import { amountInWords, formatAmount, formatDate } from './amountInWords.js';
+import { amountInWords, formatAmount, formatDate, formatEuroNumber } from './amountInWords.js';
 
 const execAsync = promisify(exec);
 
@@ -48,23 +48,6 @@ export interface PreviewSettings {
   assessmentPeriod: string;
 }
 
-export interface InvoiceData {
-  Anrede: string;
-  Name: string;
-  Strasse: string;
-  Ort: string;
-  Heute: string;
-  Title: string;
-  ReNr: string;
-  Netto: string;
-  Steuer: string;
-  Brutto: string;
-  ust: number;
-  MailAnrede: string;
-  PaymentDetails: string;
-  TableWithServices: string;
-}
-
 function escapeXml(text: string): string {
   return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -90,7 +73,7 @@ function lineItemTextRuns(text: string): string {
 function getDocxTableLineItems(lineItems: Array<{ text: string; priceInCents: number }>): string {
   let tableItems = '';
   lineItems.forEach((item) => {
-    const priceContent = (item.priceInCents / 100).toFixed(2);
+    const priceContent = `${formatEuroNumber(item.priceInCents)}\u00a0€`;
     tableItems += `
         <w:tr>
             <w:tc>
@@ -105,7 +88,7 @@ function getDocxTableLineItems(lineItems: Array<{ text: string; priceInCents: nu
                 </w:tcPr>
                 <w:p>
                     <w:r>
-                        <w:t>${priceContent}€</w:t>
+                        <w:t xml:space="preserve">${priceContent}</w:t>
                     </w:r>
                 </w:p>
             </w:tc>
@@ -172,34 +155,6 @@ async function fillCoverLetterTemplate(
     linebreaks: true,
   });
   doc.render(data);
-  return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
-}
-
-async function fillInvoiceTemplate(templateBuffer: Buffer, data: InvoiceData): Promise<Buffer> {
-  const zip = new PizZip(templateBuffer);
-  const doc = new Docxtemplater(zip, {
-    paragraphLoop: true,
-    linebreaks: true,
-  });
-  doc.render({
-    Anrede: data.Anrede,
-    Name: data.Name,
-    Strasse: data.Strasse,
-    Ort: data.Ort,
-    Heute: data.Heute,
-    Title: data.Title,
-    ReNr: data.ReNr,
-    Netto: data.Netto,
-    Steuer: data.Steuer,
-    Brutto: data.Brutto,
-    ust: data.ust,
-    MailAnrede: data.MailAnrede,
-    PaymentDetails: data.PaymentDetails,
-    TableWithServices: data.TableWithServices,
-    monthlyPay: false,
-    MonthlyBruto: '',
-  });
-
   return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
 }
 
@@ -297,12 +252,12 @@ async function fillPdfForm(templateBuffer: Buffer, data: PdfFormData): Promise<B
 export function getDummyData(
   type: TemplateType,
   settings: PreviewSettings,
-): CoverLetterData | PdfFormData | InvoiceData {
+): CoverLetterData | PdfFormData | InvoiceDocxInput {
   if (type === 'ANSCHREIBEN') {
     return {
       BriefAnrede: 'Sehr geehrte Damen und Herren',
       Anrede: 'Max Mustermann',
-      Name: 'Muserfirma GmbH',
+      Name: 'Musterfirma GmbH',
       Strasse: 'Musterstraße 1',
       Ort: '67105 Schifferstadt',
       Heute: formatDate(new Date()),
@@ -314,22 +269,18 @@ export function getDummyData(
 
   if (type === 'RECHNUNG') {
     return {
-      Anrede: '',
-      Name: 'Muserfirma GmbH',
-      Strasse: 'Musterstraße 1',
-      Ort: '67105 Schifferstadt',
-      Heute: formatDate(new Date()),
-      Title: 'Miete Musikheim April 2026',
-      ReNr: '1 / 2026',
-      Netto: '84,03',
-      Steuer: '15,97',
-      Brutto: '100,00',
-      ust: 19,
-      MailAnrede: 'Sehr geehrte Damen und Herren',
-      PaymentDetails:
-        'Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.',
-      TableWithServices: getDocxTableLineItems([{ text: 'Miete Musikheim', priceInCents: 8403 }]),
-    } as InvoiceData;
+      salutation: '',
+      name: 'Musterfirma GmbH',
+      street: 'Musterstraße 1',
+      city: '67105 Schifferstadt',
+      invoiceDate: new Date(),
+      title: 'Miete Musikheim April 2026',
+      invoiceNumber: '1 / 2026',
+      vat: 19,
+      emailSalutation: 'Sehr geehrte Damen und Herren',
+      directDebit: false,
+      lineItems: [{ text: 'Miete Musikheim', priceInCents: 8403 }],
+    };
   }
 
   return {
@@ -350,14 +301,14 @@ export function getDummyData(
 export async function generatePreviewTemplate(
   type: TemplateType,
   templateBuffer: Buffer,
-  data: CoverLetterData | PdfFormData | InvoiceData,
+  data: CoverLetterData | PdfFormData | InvoiceDocxInput,
 ): Promise<Buffer> {
   if (type === 'ANSCHREIBEN') {
     const filledDocx = await fillCoverLetterTemplate(templateBuffer, data as CoverLetterData);
     return docxToPdf(filledDocx);
   }
   if (type === 'RECHNUNG') {
-    const filledDocx = await fillInvoiceTemplate(templateBuffer, data as InvoiceData);
+    const filledDocx = buildInvoiceDocx(templateBuffer, data as InvoiceDocxInput);
     return docxToPdf(filledDocx);
   }
   return fillPdfForm(templateBuffer, data as PdfFormData);
@@ -480,7 +431,7 @@ export function buildInvoiceDocx(templateBuffer: Buffer, input: InvoiceDocxInput
 
   const paymentDetails = input.directDebit
     ? `Der Betrag wird in den nächsten Tagen mit dem Vermerk "${input.invoiceNumber}" von Ihrem Konto eingezogen.`
-    : 'Bitte Überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.';
+    : 'Bitte überweisen Sie den Betrag unter Angabe der Rechnungsnummer an das untenstehende Konto.';
 
   const doc = new Docxtemplater(new PizZip(templateBuffer), {
     paragraphLoop: true,
@@ -491,12 +442,12 @@ export function buildInvoiceDocx(templateBuffer: Buffer, input: InvoiceDocxInput
     Name: input.name,
     Strasse: input.street,
     Ort: input.city,
-    Heute: input.invoiceDate.toLocaleDateString('de'),
+    Heute: formatDate(input.invoiceDate),
     Title: input.title,
     ReNr: input.invoiceNumber,
-    Netto: (net / 100).toFixed(2),
-    Steuer: (tax / 100).toFixed(2),
-    Brutto: (gross / 100).toFixed(2),
+    Netto: formatEuroNumber(net),
+    Steuer: formatEuroNumber(tax),
+    Brutto: formatEuroNumber(gross),
     ust: input.vat,
     MailAnrede: input.emailSalutation,
     PaymentDetails: paymentDetails,

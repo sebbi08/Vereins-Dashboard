@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { amountInWords, formatAmount, formatDate } from '../../services/amountInWords';
+import {
+  amountInWords,
+  formatAmount,
+  formatDate,
+  formatEuroNumber,
+} from '../../services/amountInWords';
+
+describe('formatEuroNumber', () => {
+  it.each([
+    [0, '0,00'],
+    [5, '0,05'],
+    [8403, '84,03'],
+    [123456, '1.234,56'],
+    [100000000, '1.000.000,00'],
+  ])('writes %i cents as %j without a currency sign', (cents, expected) => {
+    expect(formatEuroNumber(cents)).toBe(expected);
+  });
+});
 
 describe('amountInWords', () => {
   it.each([

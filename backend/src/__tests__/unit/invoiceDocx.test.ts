@@ -3,7 +3,11 @@ import path from 'path';
 import PizZip from 'pizzip';
 import { fileURLToPath } from 'url';
 import { describe, expect, it, vi } from 'vitest';
-import { buildInvoiceDocx } from '../../services/pdfGeneration';
+import {
+  buildInvoiceDocx,
+  getDummyData,
+  type InvoiceDocxInput,
+} from '../../services/pdfGeneration';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const templatePath = path.resolve(__dirname, '../../../../e2e/fixture/Rechnung.docx');
@@ -64,7 +68,7 @@ describe('buildInvoiceDocx', () => {
     );
     expect(xml).toContain('Erste Position');
     expect(xml).toContain('Zweite Position');
-    expect(xml).toContain('25.50€');
+    expect(textOf(xml)).toContain('25,50\u00a0€');
     expect(xml).not.toContain('{text0}');
   });
 
@@ -83,6 +87,54 @@ describe('buildInvoiceDocx', () => {
     );
     expect(textOf(xml)).toContain(expected);
     expect(textOf(xml)).toContain('Position A');
+  });
+
+  it('writes the totals in German notation with thousands separators', () => {
+    const text = textOf(
+      documentXml(
+        buildInvoiceDocx(fs.readFileSync(templatePath), {
+          ...baseInput,
+          lineItems: [{ text: 'Miete', priceInCents: 123456 }],
+        }),
+      ),
+    );
+    expect(text).toContain('1.234,56'); // net
+    expect(text).toContain('234,57'); // 19 % tax
+    expect(text).toContain('1.469,13'); // gross
+    expect(text).not.toContain('1234.56');
+  });
+
+  it('writes the invoice date as dd.mm.yyyy', () => {
+    const text = textOf(
+      documentXml(
+        buildInvoiceDocx(fs.readFileSync(templatePath), {
+          ...baseInput,
+          lineItems: [{ text: 'Miete', priceInCents: 1000 }],
+        }),
+      ),
+    );
+    expect(text).toContain('05.10.2026');
+    expect(text).not.toMatch(/(^|\D)5\.10\.2026/);
+  });
+
+  it('renders the template preview with the same builder and data shape as real invoices', () => {
+    const dummy = getDummyData('RECHNUNG', {
+      treasurer: '',
+      charitablePurpose: '',
+      taxOfficeName: '',
+      taxNumber: '',
+      exemptionDate: '',
+      assessmentPeriod: '',
+    });
+    expect(dummy).toHaveProperty('lineItems');
+    expect(dummy).toHaveProperty('invoiceNumber');
+
+    const text = textOf(
+      documentXml(buildInvoiceDocx(fs.readFileSync(templatePath), dummy as InvoiceDocxInput)),
+    );
+    expect(text).toContain('Miete Musikheim');
+    expect(text).toContain('84,03');
+    expect(text).toContain('100,00');
   });
 
   it('keeps braces and XML special characters in line items literally', () => {

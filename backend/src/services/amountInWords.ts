@@ -13,6 +13,14 @@ export function amountInWords(cents: number): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/** German decimal notation without a currency sign, e.g. 123456 → "1.234,56". */
+export function formatEuroNumber(cents: number): string {
+  return new Intl.NumberFormat('de-DE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(cents / 100);
+}
+
 export function formatAmount(cents: number): string {
   return new Intl.NumberFormat('de-DE', {
     style: 'currency',
