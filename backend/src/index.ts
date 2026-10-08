@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { createApp } from './app.js';
 import { ABSOLUTE_DATA_DIR, DATABASE_FILE_PATH, DATABASE_URL } from './config.js';
 import { initializeApp } from './init.js';
+import { recoverInterruptedPdfs } from './services/pdfRecovery.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -27,7 +28,11 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 initializeApp()
-  .then(() => {
+  .then(async () => {
+    const recovered = await recoverInterruptedPdfs();
+    if (recovered > 0) {
+      console.warn(`Marked ${recovered} interrupted PDF generation(s) as failed; retry them.`);
+    }
     app.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
       console.log(`Data dir: ${ABSOLUTE_DATA_DIR}`);

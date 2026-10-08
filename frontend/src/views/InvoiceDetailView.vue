@@ -7,7 +7,7 @@ import Button from 'primevue/button';
 import Card from 'primevue/card';
 import Message from 'primevue/message';
 import type { InvoiceDto, InvoiceRevisionDto } from 'shared';
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import PdfFailureNotice from '../components/PdfFailureNotice.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
@@ -62,10 +62,34 @@ async function loadData() {
     reportLoadFailure('Network error');
   } finally {
     loading.value = false;
+    schedulePdfPoll();
   }
 }
 
+// Invoice PDFs are generated in the background: while one is pending, reload until it is done,
+// so Download and Send appear without a manual page reload.
+const PDF_POLL_INTERVAL_MS = 2000;
+const PDF_POLL_MAX = 90; // about three minutes
+let pdfPollTimer: ReturnType<typeof setTimeout> | null = null;
+let pdfPolls = 0;
+let unmounted = false;
+
+function schedulePdfPoll() {
+  if (pdfPollTimer) clearTimeout(pdfPollTimer);
+  pdfPollTimer = null;
+  const pending = invoice.value?.revisions.some((r) => r.pdfStatus === 'PENDING') ?? false;
+  if (unmounted || !pending || pdfPolls >= PDF_POLL_MAX) return;
+  pdfPollTimer = setTimeout(() => {
+    pdfPolls++;
+    void loadData();
+  }, PDF_POLL_INTERVAL_MS);
+}
+
 onMounted(loadData);
+onBeforeUnmount(() => {
+  unmounted = true;
+  if (pdfPollTimer) clearTimeout(pdfPollTimer);
+});
 
 function grossCents(rev: InvoiceRevisionDto): number {
   const net = rev.inputs.lineItems.reduce((sum, p) => sum + p.priceInCents, 0);

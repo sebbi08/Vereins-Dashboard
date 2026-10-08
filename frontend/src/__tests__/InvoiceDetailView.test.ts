@@ -251,6 +251,65 @@ describe('InvoiceDetailView', () => {
     expect(notify.success).not.toHaveBeenCalled();
   });
 
+  describe('while a PDF is being generated', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      replies['GET /api/invoice/1'] = {
+        status: 200,
+        body: makeInvoice({ revisions: [revision({ pdfStatus: 'PENDING' })] }),
+      };
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function loads(): number {
+      return calls().filter((c) => c === 'GET /api/invoice/1').length;
+    }
+
+    it('reloads until the PDF is ready and then offers the download', async () => {
+      const wrapper = await mountView();
+      expect(wrapper.find('[data-testid="download-pdf"]').exists()).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(2000);
+      await flushPromises();
+      expect(loads()).toBe(2);
+
+      replies['GET /api/invoice/1'] = { status: 200, body: makeInvoice() };
+      await vi.advanceTimersByTimeAsync(2000);
+      await flushPromises();
+      expect(loads()).toBe(3);
+      expect(wrapper.find('[data-testid="download-pdf"]').exists()).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      await flushPromises();
+      expect(loads()).toBe(3);
+    });
+
+    it('stops reloading when the page is left', async () => {
+      const wrapper = await mountView();
+      wrapper.unmount();
+
+      await vi.advanceTimersByTimeAsync(10_000);
+      await flushPromises();
+      expect(loads()).toBe(1);
+    });
+
+    it('gives up after a few minutes', async () => {
+      await mountView();
+
+      await vi.advanceTimersByTimeAsync(10 * 60_000);
+      await flushPromises();
+      const afterCap = loads();
+      await vi.advanceTimersByTimeAsync(60_000);
+      await flushPromises();
+
+      expect(afterCap).toBeLessThan(200);
+      expect(loads()).toBe(afterCap);
+    });
+  });
+
   it('opens the PDF download', async () => {
     const open = vi.fn();
     vi.stubGlobal('open', open);
