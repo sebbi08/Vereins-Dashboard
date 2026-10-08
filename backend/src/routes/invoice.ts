@@ -1,6 +1,5 @@
 import { ZipArchive } from 'archiver';
 import { Router } from 'express';
-import fs from 'fs';
 import type { InvoiceInputs, InvoiceLineItem, InvoiceListItem, PdfStatus } from 'shared';
 import type { Prisma } from '../../prisma/generated/client.js';
 import { toAbsolutePath } from '../config.js';
@@ -240,9 +239,14 @@ invoiceRouter.get('/revision/:revisionId/download', async (req, res) => {
 
   const safeNum = revision.invoice.number.replace(/\s*\/\s*/g, '-');
   const fileName = `${safeNum}-R${revision.revisionNumber}.pdf`;
-  res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-  fs.createReadStream(toAbsolutePath(revision.filePath)).pipe(res);
+  res.sendFile(
+    toAbsolutePath(revision.filePath),
+    { headers: { 'Content-Disposition': `inline; filename="${fileName}"` } },
+    (err) => {
+      // A file missing on disk must not take the process down with an unhandled stream error.
+      if (err && !res.headersSent) res.status(404).json({ error: 'File not available' });
+    },
+  );
 });
 
 // POST /api/invoice/revision/:revisionId/retry-pdf

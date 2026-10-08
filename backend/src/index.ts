@@ -8,6 +8,12 @@ import { initializeApp } from './init.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+// Route errors are answered by the error middleware; this backstop keeps a rejection from
+// fire-and-forget work (e.g. background PDF generation) from ending the process.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+});
+
 const app = createApp();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
@@ -15,7 +21,7 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 if (process.env.NODE_ENV === 'production') {
   const frontendDist = path.join(__dirname, '../../frontend/dist');
   app.use(express.static(frontendDist));
-  app.get('*', (_req, res) => {
+  app.get('/{*splat}', (_req, res) => {
     res.sendFile(path.join(frontendDist, 'index.html'));
   });
 }
