@@ -195,7 +195,12 @@ async function onRowEditSave(event: DataTableRowEditSaveEvent) {
         addressSalutation: edited.addressSalutation || null,
       }),
     });
-    if (!res.ok) throw new Error('save failed');
+    if (!res.ok) {
+      // e.g. 'Name is required' — the server says what is wrong with the row
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      notify.error(body.error || 'Error saving donor');
+      return;
+    }
     const updated = (await res.json()) as DonorDto;
     donors.value = donors.value.map((d) => (d.id === updated.id ? updated : d));
     notify.success('Donor saved');

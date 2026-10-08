@@ -202,6 +202,33 @@ describe('InvoiceDetailView', () => {
     expect(notify.success).toHaveBeenCalledWith('Email sent successfully');
   });
 
+  it('names the invoice and the address in the send confirmation', async () => {
+    confirmAction.mockResolvedValueOnce(false);
+    const wrapper = await mountView();
+
+    await wrapper.find('[data-testid="send-email"]').trigger('click');
+
+    expect(confirmAction).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Send invoice 1 / 2026 to anna@example.org?' }),
+    );
+  });
+
+  it('cannot send an invoice that has no email address', async () => {
+    replies['GET /api/invoice/1'] = {
+      status: 200,
+      body: makeInvoice({
+        revisions: [revision({ inputs: { ...revision({}).inputs, email: '' } })],
+      }),
+    };
+    const wrapper = await mountView();
+
+    const send = wrapper.find('[data-testid="send-email"]');
+    expect(send.attributes('disabled')).toBeDefined();
+    expect(wrapper.find('[data-testid="no-email-hint"]').text()).toBe(
+      'No email address on this invoice',
+    );
+  });
+
   it('sends a test email without confirmation', async () => {
     replies['POST /api/invoice/revision/11/send-test-email'] = {
       status: 400,

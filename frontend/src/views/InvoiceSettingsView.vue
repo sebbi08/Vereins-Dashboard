@@ -64,6 +64,11 @@ const emailSettings = ref<EmailSettings>({
 });
 const envMode = ref('');
 const emailLoaded = ref(false);
+/** The test email uses the saved settings, so edits must be saved before testing them. */
+const savedEmailSettings = ref('');
+const emailSettingsEdited = computed(
+  () => emailLoaded.value && JSON.stringify(emailSettings.value) !== savedEmailSettings.value,
+);
 const emailLoadFailed = ref(false);
 const emailSaving = ref(false);
 const emailTesting = ref(false);
@@ -73,6 +78,7 @@ async function loadEmailSettings() {
     const res = await fetch('/api/email-settings');
     if (!res.ok) throw new Error('load failed');
     Object.assign(emailSettings.value, await res.json());
+    savedEmailSettings.value = JSON.stringify(emailSettings.value);
     emailLoaded.value = true;
   } catch {
     emailLoadFailed.value = true;
@@ -99,6 +105,7 @@ async function saveEmailSettings() {
       body: JSON.stringify(emailSettings.value),
     });
     if (!res.ok) throw new Error('save failed');
+    savedEmailSettings.value = JSON.stringify(emailSettings.value);
     notify.success('Email settings saved');
   } catch {
     notify.error('Error saving email settings');
@@ -194,7 +201,12 @@ async function onRowEditSave(event: DataTableRowEditSaveEvent) {
         salutation: edited.salutation || null,
       }),
     });
-    if (!res.ok) throw new Error('save failed');
+    if (!res.ok) {
+      // e.g. 'Name is required' — the server says what is wrong with the row
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      notify.error(body.error || 'Error saving recipient');
+      return;
+    }
     const updated = (await res.json()) as InvoiceRecipientDto;
     recipients.value = recipients.value.map((r) => (r.id === updated.id ? updated : r));
     notify.success('Recipient saved');
@@ -358,10 +370,14 @@ onMounted(() => {
                 severity="secondary"
                 outlined
                 :loading="emailTesting"
+                :disabled="emailSettingsEdited"
                 data-testid="test-email"
                 @click="sendTestEmail"
               />
             </div>
+            <small v-if="emailSettingsEdited" class="muted" data-testid="test-email-hint">
+              Save the settings to test them.
+            </small>
           </div>
         </TabPanel>
 

@@ -141,8 +141,7 @@ async function retryPdf(rev: InvoiceRevisionDto) {
 
 async function sendEmail(rev: InvoiceRevisionDto) {
   const confirmed = await confirmAction({
-    message:
-      'Send this invoice to the real recipient now? This action sends the email to the recipient address.',
+    message: `Send invoice ${invoice.value?.number} to ${rev.inputs.email.trim()}?`,
     header: 'Send invoice',
     acceptLabel: 'Send email',
   });
@@ -365,9 +364,23 @@ function downloadPdf(rev: InvoiceRevisionDto) {
                     icon="pi pi-envelope"
                     size="small"
                     :loading="busy[`email-${rev.id}`]"
+                    :disabled="!rev.inputs.email.trim()"
                     data-testid="send-email"
                     @click="sendEmail(rev)"
                   />
+                  <small
+                    v-if="
+                      rev.pdfStatus === 'OK' &&
+                      isActive &&
+                      rev.emailStatus !== 'SENT' &&
+                      isLatest(rev) &&
+                      !rev.inputs.email.trim()
+                    "
+                    class="muted"
+                    data-testid="no-email-hint"
+                  >
+                    No email address on this invoice
+                  </small>
                   <StatusTag
                     v-if="rev.emailStatus !== 'NOT_SENT'"
                     :tag="emailStatusTag(rev.emailStatus)"

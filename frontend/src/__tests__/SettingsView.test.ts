@@ -308,6 +308,19 @@ describe('SettingsView', () => {
     expect(notify.error).toHaveBeenCalledWith('Error saving donor');
   });
 
+  it("shows the server's reason when a donor cannot be saved", async () => {
+    replies['PATCH /api/donor/2'] = { status: 400, body: { error: 'Name is required' } };
+    const wrapper = await mountView();
+    donorsTable(wrapper).vm.$emit('row-edit-save', {
+      originalEvent: new Event('click'),
+      data: donors[1],
+      newData: { ...donors[1], name: '' },
+      index: 1,
+    });
+    await flushPromises();
+    expect(notify.error).toHaveBeenCalledWith('Name is required');
+  });
+
   describe('deleting a donor', () => {
     it('deletes a donor after confirmation and removes the row', async () => {
       replies['DELETE /api/donor/2'] = { status: 204 };

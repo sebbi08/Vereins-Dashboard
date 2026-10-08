@@ -293,6 +293,41 @@ describe('InvoiceSettingsView', () => {
     expect(notify.error).toHaveBeenCalledWith('Error saving recipient');
   });
 
+  it("shows the server's reason when a recipient cannot be saved", async () => {
+    replies['PATCH /api/invoice-recipient/1'] = {
+      status: 400,
+      body: { error: 'Name is required' },
+    };
+    const wrapper = await mountView();
+    const table = wrapper
+      .findAllComponents(DataTable)
+      .find((c) => c.attributes('data-testid') === 'recipients-table')!;
+    table.vm.$emit('row-edit-save', {
+      originalEvent: new Event('click'),
+      data: recipients[0],
+      newData: { ...recipients[0], name: '' },
+      index: 0,
+    });
+    await flushPromises();
+    expect(notify.error).toHaveBeenCalledWith('Name is required');
+  });
+
+  it('asks to save edited email settings before sending a test email', async () => {
+    replies['PUT /api/email-settings'] = { status: 200, body: {} };
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="test-email"]').attributes('disabled')).toBeUndefined();
+
+    await wrapper.find('#smtp-host').setValue('smtp.neu.example');
+    expect(wrapper.find('[data-testid="test-email"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('[data-testid="test-email-hint"]').text()).toBe(
+      'Save the settings to test them.',
+    );
+
+    await wrapper.find('[data-testid="save-email"]').trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="test-email"]').attributes('disabled')).toBeUndefined();
+  });
+
   describe('deleting a recipient', () => {
     it('deletes a recipient after confirmation and removes the row', async () => {
       replies['DELETE /api/invoice-recipient/2'] = { status: 204 };
