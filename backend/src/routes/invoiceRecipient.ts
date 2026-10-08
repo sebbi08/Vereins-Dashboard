@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../prismaClient.js';
+import { parseMasterDataPatch } from '../services/requestParsing.js';
 
 export const invoiceRecipientRouter = Router();
 
@@ -23,13 +24,16 @@ invoiceRecipientRouter.patch('/:id', async (req, res) => {
     return;
   }
 
-  const { name, street, city, email, salutation } = req.body as {
-    name?: string;
-    street?: string;
-    city?: string;
-    email?: string | null;
-    salutation?: string | null;
-  };
+  const parsed = parseMasterDataPatch(
+    req.body,
+    ['name', 'street', 'city'] as const,
+    ['email', 'salutation'] as const,
+  );
+  if ('error' in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const { name, street, city, email, salutation } = parsed.value;
 
   const recipient = await prisma.invoiceRecipient.update({
     where: { id },

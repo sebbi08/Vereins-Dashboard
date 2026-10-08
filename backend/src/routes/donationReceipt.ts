@@ -6,12 +6,16 @@ import { toAbsolutePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
 import { generateReceiptPdf } from '../services/pdfGeneration.js';
 import { generateReceiptNumber } from '../services/receiptNumber.js';
+import { parseReceiptCreateBody, parseReceiptRevisionBody } from '../services/requestParsing.js';
 
 export const donationReceiptRouter = Router();
 
 const DEFAULT_LETTER_SALUTATION = 'Sehr geehrte Damen und Herren';
 const PDF_ERROR_MESSAGE = 'PDF could not be generated. Please try retry.';
 const runningRetries = new Set<number>();
+
+/** A donor problem found inside the create transaction; answered with 400. */
+class DonorError extends Error {}
 
 function revisionToDto(rev: {
   id: number;
@@ -396,17 +400,12 @@ donationReceiptRouter.get('/:id', async (req, res) => {
 
 // POST /api/donation-receipt
 donationReceiptRouter.post('/', async (req, res) => {
-  const body = req.body as {
-    donorId?: number;
-    donorData?: {
-      name: string;
-      street: string;
-      city: string;
-      letterSalutation?: string;
-      addressSalutation?: string;
-    };
-    inputs: ReceiptInputs;
-  };
+  const parsed = parseReceiptCreateBody(req.body);
+  if ('error' in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const body = parsed.value;
 
   const validationError = validateRequiredFields(body.inputs);
   if (validationError) {
@@ -433,103 +432,112 @@ donationReceiptRouter.post('/', async (req, res) => {
     return;
   }
 
-  const donationDate = new Date(body.inputs.donationDate);
+  const { donationDate } = body;
 
-  const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    // Inside the transaction: transactions run one at a time, so two requests cannot pick the same number.
-    const { number, year, runningNumber } = await generateReceiptNumber(tx);
-    let donorUpdated = false;
-    let donorId = body.donorId;
+  const result = await prisma
+    .$transaction(async (tx: Prisma.TransactionClient) => {
+      // Inside the transaction: transactions run one at a time, so two requests cannot pick the same number.
+      const { number, year, runningNumber } = await generateReceiptNumber(tx);
+      let donorUpdated = false;
+      let donorId = body.donorId;
 
-    if (donorId) {
-      const existingDonor = await tx.donor.findUnique({ where: { id: donorId } });
-      if (!existingDonor) {
-        throw new Error('Donor not found');
+      if (donorId) {
+        const existingDonor = await tx.donor.findUnique({ where: { id: donorId } });
+        if (!existingDonor) {
+          throw new DonorError('Donor not found');
+        }
+
+        const donorUpdateData: {
+          name: string;
+          street: string;
+          city: string;
+          letterSalutation?: string;
+          addressSalutation?: string | null;
+        } = {
+          name: body.inputs.name,
+          street: body.inputs.street,
+          city: body.inputs.city,
+        };
+
+        if (body.inputs.withCoverLetter) {
+          donorUpdateData.letterSalutation = body.inputs.letterSalutation.trim();
+          donorUpdateData.addressSalutation = normalizeAddressSalutation(
+            body.inputs.addressSalutation,
+          );
+        }
+
+        await tx.donor.update({ where: { id: donorId }, data: donorUpdateData });
+        donorUpdated = true;
+      } else {
+        if (!body.donorData) {
+          throw new DonorError('No donor specified');
+        }
+
+        const newDonor = await tx.donor.create({
+          data: {
+            name: body.donorData.name,
+            street: body.donorData.street,
+            city: body.donorData.city,
+            letterSalutation: body.inputs.withCoverLetter
+              ? body.inputs.letterSalutation.trim()
+              : DEFAULT_LETTER_SALUTATION,
+            addressSalutation: body.inputs.withCoverLetter
+              ? normalizeAddressSalutation(body.inputs.addressSalutation)
+              : null,
+          },
+        });
+        donorId = newDonor.id;
+        donorUpdated = true;
       }
 
-      const donorUpdateData: {
-        name: string;
-        street: string;
-        city: string;
-        letterSalutation?: string;
-        addressSalutation?: string | null;
-      } = {
-        name: body.inputs.name,
-        street: body.inputs.street,
-        city: body.inputs.city,
-      };
-
-      if (body.inputs.withCoverLetter) {
-        donorUpdateData.letterSalutation = body.inputs.letterSalutation.trim();
-        donorUpdateData.addressSalutation = normalizeAddressSalutation(
-          body.inputs.addressSalutation,
-        );
-      }
-
-      await tx.donor.update({ where: { id: donorId }, data: donorUpdateData });
-      donorUpdated = true;
-    } else {
-      if (!body.donorData) {
-        throw new Error('No donor specified');
-      }
-
-      const newDonor = await tx.donor.create({
+      const receipt = await tx.donationReceipt.create({
         data: {
-          name: body.donorData.name,
-          street: body.donorData.street,
-          city: body.donorData.city,
-          letterSalutation: body.inputs.withCoverLetter
-            ? body.inputs.letterSalutation.trim()
-            : DEFAULT_LETTER_SALUTATION,
+          number,
+          year,
+          runningNumber,
+          donorId: donorId!,
+          donationDate,
+        },
+      });
+
+      const revision = await tx.donationReceiptRevision.create({
+        data: {
+          donationReceiptId: receipt.id,
+          revisionNumber: 1,
+          name: body.inputs.name,
+          street: body.inputs.street,
+          city: body.inputs.city,
+          letterSalutation: normalizeLetterSalutation(body.inputs),
           addressSalutation: body.inputs.withCoverLetter
             ? normalizeAddressSalutation(body.inputs.addressSalutation)
             : null,
+          donationAmountCents: body.inputs.donationAmountCents,
+          donationDate,
+          withCoverLetter: body.inputs.withCoverLetter,
+          treasurer: body.inputs.treasurer,
+          charitablePurpose: body.inputs.charitablePurpose,
+          taxOfficeName: body.inputs.taxOfficeName,
+          taxNumber: body.inputs.taxNumber,
+          exemptionDate: body.inputs.exemptionDate,
+          assessmentPeriod: body.inputs.assessmentPeriod,
+          coverLetterTemplateId: coverLetterTemplate?.id ?? null,
+          receiptTemplateId: receiptTemplate.id,
+          pdfStatus: 'PENDING',
         },
       });
-      donorId = newDonor.id;
-      donorUpdated = true;
-    }
 
-    const receipt = await tx.donationReceipt.create({
-      data: {
-        number,
-        year,
-        runningNumber,
-        donorId: donorId!,
-        donationDate,
-      },
+      const donor = await tx.donor.findUniqueOrThrow({ where: { id: donorId! } });
+
+      return { receipt, revision, donor, donorUpdated };
+    })
+    .catch((err: unknown) => {
+      if (err instanceof DonorError) return err;
+      throw err;
     });
-
-    const revision = await tx.donationReceiptRevision.create({
-      data: {
-        donationReceiptId: receipt.id,
-        revisionNumber: 1,
-        name: body.inputs.name,
-        street: body.inputs.street,
-        city: body.inputs.city,
-        letterSalutation: normalizeLetterSalutation(body.inputs),
-        addressSalutation: body.inputs.withCoverLetter
-          ? normalizeAddressSalutation(body.inputs.addressSalutation)
-          : null,
-        donationAmountCents: body.inputs.donationAmountCents,
-        donationDate,
-        withCoverLetter: body.inputs.withCoverLetter,
-        treasurer: body.inputs.treasurer,
-        charitablePurpose: body.inputs.charitablePurpose,
-        taxOfficeName: body.inputs.taxOfficeName,
-        taxNumber: body.inputs.taxNumber,
-        exemptionDate: body.inputs.exemptionDate,
-        assessmentPeriod: body.inputs.assessmentPeriod,
-        coverLetterTemplateId: coverLetterTemplate?.id ?? null,
-        receiptTemplateId: receiptTemplate.id,
-        pdfStatus: 'PENDING',
-      },
-    });
-
-    const donor = await tx.donor.findUniqueOrThrow({ where: { id: donorId! } });
-
-    return { receipt, revision, donor, donorUpdated };
-  });
+  if (result instanceof DonorError) {
+    res.status(400).json({ error: result.message });
+    return;
+  }
 
   const pdf = await attemptPdfGeneration(result.revision.id);
 
@@ -552,6 +560,12 @@ donationReceiptRouter.post('/:id/revision', async (req, res) => {
     res.status(400).json({ error: 'Invalid ID' });
     return;
   }
+  const parsed = parseReceiptRevisionBody(req.body);
+  if ('error' in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const body = parsed.value;
 
   const receipt = await prisma.donationReceipt.findUnique({ where: { id } });
   if (!receipt) {
@@ -562,8 +576,6 @@ donationReceiptRouter.post('/:id/revision', async (req, res) => {
     res.status(400).json({ error: 'Cancelled receipts cannot be revised' });
     return;
   }
-
-  const body = req.body as { inputs: ReceiptInputs };
 
   const validationError = validateRequiredFields(body.inputs);
   if (validationError) {
@@ -590,7 +602,7 @@ donationReceiptRouter.post('/:id/revision', async (req, res) => {
     return;
   }
 
-  const donationDate = new Date(body.inputs.donationDate);
+  const { donationDate } = body;
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const lastRevision = await tx.donationReceiptRevision.findFirst({

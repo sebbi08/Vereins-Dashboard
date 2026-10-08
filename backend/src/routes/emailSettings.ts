@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { EmailSettings } from 'shared';
 import { prisma } from '../prismaClient.js';
+import { parseTextSettings } from '../services/requestParsing.js';
 import { sendTestEmail } from '../services/emailService.js';
 
 export const emailSettingsRouter = Router();
@@ -28,13 +29,18 @@ emailSettingsRouter.get('/', async (_req, res) => {
 });
 
 emailSettingsRouter.put('/', async (req, res) => {
-  const body = req.body as Partial<EmailSettings>;
+  const parsed = parseTextSettings(req.body, SETTINGS_KEYS);
+  if ('error' in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const body = parsed.value;
 
   const updates = SETTINGS_KEYS.filter((k) => body[k] !== undefined).map((key) =>
     prisma.systemSetting.upsert({
       where: { key },
-      update: { value: body[key] as string },
-      create: { key, value: body[key] as string },
+      update: { value: body[key]! },
+      create: { key, value: body[key]! },
     }),
   );
 

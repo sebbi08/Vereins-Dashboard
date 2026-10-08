@@ -11,9 +11,13 @@ import {
   RecipientError,
   saveRecipient,
   validateRequiredFields,
-  type RecipientSelection,
 } from '../services/invoiceCreation.js';
 import { attemptInvoicePdfGeneration } from '../services/invoicePdf.js';
+import {
+  parseInvoiceCreateBody,
+  parseInvoiceRevisionBody,
+  todayAsCalendarDay,
+} from '../services/requestParsing.js';
 
 export const invoiceRouter = Router();
 
@@ -404,7 +408,12 @@ invoiceRouter.get('/:id', async (req, res) => {
 
 // POST /api/invoice
 invoiceRouter.post('/', async (req, res) => {
-  const body = req.body as RecipientSelection & { inputs: InvoiceInputs };
+  const parsed = parseInvoiceCreateBody(req.body, todayAsCalendarDay());
+  if ('error' in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const body = parsed.value;
 
   const validationError = validateRequiredFields(body.inputs);
   if (validationError) {
@@ -420,7 +429,7 @@ invoiceRouter.post('/', async (req, res) => {
     return;
   }
 
-  const invoiceDate = body.inputs.invoiceDate ? new Date(body.inputs.invoiceDate) : new Date();
+  const { invoiceDate } = body;
 
   const result = await prisma
     .$transaction(async (tx: Prisma.TransactionClient) => {
@@ -469,6 +478,12 @@ invoiceRouter.post('/:id/revision', async (req, res) => {
     res.status(400).json({ error: 'Invalid ID' });
     return;
   }
+  const parsed = parseInvoiceRevisionBody(req.body, todayAsCalendarDay());
+  if ('error' in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const body = parsed.value;
 
   const invoice = await prisma.invoice.findUnique({ where: { id } });
   if (!invoice) {
@@ -479,8 +494,6 @@ invoiceRouter.post('/:id/revision', async (req, res) => {
     res.status(400).json({ error: 'Cancelled invoices cannot be revised' });
     return;
   }
-
-  const body = req.body as { inputs: InvoiceInputs };
 
   const validationError = validateRequiredFields(body.inputs);
   if (validationError) {
@@ -496,7 +509,7 @@ invoiceRouter.post('/:id/revision', async (req, res) => {
     return;
   }
 
-  const invoiceDate = body.inputs.invoiceDate ? new Date(body.inputs.invoiceDate) : new Date();
+  const { invoiceDate } = body;
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const lastRevision = await tx.invoiceRevision.findFirst({

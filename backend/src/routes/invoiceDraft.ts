@@ -16,6 +16,7 @@ import {
   type RecipientSelection,
 } from '../services/invoiceCreation.js';
 import { attemptInvoicePdfGeneration } from '../services/invoicePdf.js';
+import { parseDraftBody } from '../services/requestParsing.js';
 
 export const invoiceDraftRouter = Router();
 
@@ -120,7 +121,12 @@ invoiceDraftRouter.get('/:id', async (req, res) => {
 
 // POST /api/invoice-draft
 invoiceDraftRouter.post('/', async (req, res) => {
-  const body = req.body as DraftBody;
+  const parsed = parseDraftBody(req.body);
+  if ('error' in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const body = parsed.value;
   if (!hasValidName(body)) {
     res.status(400).json({ error: 'Name is required' });
     return;
@@ -152,7 +158,12 @@ invoiceDraftRouter.put('/:id', async (req, res) => {
     return;
   }
 
-  const body = req.body as DraftBody;
+  const parsed = parseDraftBody(req.body);
+  if ('error' in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const body = parsed.value;
   if (!hasValidName(body)) {
     res.status(400).json({ error: 'Name is required' });
     return;
