@@ -68,4 +68,17 @@ describe('useAppStore', () => {
 
     expect(store.receiptTemplateAvailable).toBe(false);
   });
+
+  it.each([
+    ['responds with an error', () => Promise.resolve({ ok: false } as Response)],
+    ['is unreachable', () => Promise.reject(new Error('offline'))],
+  ])('marks both templates as unavailable when the template check %s', async (_label, reply) => {
+    global.fetch = vi.fn().mockImplementationOnce(reply);
+
+    const store = useAppStore();
+    await store.checkTemplates();
+
+    expect(store.receiptTemplateAvailable).toBe(false);
+    expect(store.invoiceTemplateAvailable).toBe(false);
+  });
 });

@@ -63,3 +63,9 @@ describe('index.html theme bootstrap', () => {
     expect(isDark()).toBe(true);
   });
 });
+
+describe('index.html language', () => {
+  it('declares English, the language of the UI, for screen readers', () => {
+    expect(html).toMatch(/<html lang="en">/);
+  });
+});

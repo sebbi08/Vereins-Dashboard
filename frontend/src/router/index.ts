@@ -8,6 +8,7 @@ import InvoiceDetailView from '@/views/InvoiceDetailView.vue';
 import InvoiceFormView from '@/views/InvoiceFormView.vue';
 import InvoiceSettingsView from '@/views/InvoiceSettingsView.vue';
 import InvoiceView from '@/views/InvoiceView.vue';
+import NotFoundView from '@/views/NotFoundView.vue';
 import SettingsView from '@/views/SettingsView.vue';
 import { createRouter, createWebHistory } from 'vue-router';
 
@@ -73,6 +74,7 @@ const router = createRouter({
       path: '/settings',
       redirect: '/donation-receipt/settings',
     },
+    { path: '/:pathMatch(.*)*', name: 'not-found', component: NotFoundView },
   ],
 });
 

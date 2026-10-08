@@ -12,15 +12,21 @@ export const useAppStore = defineStore('app', () => {
     try {
       const res = await fetch('/api/templates');
       if (!res.ok) {
-        receiptTemplateAvailable.value = false;
+        markUnavailable();
         return;
       }
       const templates: { type: string }[] = await res.json();
       receiptTemplateAvailable.value = templates.some((v) => v.type === 'QUITTUNG');
       invoiceTemplateAvailable.value = templates.some((v) => v.type === 'RECHNUNG');
     } catch {
-      receiptTemplateAvailable.value = false;
+      markUnavailable();
     }
+  }
+
+  /** Without a template list, neither document type can be created. */
+  function markUnavailable() {
+    receiptTemplateAvailable.value = false;
+    invoiceTemplateAvailable.value = false;
   }
 
   return { appName, receiptTemplateAvailable, invoiceTemplateAvailable, checkTemplates };
