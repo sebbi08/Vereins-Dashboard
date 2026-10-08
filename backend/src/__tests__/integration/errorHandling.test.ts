@@ -104,4 +104,13 @@ describe('error handling', () => {
     },
     CRASH_TIMEOUT,
   );
+
+  it('reports an invoice PDF missing on disk in a batch download instead of zipping nothing', async () => {
+    const revision = await seedRevisionWithMissingPdf();
+    const res = await request
+      .post('/api/invoice/download-batch')
+      .send({ ids: [revision.invoiceId] });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'PDF_NOT_READY', ids: [revision.invoiceId] });
+  });
 });

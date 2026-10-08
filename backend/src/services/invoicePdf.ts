@@ -2,7 +2,7 @@ import type { PdfStatus } from 'shared';
 import { prisma } from '../prismaClient.js';
 import { generateInvoicePdf } from './pdfGeneration.js';
 
-const PDF_ERROR_MESSAGE = 'PDF could not be generated. Please try retry.';
+const PDF_ERROR_MESSAGE = 'PDF could not be generated. Please try again.';
 
 async function updateRevisionPdfStatus(
   revisionId: number,

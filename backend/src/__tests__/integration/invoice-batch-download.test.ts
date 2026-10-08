@@ -1,6 +1,9 @@
+import fs from 'fs';
+import path from 'path';
 import supertest from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../app';
+import { toAbsolutePath } from '../../config';
 import { initializeApp } from '../../init';
 import { prisma } from '../../prismaClient';
 import { useCleanDatabase } from './helpers';
@@ -65,6 +68,12 @@ async function seedRecipientAndInvoice(overrides?: {
           : (overrides?.filePath ?? null),
     },
   });
+  if (revision.filePath && overrides?.filePath === undefined) {
+    // The default revision has a real PDF on disk, as a generated one would
+    const file = toAbsolutePath(revision.filePath);
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    await fs.promises.writeFile(file, '%PDF-test');
+  }
   return { template, recipient, invoice, revision };
 }
 

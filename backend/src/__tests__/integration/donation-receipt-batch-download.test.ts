@@ -1,6 +1,10 @@
+import fs from 'fs';
+import path from 'path';
+import PizZip from 'pizzip';
 import supertest from 'supertest';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createApp } from '../../app';
+import { toAbsolutePath } from '../../config';
 import { initializeApp } from '../../init';
 import { prisma } from '../../prismaClient';
 import { useCleanDatabase } from './helpers';
@@ -73,7 +77,21 @@ async function seedDonorAndReceipt(overrides?: {
           : (overrides?.filePath ?? null),
     },
   });
+  if (revision.filePath && overrides?.filePath === undefined) {
+    // The default revision has a real PDF on disk, as a generated one would
+    const file = toAbsolutePath(revision.filePath);
+    await fs.promises.mkdir(path.dirname(file), { recursive: true });
+    await fs.promises.writeFile(file, '%PDF-test');
+  }
   return { donor, receipt, revision, template };
+}
+
+/** Collects a binary response body (supertest buffers only text by default). */
+function binary(res: supertest.Response, done: (err: Error | null, body: Buffer) => void) {
+  const stream = res as unknown as NodeJS.ReadableStream;
+  const chunks: Buffer[] = [];
+  stream.on('data', (c: Buffer) => chunks.push(c));
+  stream.on('end', () => done(null, Buffer.concat(chunks)));
 }
 
 describe('POST /api/donation-receipt/download-batch', () => {
@@ -87,6 +105,30 @@ describe('POST /api/donation-receipt/download-batch', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toBe('application/zip');
     expect(res.headers['content-disposition']).toMatch(/^attachment; filename="quittungen-/);
+  });
+
+  it('puts every selected PDF into the ZIP', async () => {
+    const { receipt } = await seedDonorAndReceipt();
+
+    const res = await request
+      .post('/api/donation-receipt/download-batch')
+      .send({ ids: [receipt.id] })
+      .buffer(true)
+      .parse(binary);
+
+    const names = Object.keys(new PizZip(res.body as Buffer).files);
+    expect(names).toEqual([`${receipt.number}-R1.pdf`]);
+  });
+
+  it('reports a PDF that is missing on disk instead of leaving it out of the ZIP', async () => {
+    const { receipt } = await seedDonorAndReceipt({ filePath: 'receipts/missing/gone.pdf' });
+
+    const res = await request
+      .post('/api/donation-receipt/download-batch')
+      .send({ ids: [receipt.id] });
+
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'PDF_NOT_READY', ids: [receipt.id] });
   });
 
   it('returns 400 when IDs array is empty', async () => {

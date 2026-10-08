@@ -2,16 +2,26 @@ import { ZipArchive } from 'archiver';
 import { Router } from 'express';
 import type { DonationReceiptListItem, PdfStatus, ReceiptInputs } from 'shared';
 import type { Prisma } from '../../prisma/generated/client.js';
+import fs from 'fs';
 import { toAbsolutePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
 import { generateReceiptPdf } from '../services/pdfGeneration.js';
 import { generateReceiptNumber } from '../services/receiptNumber.js';
 import { parseReceiptCreateBody, parseReceiptRevisionBody } from '../services/requestParsing.js';
 
+async function fileExists(storedPath: string): Promise<boolean> {
+  try {
+    await fs.promises.access(toAbsolutePath(storedPath));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const donationReceiptRouter = Router();
 
 const DEFAULT_LETTER_SALUTATION = 'Sehr geehrte Damen und Herren';
-const PDF_ERROR_MESSAGE = 'PDF could not be generated. Please try retry.';
+const PDF_ERROR_MESSAGE = 'PDF could not be generated. Please try again.';
 const runningRetries = new Set<number>();
 
 /** A donor problem found inside the create transaction; answered with 400. */
@@ -239,7 +249,8 @@ donationReceiptRouter.post('/download-batch', async (req, res) => {
     }
 
     const rev = receipt.revisions[0];
-    if (!rev || !rev.filePath || rev.pdfStatus !== 'OK') {
+    // A PDF missing on disk would otherwise be left out of the ZIP without a word
+    if (!rev || !rev.filePath || rev.pdfStatus !== 'OK' || !(await fileExists(rev.filePath))) {
       notReady.push(id);
       continue;
     }

@@ -41,6 +41,7 @@ settingsRouter.put('/', async (req, res) => {
     }),
   );
 
-  await Promise.all(updates);
+  // All or nothing: a failure must not leave the settings half saved
+  await prisma.$transaction(updates);
   res.json({ message: 'Settings saved' });
 });

@@ -2,6 +2,7 @@ import { ZipArchive } from 'archiver';
 import { Router } from 'express';
 import type { InvoiceInputs, InvoiceLineItem, InvoiceListItem, PdfStatus } from 'shared';
 import type { Prisma } from '../../prisma/generated/client.js';
+import fs from 'fs';
 import { toAbsolutePath } from '../config.js';
 import { prisma } from '../prismaClient.js';
 import { sendInvoiceEmail } from '../services/emailService.js';
@@ -19,6 +20,15 @@ import {
   parseInvoiceRevisionBody,
   todayAsCalendarDay,
 } from '../services/requestParsing.js';
+
+async function fileExists(storedPath: string): Promise<boolean> {
+  try {
+    await fs.promises.access(toAbsolutePath(storedPath));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export const invoiceRouter = Router();
 
@@ -172,7 +182,8 @@ invoiceRouter.post('/download-batch', async (req, res) => {
     }
 
     const rev = invoice.revisions[0];
-    if (!rev || !rev.filePath || rev.pdfStatus !== 'OK') {
+    // A PDF missing on disk would otherwise be left out of the ZIP without a word
+    if (!rev || !rev.filePath || rev.pdfStatus !== 'OK' || !(await fileExists(rev.filePath))) {
       notReady.push(id);
       continue;
     }
