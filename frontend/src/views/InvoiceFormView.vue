@@ -16,6 +16,7 @@ import type {
   InvoiceInputs,
   InvoiceRecipientDto,
 } from 'shared';
+import { calculateInvoiceTotals, INVOICE_VAT_PERCENT } from 'shared';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import DecimalInput from '../components/ui/DecimalInput.vue';
@@ -71,7 +72,7 @@ const inputs = ref<InvoiceInputs>({
   invoiceDate: toIsoDate(new Date()),
   title: '',
   lineItems: [{ text: '', priceInCents: 0 }],
-  vat: 19,
+  vat: INVOICE_VAT_PERCENT,
   directDebit: false,
   email: '',
   emailSalutation: 'Sehr geehrte Damen und Herren',
@@ -129,10 +130,9 @@ const invoiceDateValue = computed<Date | null>({
   },
 });
 
-const grossCents = computed(() => {
-  const net = inputs.value.lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
-  return net + Math.round(net * (inputs.value.vat / 100));
-});
+const grossCents = computed(
+  () => calculateInvoiceTotals(inputs.value.lineItems, inputs.value.vat).grossCents,
+);
 
 /** Bumped by every search; a response from an older search is stale. */
 let latestRecipientSearch = 0;

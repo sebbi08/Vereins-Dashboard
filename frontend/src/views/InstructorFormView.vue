@@ -3,7 +3,9 @@ import Button from 'primevue/button';
 import Message from 'primevue/message';
 import {
   calculateInstructorRent,
+  calculateInvoiceTotals,
   DEFAULT_WEEKS_PER_MONTH,
+  INVOICE_VAT_PERCENT,
   type InstructorDto,
   type InstructorRentInputs,
   type InstructorSettingsDto,
@@ -68,13 +70,11 @@ const result = computed(() =>
   issues.value.length === 0 ? calculateInstructorRent(rentInputs.value, weeksPerMonth.value) : null,
 );
 
-/** VAT on the invoice created from an instructor (the invoice form's default). */
-const INVOICE_VAT_PERCENT = 19;
-
-/** Same rounding as the invoice gross amount: net + rounded VAT. */
+/** Gross of the invoice created from this instructor, computed exactly as on the invoice. */
 const grossTotalCents = computed(() =>
   result.value
-    ? result.value.totalCents + Math.round(result.value.totalCents * (INVOICE_VAT_PERCENT / 100))
+    ? calculateInvoiceTotals([{ priceInCents: result.value.totalCents }], INVOICE_VAT_PERCENT)
+        .grossCents
     : null,
 );
 const canSave = computed(

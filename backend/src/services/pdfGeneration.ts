@@ -6,6 +6,7 @@ import path from 'path';
 import { PDFDocument, RotationTypes, StandardFonts } from 'pdf-lib';
 import PizZip from 'pizzip';
 import type { TemplateType } from 'shared';
+import { calculateInvoiceTotals } from '../../../shared/src/invoiceTotals.js';
 import { promisify } from 'util';
 import type { PrismaClient } from '../../prisma/generated/client.js';
 import { INVOICES_DIR, RECEIPTS_DIR, toAbsolutePath, toRelativePath } from '../config.js';
@@ -472,9 +473,11 @@ export interface InvoiceDocxInput {
  * break; braces in any value stay literal (values are never re-parsed as template syntax).
  */
 export function buildInvoiceDocx(templateBuffer: Buffer, input: InvoiceDocxInput): Buffer {
-  const net = input.lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
-  const tax = Math.round(net * (input.vat / 100));
-  const gross = net + tax;
+  const {
+    netCents: net,
+    taxCents: tax,
+    grossCents: gross,
+  } = calculateInvoiceTotals(input.lineItems, input.vat);
 
   const paymentDetails = input.directDebit
     ? `Der Betrag wird in den nächsten Tagen mit dem Vermerk "${input.invoiceNumber}" von Ihrem Konto eingezogen.`

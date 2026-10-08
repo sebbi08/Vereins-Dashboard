@@ -6,7 +6,7 @@ import AccordionPanel from 'primevue/accordionpanel';
 import Button from 'primevue/button';
 import Card from 'primevue/card';
 import Message from 'primevue/message';
-import type { InvoiceDto, InvoiceRevisionDto } from 'shared';
+import { calculateInvoiceTotals, type InvoiceDto, type InvoiceRevisionDto } from 'shared';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import PdfFailureNotice from '../components/PdfFailureNotice.vue';
@@ -92,8 +92,7 @@ onBeforeUnmount(() => {
 });
 
 function grossCents(rev: InvoiceRevisionDto): number {
-  const net = rev.inputs.lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
-  return net + Math.round(net * (rev.inputs.vat / 100));
+  return calculateInvoiceTotals(rev.inputs.lineItems, rev.inputs.vat).grossCents;
 }
 
 function isLatest(rev: InvoiceRevisionDto): boolean {

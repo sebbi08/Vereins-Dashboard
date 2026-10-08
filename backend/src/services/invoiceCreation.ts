@@ -1,4 +1,5 @@
 import type { InvoiceContent, InvoiceLineItem } from 'shared';
+import { calculateInvoiceTotals } from '../../../shared/src/invoiceTotals.js';
 import type { Prisma } from '../../prisma/generated/client.js';
 import { generateInvoiceNumber } from './invoiceNumber.js';
 
@@ -41,9 +42,7 @@ export function validateRequiredFields(inputs: InvoiceContent): string | null {
 
 export function calculateGross(positionsJson: string, vat: number): number {
   const lineItems: InvoiceLineItem[] = JSON.parse(positionsJson);
-  const net = lineItems.reduce((sum, p) => sum + p.priceInCents, 0);
-  const tax = Math.round(net * (vat / 100));
-  return net + tax;
+  return calculateInvoiceTotals(lineItems, vat).grossCents;
 }
 
 /**
