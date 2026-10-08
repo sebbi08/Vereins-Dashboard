@@ -433,10 +433,11 @@ donationReceiptRouter.post('/', async (req, res) => {
     return;
   }
 
-  const { number, year, runningNumber } = await generateReceiptNumber(prisma);
   const donationDate = new Date(body.inputs.donationDate);
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    // Inside the transaction: transactions run one at a time, so two requests cannot pick the same number.
+    const { number, year, runningNumber } = await generateReceiptNumber(tx);
     let donorUpdated = false;
     let donorId = body.donorId;
 
@@ -589,14 +590,14 @@ donationReceiptRouter.post('/:id/revision', async (req, res) => {
     return;
   }
 
-  const lastRevision = await prisma.donationReceiptRevision.findFirst({
-    where: { donationReceiptId: id },
-    orderBy: { revisionNumber: 'desc' },
-  });
-  const newRevisionNumber = (lastRevision?.revisionNumber ?? 0) + 1;
   const donationDate = new Date(body.inputs.donationDate);
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const lastRevision = await tx.donationReceiptRevision.findFirst({
+      where: { donationReceiptId: id },
+      orderBy: { revisionNumber: 'desc' },
+    });
+    const newRevisionNumber = (lastRevision?.revisionNumber ?? 0) + 1;
     await tx.donationReceiptRevision.updateMany({
       where: { donationReceiptId: id, status: 'AKTIV' },
       data: { status: 'ERSETZT' },

@@ -496,14 +496,14 @@ invoiceRouter.post('/:id/revision', async (req, res) => {
     return;
   }
 
-  const lastRevision = await prisma.invoiceRevision.findFirst({
-    where: { invoiceId: id },
-    orderBy: { revisionNumber: 'desc' },
-  });
-  const newRevisionNumber = (lastRevision?.revisionNumber ?? 0) + 1;
   const invoiceDate = body.inputs.invoiceDate ? new Date(body.inputs.invoiceDate) : new Date();
 
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const lastRevision = await tx.invoiceRevision.findFirst({
+      where: { invoiceId: id },
+      orderBy: { revisionNumber: 'desc' },
+    });
+    const newRevisionNumber = (lastRevision?.revisionNumber ?? 0) + 1;
     await tx.invoiceRevision.updateMany({
       where: { invoiceId: id, status: 'AKTIV' },
       data: { status: 'ERSETZT' },

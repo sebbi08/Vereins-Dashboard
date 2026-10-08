@@ -77,6 +77,8 @@ model DonationReceiptRevision {
   pdfTechError String?
   filePath     String?
   createdAt    DateTime @default(now())
+
+  @@unique([donationReceiptId, revisionNumber])
 }
 
 model SystemSetting {
@@ -138,6 +140,8 @@ model InvoiceRevision {
   emailStatus     String   @default("NOT_SENT")
   emailError      String?
   createdAt       DateTime @default(now())
+
+  @@unique([invoiceId, revisionNumber])
 }
 
 model InvoiceDraft {
