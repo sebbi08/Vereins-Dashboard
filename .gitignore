@@ -37,3 +37,6 @@ dev-data-back-bevore-en
 backend/prisma/generated
 .browser-cache
 e2e/data
+
+# Playwright MCP snapshots and console logs
+.playwright-mcp
