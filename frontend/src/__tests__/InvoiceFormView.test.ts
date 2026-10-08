@@ -367,13 +367,13 @@ describe('InvoiceFormView — new invoice', () => {
   });
 
   it('searches recipients and fills the fields on selection, keeping them editable', async () => {
-    replies['GET /api/invoice/recipient?search=An'] = { status: 200, body: [anna] };
+    replies['GET /api/invoice-recipient?search=An'] = { status: 200, body: [anna] };
     const wrapper = await mountForm();
     const autocomplete = wrapper.findComponent(AutoComplete);
 
     autocomplete.vm.$emit('complete', { originalEvent: new Event('input'), query: 'An' });
     await flushPromises();
-    expect(calls()).toEqual(['GET /api/invoice/recipient?search=An']);
+    expect(calls()).toEqual(['GET /api/invoice-recipient?search=An']);
 
     autocomplete.vm.$emit('option-select', { originalEvent: new Event('click'), value: anna });
     await flushPromises();
@@ -390,6 +390,24 @@ describe('InvoiceFormView — new invoice', () => {
     expect(wrapper.find('#name').attributes('disabled')).toBeUndefined();
     expect(wrapper.find('#street').attributes('disabled')).toBeUndefined();
     expect(wrapper.find('[data-testid="recipient-linked-hint"]').exists()).toBe(true);
+  });
+
+  it('ignores a recipient search response that arrives after a newer one', async () => {
+    let answerFirst!: (value: Response) => void;
+    fetchMock.mockImplementationOnce(
+      () => new Promise<Response>((resolve) => (answerFirst = resolve)),
+    );
+    replies['GET /api/invoice-recipient?search=Ann'] = { status: 200, body: [anna] };
+    const wrapper = await mountForm();
+    const autocomplete = wrapper.findComponent(AutoComplete);
+
+    autocomplete.vm.$emit('complete', { originalEvent: new Event('input'), query: 'An' });
+    autocomplete.vm.$emit('complete', { originalEvent: new Event('input'), query: 'Ann' });
+    await flushPromises();
+    answerFirst({ ok: true, status: 200, json: () => Promise.resolve([]) } as unknown as Response);
+    await flushPromises();
+
+    expect(autocomplete.props('suggestions')).toEqual([anna]);
   });
 
   async function selectAnna(wrapper: VueWrapper) {

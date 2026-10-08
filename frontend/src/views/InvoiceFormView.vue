@@ -121,20 +121,26 @@ const grossCents = computed(() => {
   return net + Math.round(net * (inputs.value.vat / 100));
 });
 
+/** Bumped by every search; a response from an older search is stale. */
+let latestRecipientSearch = 0;
+
 async function searchRecipient(event: AutoCompleteCompleteEvent) {
   const query = event.query.trim();
+  const searchId = ++latestRecipientSearch;
   if (!query) {
     recipientSuggestions.value = [];
     return;
   }
+  let found: InvoiceRecipientDto[] = [];
   try {
-    const res = await fetch(`/api/invoice/recipient?search=${encodeURIComponent(query)}`);
-    recipientSuggestions.value = res.ok ? await res.json() : [];
+    const res = await fetch(`/api/invoice-recipient?search=${encodeURIComponent(query)}`);
+    if (res.ok) found = await res.json();
   } catch {
-    recipientSuggestions.value = [];
-  } finally {
-    recipientSearched.value = true;
+    // no suggestions
   }
+  if (searchId !== latestRecipientSearch) return;
+  recipientSuggestions.value = found;
+  recipientSearched.value = true;
 }
 
 function onRecipientInput(value: string | InvoiceRecipientDto | null) {

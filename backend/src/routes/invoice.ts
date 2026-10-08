@@ -85,17 +85,6 @@ function revisionToDto(rev: {
   };
 }
 
-// GET /api/invoice/recipient
-invoiceRouter.get('/recipient', async (req, res) => {
-  const search = String(req.query.search ?? '');
-  const recipients = await prisma.invoiceRecipient.findMany({
-    where: search ? { name: { contains: search } } : {},
-    orderBy: { name: 'asc' },
-    take: 20,
-  });
-  res.json(recipients);
-});
-
 // GET /api/invoice
 invoiceRouter.get('/', async (req, res) => {
   const search = String(req.query.search ?? '');

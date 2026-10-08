@@ -159,9 +159,9 @@ describe('GET /api/invoice', () => {
   });
 });
 
-describe('GET /api/invoice/recipient', () => {
+describe('GET /api/invoice-recipient', () => {
   it('returns empty list when no recipients exist', async () => {
-    const res = await request.get('/api/invoice/recipient');
+    const res = await request.get('/api/invoice-recipient');
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
@@ -171,7 +171,7 @@ describe('GET /api/invoice/recipient', () => {
       data: { name: 'Test Firma', street: 'X', city: 'Y' },
     });
 
-    const res = await request.get('/api/invoice/recipient?search=Test');
+    const res = await request.get('/api/invoice-recipient?search=Test');
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
   });
