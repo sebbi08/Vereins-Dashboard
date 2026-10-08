@@ -6,13 +6,13 @@ function makeMockPrisma(lastInvoice: { runningNumber: number } | null) {
     invoice: {
       findFirst: vi.fn().mockResolvedValue(lastInvoice),
     },
-  } as never;
+  };
 }
 
 describe('generateInvoiceNumber', () => {
   it('starts at 1 when no invoices exist for the year', async () => {
     const prisma = makeMockPrisma(null);
-    const result = await generateInvoiceNumber(prisma);
+    const result = await generateInvoiceNumber(prisma as never);
     const year = new Date().getFullYear();
 
     expect(result.runningNumber).toBe(1);
@@ -22,7 +22,7 @@ describe('generateInvoiceNumber', () => {
 
   it('increments from the last invoice', async () => {
     const prisma = makeMockPrisma({ runningNumber: 5 });
-    const result = await generateInvoiceNumber(prisma);
+    const result = await generateInvoiceNumber(prisma as never);
     const year = new Date().getFullYear();
 
     expect(result.runningNumber).toBe(6);
@@ -31,7 +31,7 @@ describe('generateInvoiceNumber', () => {
 
   it('passes the current year to prisma when searching', async () => {
     const prisma = makeMockPrisma(null);
-    await generateInvoiceNumber(prisma);
+    await generateInvoiceNumber(prisma as never);
     const year = new Date().getFullYear();
 
     expect(prisma.invoice.findFirst).toHaveBeenCalledWith(

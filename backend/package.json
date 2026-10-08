@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "prisma generate && prisma migrate deploy && tsx watch src/index.ts",
-    "typecheck": "prisma generate && tsc --noEmit -p tsconfig.json",
+    "typecheck": "prisma generate && tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
     "build": "npx prisma generate && tsc -p tsconfig.json",
     "start": "prisma generate && node dist/backend/src/index.js",
     "db:migrate": "prisma migrate dev",

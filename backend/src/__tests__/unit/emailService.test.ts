@@ -22,6 +22,7 @@ vi.mock('../config.js', () => ({
 // ---------------------------------------------------------------------------
 // Imports — mocks are applied by the time these load
 // ---------------------------------------------------------------------------
+import type { PrismaClient } from '../../../prisma/generated/client';
 import { getSetting, replaceVariables, sendInvoiceEmail } from '../../services/emailService';
 
 // ---------------------------------------------------------------------------
@@ -128,7 +129,7 @@ describe('sendInvoiceEmail — dev override', () => {
     title: 'Jahresbeitrag 2024',
     pdfStatus: 'OK' as const,
     filePath: 'invoices/1/r1/doc.pdf',
-    invoice: { number: '2024-001', status: 'AKTIV' as const },
+    invoice: { number: '2024-001', status: 'AKTIV' as string },
   };
 
   function buildPrismaMock(
@@ -149,7 +150,7 @@ describe('sendInvoiceEmail — dev override', () => {
           .mockResolvedValue('revision' in overrides ? overrides.revision : revision),
         update: vi.fn().mockResolvedValue({}),
       },
-    };
+    } as unknown as PrismaClient;
   }
 
   beforeEach(() => {
