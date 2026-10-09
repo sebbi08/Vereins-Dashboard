@@ -34,16 +34,34 @@ function booking(overrides: Partial<Booking> = {}): Booking {
 
 describe('findInvoiceNumber', () => {
   it.each([
-    '12/2026',
-    '12 / 26',
-    '12-2026',
     'RE 12 2026',
-    '2026/12',
     'Nr. 012/2026',
     'ReNr. 12.26',
     'Rechnung 12_2026 Danke',
-  ])('finds 12 / 2026 in %j', (purpose) => {
+    'Rg.-Nr. 12/2026',
+    'Rechnungs-Nr. 012/2026',
+    'RE: 2026/12',
+  ])('finds 12 / 2026 after a keyword in %j', (purpose) => {
     expect(findInvoiceNumber(purpose, 12, 2026)).toBe('STRONG');
+  });
+
+  it.each(['12/2026', '12 / 26', '12-2026', '2026/12'])(
+    'reads 12 / 2026 without a keyword in %j as a weak hint',
+    (purpose) => {
+      expect(findInvoiceNumber(purpose, 12, 2026)).toBe('WEAK');
+    },
+  );
+
+  it.each([
+    ['Miete 03/2026', 3],
+    ['Beitrag 2026/03', 3],
+    ['Quartal 1/2026', 1],
+    ['Halbjahr 2/2026', 2],
+    ['KW 12 2026', 12],
+    ['Beitrag Q2 2026', 2],
+    ['Mitgliedsbeitrag 2026 2 Kinder', 2],
+  ])('does not read the period in %j as invoice %i / 2026', (purpose, runningNumber) => {
+    expect(findInvoiceNumber(purpose, runningNumber, 2026)).not.toBe('STRONG');
   });
 
   it.each([
@@ -78,7 +96,7 @@ describe('findInvoiceNumber', () => {
     },
   );
 
-  it.each(['Mitgliedsnr 12', 'Rechnung 120', 'Rechnung 12/2025', 'Kurs 12'])(
+  it.each(['Mitgliedsnr 12', 'Rechnung 120', 'Rechnung 12/2025', 'Rechnung 12 2025', 'Kurs 12'])(
     'reads no hint in %j',
     (purpose) => {
       expect(findInvoiceNumber(purpose, 12, 2026)).toBeNull();
@@ -91,12 +109,20 @@ describe('nameWords', () => {
     expect(nameWords('Müller & Söhne GmbH & Co. KG')).toEqual(['mueller', 'soehne']);
     expect(nameWords('Turnverein Groß e.V.')).toEqual(['turnverein', 'gross']);
   });
+
+  it('strips other accents and drops salutations and filler words', () => {
+    expect(nameWords('René Roth')).toEqual(['rene', 'roth']);
+    expect(nameWords('Familie Meier und Herr von der Linde')).toEqual(['meier', 'linde']);
+    expect(nameWords('Frau Vom Das Die Verein Kahn')).toEqual(['kahn']);
+  });
 });
 
 describe('nameMatches', () => {
-  it('matches when at least half of the invoice name is in the payer', () => {
+  it('matches when the last word and at least half of the invoice name are in the payer', () => {
     expect(nameMatches('Musikschule Klangwelt GmbH', 'KLANGWELT MUSIKSCHULE')).toBe(true);
     expect(nameMatches('Anna Müller', 'Mueller, Anna')).toBe(true);
+    expect(nameMatches('Anna Müller', 'A. Mueller')).toBe(true);
+    expect(nameMatches('René Roth', 'RENE ROTH')).toBe(true);
     expect(nameMatches('Max Mustermann Peter Huber', 'Max Huber')).toBe(true);
   });
 
@@ -104,6 +130,12 @@ describe('nameMatches', () => {
     expect(nameMatches('Anna Müller', 'Stadtwerke Nord')).toBe(false);
     expect(nameMatches('Max Mustermann Peter Huber', 'Max Meier')).toBe(false);
     expect(nameMatches('AG', 'AG Nord')).toBe(false);
+  });
+
+  it('does not match on a shared first name or a shared generic word', () => {
+    expect(nameMatches('Anna Müller', 'Anna Schmidt')).toBe(false);
+    expect(nameMatches('Familie Meier', 'Familie Schulz')).toBe(false);
+    expect(nameMatches('Musikschule Klangwelt GmbH', 'Musikschule am Park')).toBe(false);
   });
 });
 
@@ -147,6 +179,35 @@ describe('matchBookings', () => {
     );
     expect(result.matches[0].level).toBe('AMOUNT_ONLY');
     expect(result.matches[0].candidates[0].reasons).toEqual(['AMOUNT', 'INVOICE_NUMBER']);
+  });
+
+  it('does not trust a period in the purpose that looks like an invoice number', () => {
+    const march = invoice({
+      id: 3,
+      number: '3 / 2026',
+      runningNumber: 3,
+      name: 'Anna Schmidt',
+      amountCents: 6000,
+    });
+    const yoga = invoice({
+      id: 17,
+      number: '17 / 2026',
+      runningNumber: 17,
+      name: 'Yoga Studio Sonne',
+      amountCents: 6000,
+    });
+    const result = matchBookings(
+      [booking({ payer: 'Petra Klein', purpose: 'Miete 03/2026 Yoga', amountCents: 6000 })],
+      [march, yoga],
+    );
+    expect(result.matches[0].level).toBe('AMOUNT_ONLY');
+    expect(result.matches[0].candidates.map((c) => c.invoiceId)).toEqual([3, 17]);
+    expect(result.matches[0].candidates[0].reasons).toEqual(['AMOUNT', 'INVOICE_NUMBER']);
+  });
+
+  it('proposes nothing for a differing amount with a period that looks like the number', () => {
+    const bare = booking({ payer: 'Unbekannt', purpose: 'Miete 12/2026', amountCents: 5850 });
+    expect(matchBookings([bare], [invoice()]).unmatched).toEqual([bare]);
   });
 
   it('flags a differing amount when the invoice number is clearly given', () => {

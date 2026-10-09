@@ -135,33 +135,47 @@ on the active revision.
 
 1. **Amount** — booking amount equals the invoice amount to the cent.
 2. **Invoice number** in the purpose text. Invoice numbers are `<runningNumber> / <year>`.
-   - **Strong:** the running number and the year appear next to each other in either order,
-     separated by at least one space or one of `/ - _ .` (so `202612` does not count, and any mix
-     like `/` is fine). Leading zeros on the running
-     number are allowed; the year may be 4 digits or its last 2 digits. Neither number may be part
-     of a longer digit run. Examples that match invoice `12 / 2026`: `12/2026`, `12 / 26`,
-     `12-2026`, `RE 12 2026`, `2026/12`, `Nr. 012/2026`, `ReNr. 12.26`. Not a match: `112/2026`,
-     `12/2025`, `1220 26`.
-   - **Weak:** only the running number, directly after `RE`, `Re.`, `Rg`, `Rg.`, `Rechnung`,
-     `Nr`, `Nr.` or `ReNr` (case-insensitive, optional `.`/`:` and spaces), not followed by a
-     year. Example: `Rechnung 12`.
+   - **Number and year:** the running number and the year appear next to each other in either
+     order, separated by at least one space or one of `/ - _ .` (so `202612` does not count, and
+     any mix like `/` is fine). Leading zeros on the running number are allowed; the year may be
+     4 digits or its last 2 digits (year first only with 4 digits). Neither number may be part of
+     a longer digit run or chained to a neighbour by `. / -` (a date such as `22.12.2026`), and a
+     number followed by `Uhr` is a time. Not a match for invoice `12 / 2026`: `112/2026`,
+     `12/2025`, `1220 26`, `DATUM 22.12.2026`, `um 12.26 Uhr`.
+   - **Keyed (strong):** number and year directly after a keyword — `RE`, `Rg`, `Nr`, `ReNr`,
+     `Re-Nr`, `Rechnung`, `Rechnungsnr`, `Rechnungsnummer` (case-insensitive, not preceded by a
+     letter), then an optional `.`, an optional `-` or `:`, and spaces. Examples for invoice
+     `12 / 2026`: `RE 12 2026`, `Rechnung 12_2026`, `Nr. 012/2026`, `ReNr. 12.26`,
+     `Rg.-Nr. 12/2026`, `Rechnungs-Nr. 012/2026`, `RE: 2026/12`.
+   - **Weak:**
+     - number and year without a keyword directly before them (bare): `12/2026`, `2026/12`,
+       `12 / 26`. Such text is often a period — `Miete 03/2026`, `Quartal 1/2026`, `KW 12 2026`,
+       `Beitrag Q2 2026`, `Mitgliedsbeitrag 2026 2 Kinder` — so it never decides a match; or
+     - only the running number, directly after a keyword (optional `.`/`:` and spaces), not
+       followed by a year or by another number after a space. Example: `Rechnung 12`; not
+       `Rechnung 12/2025` or `Rechnung 12 2025`.
 3. **Name** — compares the invoice name with the booking payer after normalising both: lower
-   case, `ä→ae ö→oe ü→ue ß→ss`, punctuation becomes space, legal forms dropped (`gmbh`, `mbh`,
-   `ev`/`e v`, `ug`, `ag`, `kg`, `ohg`, `gbr`, `co`), words shorter than 3 letters dropped. A match
-   when at least half of the invoice name's remaining words occur among the payer's words (and
-   the invoice name has at least one such word).
+   case, `ä→ae ö→oe ü→ue ß→ss`, then other accents stripped (`é→e`), punctuation becomes space,
+   legal forms dropped (`gmbh`, `mbh`, `ev`/`e v`, `ug`, `ag`, `kg`, `ohg`, `gbr`, `co`), stop
+   words dropped (`familie`, `herr`, `frau`, `und`, `der`, `die`, `das`, `von`, `vom`, `verein`),
+   words shorter than 3 letters dropped. A match when the **last** remaining word of the invoice
+   name occurs among the payer's words **and** at least half of the invoice name's remaining
+   words occur there (and the invoice name has at least one such word). So `Anna Müller` matches
+   `A. Mueller` and `Mueller, Anna`, but not `Anna Schmidt`; `Familie Meier` does not match
+   `Familie Schulz`.
 
 **Levels per pair:**
 
-| Level            | Condition                                                                          | Preselected                        |
-| ---------------- | ---------------------------------------------------------------------------------- | ---------------------------------- |
-| `CONFIDENT`      | amount matches and (strong invoice number or name)                                 | yes, when it is the only candidate |
-| `AMOUNT_ONLY`    | amount matches, no strong number and no name (a weak number is listed as a reason) | no                                 |
-| `AMOUNT_DIFFERS` | amount does not match, strong invoice number found                                 | no                                 |
+| Level            | Condition                                                               | Preselected                        |
+| ---------------- | ----------------------------------------------------------------------- | ---------------------------------- |
+| `CONFIDENT`      | amount matches and (keyed invoice number or name)                       | yes, when it is the only candidate |
+| `AMOUNT_ONLY`    | amount matches, no keyed number and no name (a weak number is a reason) | no                                 |
+| `AMOUNT_DIFFERS` | amount does not match, keyed invoice number found                       | no                                 |
 
-A differing amount with only a name match, or with only a weak number, is no proposal.
+A differing amount with only a name match, or with only a weak number (bare or keyword plus
+running number), is no proposal.
 
-`reasons` lists the signals found (`INVOICE_NUMBER` for strong or weak).
+`reasons` lists the signals found (`INVOICE_NUMBER` for keyed or weak).
 
 **Per booking:** the booking appears once, with its best level (`CONFIDENT` > `AMOUNT_DIFFERS` >
 `AMOUNT_ONLY`) and all candidates of that level, sorted by invoice number. A booking without any
