@@ -404,4 +404,60 @@ describe('InvoiceDetailView', () => {
     await flushPromises();
     expect(notify.error).toHaveBeenCalledWith('Revision not found');
   });
+
+  it('marks an open invoice as paid after confirming', async () => {
+    replies['PATCH /api/invoice/1/paid'] = { status: 200, body: { id: 1, paid: true } };
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="payment-status"]').text()).toBe('Open');
+
+    replies['GET /api/invoice/1'] = { status: 200, body: makeInvoice({ paid: true }) };
+    await wrapper.find('[data-testid="mark-paid"]').trigger('click');
+    await flushPromises();
+
+    expect(confirmAction).toHaveBeenCalledWith(
+      expect.objectContaining({ acceptLabel: 'Mark as paid' }),
+    );
+    const patch = fetchMock.mock.calls.find(([url]) => url === '/api/invoice/1/paid');
+    expect(patch?.[1]?.method).toBe('PATCH');
+    expect(JSON.parse(String(patch?.[1]?.body))).toEqual({ paid: true });
+    expect(notify.success).toHaveBeenCalledWith('Invoice marked as paid');
+    expect(wrapper.find('[data-testid="payment-status"]').text()).toBe('Paid');
+    expect(wrapper.find('[data-testid="mark-paid"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="mark-unpaid"]').exists()).toBe(true);
+  });
+
+  it('marks a paid invoice as unpaid after confirming', async () => {
+    replies['GET /api/invoice/1'] = { status: 200, body: makeInvoice({ paid: true }) };
+    replies['PATCH /api/invoice/1/paid'] = { status: 200, body: { id: 1, paid: false } };
+    const wrapper = await mountView();
+
+    await wrapper.find('[data-testid="mark-unpaid"]').trigger('click');
+    await flushPromises();
+
+    const patch = fetchMock.mock.calls.find(([url]) => url === '/api/invoice/1/paid');
+    expect(JSON.parse(String(patch?.[1]?.body))).toEqual({ paid: false });
+    expect(notify.success).toHaveBeenCalledWith('Invoice marked as unpaid');
+  });
+
+  it('changes nothing when the confirmation is declined', async () => {
+    confirmAction.mockResolvedValue(false);
+    const wrapper = await mountView();
+    await wrapper.find('[data-testid="mark-paid"]').trigger('click');
+    await flushPromises();
+    expect(calls()).not.toContain('PATCH /api/invoice/1/paid');
+  });
+
+  it('offers no paid button for a cancelled open invoice, but unpaid for a cancelled paid one', async () => {
+    replies['GET /api/invoice/1'] = { status: 200, body: makeInvoice({ status: 'STORNIERT' }) };
+    const open = await mountView();
+    expect(open.find('[data-testid="mark-paid"]').exists()).toBe(false);
+    expect(open.find('[data-testid="payment-status"]').text()).toBe('—');
+
+    replies['GET /api/invoice/1'] = {
+      status: 200,
+      body: makeInvoice({ status: 'STORNIERT', paid: true }),
+    };
+    const paid = await mountView();
+    expect(paid.find('[data-testid="mark-unpaid"]').exists()).toBe(true);
+  });
 });

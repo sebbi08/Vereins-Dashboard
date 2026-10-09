@@ -56,6 +56,7 @@ const invoices: InvoiceListItem[] = [
     amountCents: 5950,
     invoiceDate: '2026-03-01T00:00:00.000Z',
     emailStatus: 'SENT',
+    paid: true,
   }),
   invoice({
     id: 3,
@@ -357,5 +358,19 @@ describe('InvoiceView', () => {
     const wrapper = await mountView();
     expect(notify.error).toHaveBeenCalledWith('Error loading invoices');
     expect(wrapper.find('[data-testid="list-load-error"]').text()).toContain('could not be loaded');
+  });
+
+  it('shows the payment state and filters by it', async () => {
+    const wrapper = await mountView();
+    const bernd = rows(wrapper).find((row) => row.text().includes('Bernd Bach'));
+    const anna = rows(wrapper).find((row) => row.text().includes('Anna Alt'));
+    expect(bernd?.text()).toContain('Paid');
+    expect(anna?.text()).toContain('Open');
+
+    await setFilter(wrapper, 'paid', true);
+    expect(rows(wrapper).map((row) => row.text())).toEqual([expect.stringContaining('Bernd Bach')]);
+
+    await setFilter(wrapper, 'paid', false);
+    expect(rows(wrapper).map((row) => row.text())).toEqual([expect.stringContaining('Anna Alt')]);
   });
 });

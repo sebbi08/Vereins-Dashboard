@@ -19,6 +19,7 @@ import { formatCents, formatDate, formatDateTime } from '../utils/format';
 import {
   documentStatusTag,
   emailStatusTag,
+  paymentStatusTag,
   pdfStatusTag,
   revisionStatusTag,
 } from '../utils/statusTags';
@@ -120,6 +121,36 @@ async function cancel() {
   }
 }
 
+const paymentTag = computed(() =>
+  invoice.value ? paymentStatusTag(invoice.value.paid, invoice.value.status) : null,
+);
+
+async function setPaid(paid: boolean) {
+  if (!invoice.value) return;
+  const confirmed = await confirmAction({
+    message: paid
+      ? `Mark invoice ${invoice.value.number} as paid?`
+      : `Mark invoice ${invoice.value.number} as unpaid?`,
+    header: paid ? 'Mark as paid' : 'Mark as unpaid',
+    acceptLabel: paid ? 'Mark as paid' : 'Mark as unpaid',
+  });
+  if (!confirmed) return;
+  const ok = await run(
+    'paid',
+    () =>
+      fetch(`/api/invoice/${id}/paid`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paid }),
+      }),
+    (body) => body.error || 'Error saving the payment state',
+  );
+  if (ok) {
+    notify.success(paid ? 'Invoice marked as paid' : 'Invoice marked as unpaid');
+    await loadData();
+  }
+}
+
 async function retryPdf(rev: InvoiceRevisionDto) {
   const { ok, body: result } = await runWithBody(
     `retry-${rev.id}`,
@@ -200,6 +231,26 @@ function downloadPdf(rev: InvoiceRevisionDto) {
             @click="router.push(`/invoice/new?copyFrom=${id}`)"
           />
           <Button
+            v-if="isActive && !invoice.paid"
+            label="Mark as paid"
+            icon="pi pi-check-circle"
+            severity="success"
+            outlined
+            :loading="busy.paid"
+            data-testid="mark-paid"
+            @click="setPaid(true)"
+          />
+          <Button
+            v-if="invoice.paid"
+            label="Mark as unpaid"
+            icon="pi pi-undo"
+            severity="secondary"
+            outlined
+            :loading="busy.paid"
+            data-testid="mark-unpaid"
+            @click="setPaid(false)"
+          />
+          <Button
             v-if="isActive"
             label="Cancel invoice"
             icon="pi pi-ban"
@@ -226,6 +277,13 @@ function downloadPdf(rev: InvoiceRevisionDto) {
               <dt>Status</dt>
               <dd>
                 <StatusTag :tag="documentStatusTag(invoice.status)" data-testid="invoice-status" />
+              </dd>
+            </div>
+            <div>
+              <dt>Payment</dt>
+              <dd>
+                <StatusTag v-if="paymentTag" :tag="paymentTag" data-testid="payment-status" />
+                <span v-else data-testid="payment-status">—</span>
               </dd>
             </div>
             <div>

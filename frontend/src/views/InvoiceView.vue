@@ -31,6 +31,8 @@ import {
   documentStatusTag,
   EMAIL_STATUS_OPTIONS,
   emailStatusTag,
+  PAYMENT_FILTER_OPTIONS,
+  paymentStatusTag,
 } from '../utils/statusTags';
 import { globalFilter, TABLE_DEFAULTS } from '../utils/tableDefaults';
 import { AMOUNT_RANGE, DATE_RANGE } from '../utils/tableFilters';
@@ -62,6 +64,7 @@ function defaultFilters(): DataTableFilterMeta {
     amountCents: { value: null, matchMode: AMOUNT_RANGE },
     invoiceDate: { value: null, matchMode: DATE_RANGE },
     emailStatus: { value: null, matchMode: FilterMatchMode.EQUALS },
+    paid: { value: null, matchMode: FilterMatchMode.EQUALS },
     status: { value: 'AKTIV', matchMode: FilterMatchMode.EQUALS },
   };
 }
@@ -353,6 +356,28 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
             />
           </template>
         </Column>
+        <Column field="paid" header="Payment" :show-filter-menu="false" class="col-payment">
+          <template #body="{ data }">
+            <StatusTag
+              v-if="paymentStatusTag(data.paid, data.status)"
+              :tag="paymentStatusTag(data.paid, data.status)!"
+            />
+          </template>
+          <template #filter="{ filterModel, filterCallback }">
+            <Select
+              v-model="filterModel.value"
+              :options="PAYMENT_FILTER_OPTIONS"
+              option-label="label"
+              option-value="value"
+              placeholder="Any"
+              fluid
+              show-clear
+              size="small"
+              aria-label="Filter by payment"
+              @change="filterCallback()"
+            />
+          </template>
+        </Column>
         <Column field="status" header="Status">
           <template #body="{ data }"><StatusTag :tag="documentStatusTag(data.status)" /></template>
         </Column>
@@ -385,6 +410,10 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
 
 :deep(.col-date) {
   width: 10rem;
+}
+
+:deep(.col-payment) {
+  width: 8rem;
 }
 
 :deep(.col-email) {

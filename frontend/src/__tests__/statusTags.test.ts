@@ -7,6 +7,7 @@ import {
   documentStatusTag,
   EMAIL_STATUS_OPTIONS,
   emailStatusTag,
+  paymentStatusTag,
   pdfStatusTag,
   revisionStatusTag,
 } from '../utils/statusTags';
@@ -55,5 +56,17 @@ describe('status tags', () => {
       { label: 'Cancelled', value: 'STORNIERT' },
       { label: 'All', value: null },
     ]);
+  });
+});
+
+describe('paymentStatusTag', () => {
+  it('shows paid invoices as Paid and active unpaid ones as Open', () => {
+    expect(paymentStatusTag(true, 'AKTIV')).toEqual({ label: 'Paid', severity: 'success' });
+    expect(paymentStatusTag(true, 'STORNIERT')).toEqual({ label: 'Paid', severity: 'success' });
+    expect(paymentStatusTag(false, 'AKTIV')).toEqual({ label: 'Open', severity: 'secondary' });
+  });
+
+  it('shows nothing for a cancelled invoice that was never paid', () => {
+    expect(paymentStatusTag(false, 'STORNIERT')).toBeNull();
   });
 });

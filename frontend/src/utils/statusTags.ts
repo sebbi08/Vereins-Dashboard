@@ -52,3 +52,15 @@ export const DOCUMENT_STATUS_FILTER_OPTIONS: { label: string; value: string | nu
   ...DOCUMENT_STATUS_OPTIONS,
   { label: 'All', value: null },
 ];
+
+/** Paid, or Open while an active invoice is still owed; nothing for a cancelled unpaid one. */
+export function paymentStatusTag(paid: boolean, status: string): StatusTag | null {
+  if (paid) return { label: 'Paid', severity: 'success' };
+  return status === 'AKTIV' ? { label: 'Open', severity: 'secondary' } : null;
+}
+
+/** Column filter of the invoice list; cleared means all. */
+export const PAYMENT_FILTER_OPTIONS: { label: string; value: boolean }[] = [
+  { label: 'Open', value: false },
+  { label: 'Paid', value: true },
+];
