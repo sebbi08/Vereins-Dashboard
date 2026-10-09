@@ -7,6 +7,7 @@ import {
   documentStatusTag,
   EMAIL_STATUS_OPTIONS,
   emailStatusTag,
+  matchLevelTag,
   paymentStatusTag,
   pdfStatusTag,
   revisionStatusTag,
@@ -68,5 +69,15 @@ describe('paymentStatusTag', () => {
 
   it('shows nothing for a cancelled invoice that was never paid', () => {
     expect(paymentStatusTag(false, 'STORNIERT')).toBeNull();
+  });
+});
+
+describe('matchLevelTag', () => {
+  it.each([
+    ['CONFIDENT', 'Confident', 'success'],
+    ['AMOUNT_DIFFERS', 'Amount differs', 'warn'],
+    ['AMOUNT_ONLY', 'Amount only', 'secondary'],
+  ])('maps %s', (level, label, severity) => {
+    expect(matchLevelTag(level)).toEqual({ label, severity });
   });
 });

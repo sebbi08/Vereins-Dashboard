@@ -20,4 +20,8 @@ describe('router', () => {
     expect(lazy.length).toBeGreaterThan(5);
     expect(lazy.filter(([, kind]) => kind !== 'function')).toEqual([]);
   });
+
+  it('opens the booking import, not an invoice called "payment-import"', () => {
+    expect(router.resolve('/invoice/payment-import').name).toBe('invoice-payment-import');
+  });
 });

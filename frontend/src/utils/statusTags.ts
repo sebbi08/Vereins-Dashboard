@@ -1,3 +1,5 @@
+import type { MatchReason } from 'shared';
+
 export type TagSeverity = 'success' | 'secondary' | 'info' | 'warn' | 'danger';
 
 export interface StatusTag {
@@ -64,3 +66,17 @@ export const PAYMENT_FILTER_OPTIONS: { label: string; value: boolean }[] = [
   { label: 'Open', value: false },
   { label: 'Paid', value: true },
 ];
+
+const MATCH_LEVEL: Record<string, StatusTag> = {
+  CONFIDENT: { label: 'Confident', severity: 'success' },
+  AMOUNT_DIFFERS: { label: 'Amount differs', severity: 'warn' },
+  AMOUNT_ONLY: { label: 'Amount only', severity: 'secondary' },
+};
+
+export const matchLevelTag = (level: string) => lookup(MATCH_LEVEL, level);
+
+export const MATCH_REASON_LABELS: Record<MatchReason, string> = {
+  AMOUNT: 'Amount',
+  INVOICE_NUMBER: 'Invoice number',
+  NAME: 'Name',
+};

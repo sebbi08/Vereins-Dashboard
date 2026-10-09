@@ -139,6 +139,14 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
           @click="downloadSelected"
         />
         <Button
+          label="Import bank bookings"
+          icon="pi pi-upload"
+          severity="secondary"
+          outlined
+          data-testid="import-bookings"
+          @click="router.push('/invoice/payment-import')"
+        />
+        <Button
           label="Settings"
           icon="pi pi-cog"
           severity="secondary"

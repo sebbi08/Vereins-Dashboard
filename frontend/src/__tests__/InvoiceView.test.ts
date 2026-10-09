@@ -373,4 +373,10 @@ describe('InvoiceView', () => {
     await setFilter(wrapper, 'paid', false);
     expect(rows(wrapper).map((row) => row.text())).toEqual([expect.stringContaining('Anna Alt')]);
   });
+
+  it('leads to the bank booking import', async () => {
+    const wrapper = await mountView();
+    await wrapper.find('[data-testid="import-bookings"]').trigger('click');
+    expect(push).toHaveBeenCalledWith('/invoice/payment-import');
+  });
 });
