@@ -89,8 +89,8 @@ amountCents; reasons: MatchReason[]; differenceCents: number }` (booking − inv
   invoice. `paid: false` is always allowed.
 - Answers the updated `{ id, paid }`.
 
-`GET /api/invoice` gets a query parameter `paid=true|false` (omitted = all) and returns `paid` on
-every item. `GET /api/invoice/:id` returns `paid`.
+`GET /api/invoice` returns `paid` on every item, `GET /api/invoice/:id` returns `paid`. The list
+page already loads all invoices and filters in the browser, so there is no `paid` query parameter.
 
 ### Import settings
 
@@ -171,11 +171,13 @@ candidate goes to `unmatched`. `matches` is sorted by level in that order, then 
 
 ### Paid flag
 
-- **Invoice detail:** a tag "Paid" (success) or "Open" (secondary) next to the status tag; a button
+- **Payment tag:** "Paid" (success) for a paid invoice, "Open" (secondary) for an active unpaid one,
+  no tag for a cancelled unpaid one (nothing is owed).
+- **Invoice detail:** the payment tag next to the status tag; a button
   "Mark as paid" / "Mark as unpaid" with a confirmation dialog. For a cancelled, unpaid invoice the
   button is not shown; a cancelled, paid invoice shows "Mark as unpaid".
-- **Invoice list:** a column "Payment" with the same tag; a select "Payment: All / Open / Paid"
-  next to the existing filters (default All), passed as `paid` to the API. A button
+- **Invoice list:** a column "Payment" with the payment tag and a column filter select
+  "Open / Paid" (cleared = all, the default), like the existing Email column filter. A button
   "Import bank bookings" leads to the import page.
 
 ### Import page (`/invoice/payment-import`, `InvoicePaymentImportView.vue`)
@@ -239,7 +241,7 @@ Empty file, or a file with only a header → message "The file contains no booki
 - **Frontend unit:** `bookingCsv` — quotes, delimiter and line break inside quotes, BOM handling,
   all three encodings, amounts and dates (valid and invalid), skipped rows.
 - **Backend integration:** `PATCH /:id/paid` (set, unset, cancelled → 400, unknown → 404);
-  `GET /api/invoice?paid=`; settings GET defaults / PUT / invalid; `/match` (validation, result,
+  `paid` in list and detail; settings GET defaults / PUT / invalid; `/match` (validation, result,
   2 MB body accepted); `/confirm` (atomic, duplicates, cancelled, unknown, already paid).
 - **Frontend component:** detail toggle; list filter; import view — preview follows encoding and
   delimiter, stored settings are loaded and saved, preselection rules, an invoice cannot be
