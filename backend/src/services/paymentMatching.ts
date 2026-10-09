@@ -35,8 +35,9 @@ const KEYWORD = String.raw`(?:rechnungs?(?:nr|nummer)?|re-?nr|re|rg|nr)`;
 function strongPattern(runningNumber: number, year: number): RegExp {
   const run = `0*${runningNumber}`;
   const yearText = `(?:${year}|${String(year % 100).padStart(2, '0')})`;
+  // Year first only with 4 digits: a 2-digit year before the number is the day of a date ("26.12.").
   return new RegExp(
-    `${NOT_CHAINED_BEFORE}(?:${run}${SEPARATOR}${yearText}|${yearText}${SEPARATOR}${run})` +
+    `${NOT_CHAINED_BEFORE}(?:${run}${SEPARATOR}${yearText}|${year}${SEPARATOR}${run})` +
       NOT_CHAINED_AFTER,
     'i',
   );

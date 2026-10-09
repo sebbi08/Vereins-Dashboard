@@ -54,6 +54,8 @@ describe('findInvoiceNumber', () => {
     'DATUM 22.12.2026',
     '2026-12-05',
     'um 12.26 Uhr',
+    'Weihnachtsfeier 26.12.',
+    'Zeitraum 01.12.-26.12.',
   ])('finds no number 12 / 2026 in %j', (purpose) => {
     expect(findInvoiceNumber(purpose, 12, 2026)).toBeNull();
   });
@@ -62,6 +64,11 @@ describe('findInvoiceNumber', () => {
     const purpose = 'ReNr 1011496 DATUM 22.03.2025, 12.21 UHR';
     expect(findInvoiceNumber(purpose, 3, 2025)).toBeNull();
     expect(findInvoiceNumber(purpose, 12, 2021)).toBeNull();
+  });
+
+  it('does not read a day-month date without a year as an invoice number', () => {
+    expect(findInvoiceNumber('Kurs am 26.03. Danke', 3, 2026)).not.toBe('STRONG');
+    expect(findInvoiceNumber('Rechnung vom 26.3.', 3, 2026)).not.toBe('STRONG');
   });
 
   it.each(['Rechnung 12', 'RE: 12', 'Rg. 12 Miete', 'Rechnungsnr. 012', 'Re-Nr 12'])(
