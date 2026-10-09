@@ -5,6 +5,7 @@ import {
   chooseInvoice,
   chosenCandidate,
   initialRows,
+  removePaidInvoices,
   selectedInvoiceIds,
   setSelected,
 } from '../utils/paymentSelection';
@@ -77,5 +78,44 @@ describe('selecting', () => {
     const rows = initialRows([match(1, 'CONFIDENT', [1]), match(2, 'AMOUNT_ONLY', [1, 2])]);
     expect(chooseInvoice(rows, 1, 1)).toBe(rows);
     expect(chooseInvoice(rows, 1, 2)[1].invoiceId).toBe(2);
+  });
+});
+
+describe('removePaidInvoices', () => {
+  it('drops the rows of the paid invoices and takes them out of the other proposals', () => {
+    const rows = initialRows([
+      match(1, 'CONFIDENT', [1]),
+      match(2, 'CONFIDENT', [1]),
+      match(3, 'AMOUNT_ONLY', [1, 2]),
+      match(4, 'AMOUNT_ONLY', [1, 3, 4]),
+      match(5, 'AMOUNT_ONLY', [1, 6]),
+      match(6, 'AMOUNT_DIFFERS', [5]),
+    ]);
+
+    const left = removePaidInvoices(rows, [1, 6]);
+
+    expect(left.map((r) => r.match.booking.row)).toEqual([3, 4, 6]);
+    expect(left[0]).toMatchObject({ invoiceId: 2, selected: false });
+    expect(left[0].match.candidates.map((c) => c.invoiceId)).toEqual([2]);
+    expect(left[1]).toMatchObject({ invoiceId: null, selected: false });
+    expect(left[1].match.candidates.map((c) => c.invoiceId)).toEqual([3, 4]);
+    expect(left[2]).toBe(rows[5]);
+    expect(rows[2].match.candidates).toHaveLength(2);
+  });
+
+  it('drops a row whose chosen invoice was paid, although other candidates are left', () => {
+    let rows = initialRows([match(1, 'CONFIDENT', [1]), match(2, 'AMOUNT_ONLY', [1, 2])]);
+    rows = setSelected(rows, 0, false);
+    rows = chooseInvoice(rows, 1, 1);
+    rows = setSelected(rows, 0, true);
+
+    expect(removePaidInvoices(rows, [1])).toEqual([]);
+  });
+
+  it('keeps the rows unchanged when nothing they propose was paid', () => {
+    const rows = initialRows([match(1, 'CONFIDENT', [1]), match(2, 'AMOUNT_ONLY', [2, 3])]);
+    const left = removePaidInvoices(rows, [9]);
+    expect(left).toEqual(rows);
+    expect(left[1]).toBe(rows[1]);
   });
 });

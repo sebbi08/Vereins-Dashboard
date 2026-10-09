@@ -96,13 +96,14 @@ const RESULT: MatchResult = {
   unmatched: [],
 };
 
-type Reply = { status: number; body?: unknown };
+type Reply = { status: number; body?: unknown; wait?: Promise<void> };
 let replies: Record<string, Reply>;
 
 const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
   const key = `${init?.method ?? 'GET'} ${url}`;
   const reply = replies[key];
   if (!reply) throw new Error(`Unexpected fetch: ${key}`);
+  await reply.wait;
   return {
     ok: reply.status < 400,
     status: reply.status,
@@ -341,6 +342,46 @@ describe('InvoicePaymentImportView', () => {
     expect(sentBody('POST', '/api/invoice-payment/confirm')).toEqual({ invoiceIds: [1] });
     expect(notify.success).toHaveBeenCalledWith('1 invoice marked as paid');
     expect(wrapper.findAll('.match-row')).toHaveLength(1);
+  });
+
+  it('locks the proposals while confirming and drops every row of a paid invoice', async () => {
+    let answer = () => {};
+    replies['POST /api/invoice-payment/confirm'] = {
+      status: 200,
+      body: { marked: 1 },
+      wait: new Promise<void>((resolve) => (answer = resolve)),
+    };
+    replies['POST /api/invoice-payment/match'] = {
+      status: 200,
+      body: {
+        matches: [
+          { booking: bookingOf(1), level: 'CONFIDENT', candidates: [candidate()] },
+          { booking: bookingOf(2), level: 'CONFIDENT', candidates: [candidate()] },
+          {
+            booking: bookingOf(3),
+            level: 'AMOUNT_ONLY',
+            candidates: [candidate(), candidate({ invoiceId: 2, invoiceNumber: '2 / 2026' })],
+          },
+        ],
+        unmatched: [],
+      },
+    };
+    const wrapper = await mountView();
+    await runMatch(wrapper);
+
+    await wrapper.find('[data-testid="confirm-paid"]').trigger('click');
+    await flushPromises();
+    expect(checkbox(wrapper, 0).attributes('disabled')).toBeDefined();
+    expect(wrapper.find('[data-testid="candidate-select"]').classes()).toContain('p-disabled');
+
+    answer();
+    await flushPromises();
+
+    expect(sentBody('POST', '/api/invoice-payment/confirm')).toEqual({ invoiceIds: [1] });
+    const rows = wrapper.findAll('.match-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].find('[data-testid="invoice-link"]').attributes('href')).toBe('/invoice/2');
+    expect(checkbox(wrapper, 2).attributes('disabled')).toBeUndefined();
   });
 
   it('keeps the rows and explains a refused confirmation', async () => {

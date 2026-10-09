@@ -56,6 +56,27 @@ export function chosenCandidate(row: MatchRow): MatchCandidate | null {
   return row.match.candidates.find((c) => c.invoiceId === row.invoiceId) ?? null;
 }
 
+/**
+ * The rows left after `paidIds` were marked as paid: rows with a paid invoice go, the other rows
+ * no longer offer the paid invoices. A row left with one candidate gets it, unselected; a row
+ * left with none goes.
+ */
+export function removePaidInvoices(rows: MatchRow[], paidIds: Iterable<number>): MatchRow[] {
+  const paid = new Set(paidIds);
+  return rows.flatMap((row) => {
+    if (row.invoiceId !== null && paid.has(row.invoiceId)) return [];
+    const candidates = row.match.candidates.filter((c) => !paid.has(c.invoiceId));
+    if (candidates.length === row.match.candidates.length) return [row];
+    if (candidates.length === 0) return [];
+    const next: MatchRow = { ...row, match: { ...row.match, candidates } };
+    if (candidates.length === 1) {
+      next.invoiceId = candidates[0].invoiceId;
+      next.selected = false;
+    }
+    return [next];
+  });
+}
+
 export function selectedInvoiceIds(rows: MatchRow[]): number[] {
   return rows.flatMap((row) => (row.selected && row.invoiceId !== null ? [row.invoiceId] : []));
 }

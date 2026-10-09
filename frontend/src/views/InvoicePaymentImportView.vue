@@ -33,6 +33,7 @@ import {
   chooseInvoice,
   chosenCandidate,
   initialRows,
+  removePaidInvoices,
   selectedInvoiceIds,
   setSelected,
   takenInvoiceIds,
@@ -221,6 +222,7 @@ async function confirmPaid() {
     acceptLabel: 'Mark as paid',
   });
   if (!confirmed) return;
+  const sent = new Set(ids);
   confirming.value = true;
   try {
     const res = await requestJson('/api/invoice-payment/confirm', {
@@ -233,7 +235,7 @@ async function confirmPaid() {
       return;
     }
     notify.success(`${invoicesText(ids.length)} marked as paid`);
-    rows.value = rows.value.filter((row) => !row.selected);
+    rows.value = removePaidInvoices(rows.value, sent);
   } catch {
     notify.error('Network error');
   } finally {
@@ -366,7 +368,7 @@ async function confirmPaid() {
                 <Checkbox
                   :model-value="data.selected"
                   binary
-                  :disabled="!canSelect(rows, data)"
+                  :disabled="confirming || !canSelect(rows, data)"
                   :aria-label="`Select booking row ${data.match.booking.row}`"
                   @update:model-value="(value: boolean) => toggle(data, value)"
                 />
@@ -399,6 +401,7 @@ async function confirmPaid() {
                   option-label="label"
                   option-value="value"
                   option-disabled="disabled"
+                  :disabled="confirming"
                   placeholder="Choose invoice"
                   show-clear
                   size="small"
