@@ -1,7 +1,8 @@
 import { Router } from 'express';
-import type { SystemSettings } from 'shared';
+import type { BookingImportSettings, SystemSettings } from 'shared';
+import { DEFAULT_BOOKING_IMPORT_SETTINGS } from '../../../shared/src/invoicePayments.js';
 import { prisma } from '../prismaClient.js';
-import { parseTextSettings } from '../services/requestParsing.js';
+import { parseBookingImportSettings, parseTextSettings } from '../services/requestParsing.js';
 
 export const settingsRouter = Router();
 
@@ -44,4 +45,39 @@ settingsRouter.put('/', async (req, res) => {
   // All or nothing: a failure must not leave the settings half saved
   await prisma.$transaction(updates);
   res.json({ message: 'Settings saved' });
+});
+
+const BOOKING_IMPORT_KEY = 'bookingImport';
+
+/** The stored import settings; the defaults when none are stored or they cannot be read. */
+function storedBookingImportSettings(value: string | undefined): BookingImportSettings {
+  if (value) {
+    try {
+      const parsed = parseBookingImportSettings(JSON.parse(value));
+      if ('value' in parsed) return parsed.value;
+    } catch {
+      // unreadable JSON: fall back to the defaults
+    }
+  }
+  return DEFAULT_BOOKING_IMPORT_SETTINGS;
+}
+
+settingsRouter.get('/booking-import', async (_req, res) => {
+  const row = await prisma.systemSetting.findUnique({ where: { key: BOOKING_IMPORT_KEY } });
+  res.json(storedBookingImportSettings(row?.value));
+});
+
+settingsRouter.put('/booking-import', async (req, res) => {
+  const parsed = parseBookingImportSettings(req.body);
+  if ('error' in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  const value = JSON.stringify(parsed.value);
+  await prisma.systemSetting.upsert({
+    where: { key: BOOKING_IMPORT_KEY },
+    update: { value },
+    create: { key: BOOKING_IMPORT_KEY, value },
+  });
+  res.json(parsed.value);
 });

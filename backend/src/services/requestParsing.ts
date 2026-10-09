@@ -1,4 +1,18 @@
-import type { InvoiceContent, InvoiceLineItem, ReceiptInputs } from 'shared';
+import type {
+  Booking,
+  BookingColumns,
+  BookingImportSettings,
+  InvoiceContent,
+  InvoiceLineItem,
+  ReceiptInputs,
+} from 'shared';
+import {
+  BOOKING_COLUMN_KEYS,
+  BOOKING_DELIMITERS,
+  BOOKING_ENCODINGS,
+  MAX_BOOKINGS_PER_MATCH,
+  MAX_COLUMN_NAME_LENGTH,
+} from '../../../shared/src/invoicePayments.js';
 import type { RecipientData, RecipientSelection } from './invoiceCreation.js';
 
 /**
@@ -299,5 +313,60 @@ export function parsePaidBody(raw: unknown): Parsed<boolean> {
   return attempt(() => {
     if (!isRecord(raw)) throw new BodyError(INVALID_BODY);
     return flag(raw, 'paid');
+  });
+}
+
+/** Import settings for bank bookings: a known encoding and delimiter, four column names. */
+export function parseBookingImportSettings(raw: unknown): Parsed<BookingImportSettings> {
+  return attempt(() => {
+    if (!isRecord(raw) || !isRecord(raw.columns)) throw new BodyError(INVALID_BODY);
+    const encoding = BOOKING_ENCODINGS.find((value) => value === raw.encoding);
+    const delimiter = BOOKING_DELIMITERS.find((value) => value === raw.delimiter);
+    if (!encoding || !delimiter) throw new BodyError(INVALID_BODY);
+    const source = raw.columns;
+    const columns = {} as BookingColumns;
+    for (const key of BOOKING_COLUMN_KEYS) {
+      const name = text(source, key);
+      if (name.length > MAX_COLUMN_NAME_LENGTH) throw new BodyError(INVALID_BODY);
+      columns[key] = name;
+    }
+    return { encoding, delimiter, columns };
+  });
+}
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** POST /api/invoice-payment/match: incoming bookings as the browser read them from the file. */
+export function parseMatchBody(raw: unknown): Parsed<Booking[]> {
+  return attempt(() => {
+    if (!isRecord(raw) || !Array.isArray(raw.bookings)) throw new BodyError(INVALID_BODY);
+    if (raw.bookings.length > MAX_BOOKINGS_PER_MATCH) {
+      throw new BodyError(`At most ${MAX_BOOKINGS_PER_MATCH} bookings per match`);
+    }
+    return raw.bookings.map((item: unknown): Booking => {
+      if (!isRecord(item)) throw new BodyError(INVALID_BODY);
+      const date = text(item, 'date');
+      if (!ISO_DAY.test(date) || !parseCalendarDay(date)) throw new BodyError(INVALID_BODY);
+      const row = integer(item, 'row');
+      const amountCents = integer(item, 'amountCents');
+      if (row < 1 || amountCents <= 0) throw new BodyError(INVALID_BODY);
+      return { row, date, payer: text(item, 'payer'), purpose: text(item, 'purpose'), amountCents };
+    });
+  });
+}
+
+/** POST /api/invoice-payment/confirm: distinct invoice ids; the error is the code to answer. */
+export function parseConfirmBody(raw: unknown): Parsed<number[]> {
+  return attempt(() => {
+    const ids = isRecord(raw) ? raw.invoiceIds : undefined;
+    if (
+      !Array.isArray(ids) ||
+      ids.length === 0 ||
+      !ids.every((id) => typeof id === 'number' && Number.isSafeInteger(id) && id > 0)
+    ) {
+      throw new BodyError('MISSING_IDS');
+    }
+    if (new Set(ids).size !== ids.length) throw new BodyError('DUPLICATE_IDS');
+    return ids as number[];
   });
 }
