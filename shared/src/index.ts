@@ -188,6 +188,7 @@ export * from './instructorRent.js';
 export * from './instructorInvoiceText.js';
 export * from './instructorInvoiceRequests.js';
 export * from './invoiceTotals.js';
+export * from './invoicePayments.js';
 
 import type { InstructorRentResult, TimeBlock } from './instructorRent.js';
 
