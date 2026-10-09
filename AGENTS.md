@@ -11,8 +11,8 @@ This guide helps AI coding agents be productive in this monorepo and understand 
 
 Root `package.json` uses npm workspaces to coordinate builds, tests, and linting.
 
-The app covers donation receipts (Zuwendungsbestätigungen), invoices with revisions and drafts,
-and instructor rent. Documents are filled from uploaded templates (docxtemplater / pdf-lib) and
+The app covers donation receipts (Zuwendungsbestätigungen), invoices with revisions, drafts and
+a paid flag (set by hand or by matching an uploaded bank export), and instructor rent. Documents are filled from uploaded templates (docxtemplater / pdf-lib) and
 rendered to PDF with LibreOffice. The UI is English; numbers and dates use German formats.
 
 ### Dev vs Production
