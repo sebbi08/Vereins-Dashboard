@@ -53,6 +53,7 @@ function makeInvoice(overrides: Partial<InvoiceDto> = {}): InvoiceDto {
   return {
     id: 1,
     number: '1 / 2026',
+    paid: false,
     status: 'AKTIV',
     recipient: {
       id: 7,

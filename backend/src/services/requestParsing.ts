@@ -293,3 +293,11 @@ export function parseMasterDataPatch<R extends string, N extends string>(
 function capitalize(key: string): string {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
+
+/** PATCH /api/invoice/:id/paid: `{ paid: boolean }`. */
+export function parsePaidBody(raw: unknown): Parsed<boolean> {
+  return attempt(() => {
+    if (!isRecord(raw)) throw new BodyError(INVALID_BODY);
+    return flag(raw, 'paid');
+  });
+}

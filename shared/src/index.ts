@@ -42,6 +42,7 @@ export interface InvoiceListItem {
   id: number;
   number: string;
   status: 'AKTIV' | 'STORNIERT';
+  paid: boolean;
   recipientName: string;
   amountCents: number;
   invoiceDate: string;
@@ -68,6 +69,7 @@ export interface InvoiceDto {
   id: number;
   number: string;
   status: 'AKTIV' | 'STORNIERT';
+  paid: boolean;
   recipient: InvoiceRecipientDto;
   invoiceDate: string;
   createdAt: string;

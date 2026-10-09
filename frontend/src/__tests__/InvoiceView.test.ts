@@ -36,6 +36,7 @@ function invoice(overrides: Partial<InvoiceListItem>): InvoiceListItem {
     id: 1,
     number: '1 / 2026',
     status: 'AKTIV',
+    paid: false,
     recipientName: 'Anna Alt',
     amountCents: 11900,
     invoiceDate: '2026-01-15T00:00:00.000Z',

@@ -110,6 +110,7 @@ model Invoice {
   recipientId   Int
   recipient     InvoiceRecipient  @relation(fields: [recipientId], references: [id])
   invoiceDate   DateTime
+  paid          Boolean           @default(false)
   createdAt     DateTime          @default(now())
   revisions     InvoiceRevision[]
 }

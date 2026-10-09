@@ -486,3 +486,63 @@ describe('POST /api/invoice/:id/revision', () => {
     expect(invoiceAfter?.revisions.find((r) => r.status === 'AKTIV')?.revisionNumber).toBe(2);
   });
 });
+
+describe('PATCH /api/invoice/:id/paid', () => {
+  it('marks an active invoice as paid and back as unpaid', async () => {
+    const { invoice } = await seedRecipientAndInvoice();
+
+    const paid = await request.patch(`/api/invoice/${invoice.id}/paid`).send({ paid: true });
+    expect(paid.status).toBe(200);
+    expect(paid.body).toEqual({ id: invoice.id, paid: true });
+    expect((await prisma.invoice.findUnique({ where: { id: invoice.id } }))?.paid).toBe(true);
+
+    const unpaid = await request.patch(`/api/invoice/${invoice.id}/paid`).send({ paid: false });
+    expect(unpaid.status).toBe(200);
+    expect(unpaid.body).toEqual({ id: invoice.id, paid: false });
+  });
+
+  it('refuses to mark a cancelled invoice as paid', async () => {
+    const { invoice } = await seedRecipientAndInvoice();
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { status: 'STORNIERT' } });
+
+    const res = await request.patch(`/api/invoice/${invoice.id}/paid`).send({ paid: true });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Cancelled invoices cannot be marked as paid');
+    expect((await prisma.invoice.findUnique({ where: { id: invoice.id } }))?.paid).toBe(false);
+  });
+
+  it('lets a paid invoice that was cancelled later be marked unpaid', async () => {
+    const { invoice } = await seedRecipientAndInvoice();
+    await prisma.invoice.update({
+      where: { id: invoice.id },
+      data: { status: 'STORNIERT', paid: true },
+    });
+
+    const res = await request.patch(`/api/invoice/${invoice.id}/paid`).send({ paid: false });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ id: invoice.id, paid: false });
+  });
+
+  it('answers 400 for a body without a boolean paid', async () => {
+    const { invoice } = await seedRecipientAndInvoice();
+    const res = await request.patch(`/api/invoice/${invoice.id}/paid`).send({ paid: 'yes' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Invalid request body');
+  });
+
+  it('answers 404 for an unknown invoice and 400 for an invalid id', async () => {
+    expect((await request.patch('/api/invoice/99999/paid').send({ paid: true })).status).toBe(404);
+    expect((await request.patch('/api/invoice/abc/paid').send({ paid: true })).status).toBe(400);
+  });
+});
+
+describe('paid in the invoice list and detail', () => {
+  it('starts new invoices as unpaid and reports a paid one', async () => {
+    const { invoice } = await seedRecipientAndInvoice();
+    expect((await request.get('/api/invoice')).body[0].paid).toBe(false);
+
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { paid: true } });
+    expect((await request.get('/api/invoice')).body[0].paid).toBe(true);
+    expect((await request.get(`/api/invoice/${invoice.id}`)).body.paid).toBe(true);
+  });
+});

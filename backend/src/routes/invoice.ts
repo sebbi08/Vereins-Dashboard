@@ -17,6 +17,7 @@ import { attemptInvoicePdfGeneration } from '../services/invoicePdf.js';
 import {
   parseInvoiceCreateBody,
   parseInvoiceRevisionBody,
+  parsePaidBody,
   todayAsCalendarDay,
 } from '../services/requestParsing.js';
 
@@ -107,6 +108,7 @@ invoiceRouter.get('/', async (req, res) => {
     id: r.id,
     number: r.number,
     status: r.status as 'AKTIV' | 'STORNIERT',
+    paid: r.paid,
     recipientName: r.recipient.name,
     amountCents: r.revisions[0] ? calculateGross(r.revisions[0].positions, r.revisions[0].vat) : 0,
     invoiceDate: r.invoiceDate.toISOString(),
@@ -281,6 +283,7 @@ invoiceRouter.get('/:id', async (req, res) => {
     id: invoice.id,
     number: invoice.number,
     status: invoice.status,
+    paid: invoice.paid,
     recipient: invoice.recipient,
     invoiceDate: invoice.invoiceDate.toISOString(),
     createdAt: invoice.createdAt.toISOString(),
@@ -479,4 +482,32 @@ invoiceRouter.patch('/:id/cancel', async (req, res) => {
   });
 
   res.json({ message: 'Invoice cancelled' });
+});
+
+// PATCH /api/invoice/:id/paid
+invoiceRouter.patch('/:id/paid', async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    res.status(400).json({ error: 'Invalid ID' });
+    return;
+  }
+  const parsed = parsePaidBody(req.body);
+  if ('error' in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+
+  const invoice = await prisma.invoice.findUnique({ where: { id } });
+  if (!invoice) {
+    res.status(404).json({ error: 'Invoice not found' });
+    return;
+  }
+  // Unmarking is always allowed: a cancelled invoice may still have been paid
+  if (parsed.value && invoice.status !== 'AKTIV') {
+    res.status(400).json({ error: 'Cancelled invoices cannot be marked as paid' });
+    return;
+  }
+
+  const updated = await prisma.invoice.update({ where: { id }, data: { paid: parsed.value } });
+  res.json({ id: updated.id, paid: updated.paid });
 });
