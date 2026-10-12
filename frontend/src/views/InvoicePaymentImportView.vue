@@ -35,6 +35,7 @@ import {
   initialRows,
   removePaidInvoices,
   selectedInvoiceIds,
+  selectedPayments,
   setSelected,
   takenInvoiceIds,
   type MatchRow,
@@ -181,6 +182,22 @@ const tableRows = computed(() =>
 );
 const selectedIds = computed(() => selectedInvoiceIds(rows.value));
 
+/** Bookings the result does not propose, each list with the reason as its title. */
+const otherBookings = computed(() =>
+  [
+    {
+      testId: 'used-bookings',
+      title: 'Bookings already used for a paid invoice',
+      bookings: result.value?.used ?? [],
+    },
+    {
+      testId: 'unmatched-bookings',
+      title: 'Bookings without a match',
+      bookings: result.value?.unmatched ?? [],
+    },
+  ].filter((list) => list.bookings.length > 0),
+);
+
 function invoicesText(count: number): string {
   return `${count} ${count === 1 ? 'invoice' : 'invoices'}`;
 }
@@ -216,6 +233,7 @@ function confirmError(res: JsonResponse): string {
 
 async function confirmPaid() {
   const ids = selectedIds.value;
+  const payments = selectedPayments(rows.value);
   const confirmed = await confirmAction({
     message: `Mark ${invoicesText(ids.length)} as paid?`,
     header: 'Mark as paid',
@@ -228,7 +246,7 @@ async function confirmPaid() {
     const res = await requestJson('/api/invoice-payment/confirm', {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify({ invoiceIds: ids }),
+      body: JSON.stringify({ payments }),
     });
     if (!res.ok) {
       notify.error(confirmError(res));
@@ -442,8 +460,8 @@ async function confirmPaid() {
           </Column>
         </DataTable>
 
-        <details v-if="result.unmatched.length > 0" data-testid="unmatched-bookings">
-          <summary>Bookings without a match ({{ result.unmatched.length }})</summary>
+        <details v-for="list in otherBookings" :key="list.testId" :data-testid="list.testId">
+          <summary>{{ list.title }} ({{ list.bookings.length }})</summary>
           <table class="plain-table">
             <thead>
               <tr>
@@ -455,7 +473,7 @@ async function confirmPaid() {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="booking in result.unmatched" :key="booking.row">
+              <tr v-for="booking in list.bookings" :key="booking.row">
                 <td>{{ booking.row }}</td>
                 <td>{{ formatDate(booking.date) }}</td>
                 <td>{{ booking.payer }}</td>

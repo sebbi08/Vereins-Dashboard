@@ -94,6 +94,7 @@ const RESULT: MatchResult = {
     },
   ],
   unmatched: [],
+  used: [],
 };
 
 type Reply = { status: number; body?: unknown; wait?: Promise<void> };
@@ -291,6 +292,7 @@ describe('InvoicePaymentImportView', () => {
           { booking: bookingOf(2), level: 'CONFIDENT', candidates: [candidate()] },
         ],
         unmatched: [],
+        used: [],
       },
     };
     const wrapper = await mountView();
@@ -314,6 +316,7 @@ describe('InvoicePaymentImportView', () => {
           },
         ],
         unmatched: [],
+        used: [],
       },
     };
     const wrapper = await mountView();
@@ -339,7 +342,9 @@ describe('InvoicePaymentImportView', () => {
     expect(confirmAction).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'Mark 1 invoice as paid?' }),
     );
-    expect(sentBody('POST', '/api/invoice-payment/confirm')).toEqual({ invoiceIds: [1] });
+    expect(sentBody('POST', '/api/invoice-payment/confirm')).toEqual({
+      payments: [{ invoiceId: 1, booking: bookingOf(1) }],
+    });
     expect(notify.success).toHaveBeenCalledWith('1 invoice marked as paid');
     expect(wrapper.findAll('.match-row')).toHaveLength(1);
   });
@@ -364,6 +369,7 @@ describe('InvoicePaymentImportView', () => {
           },
         ],
         unmatched: [],
+        used: [],
       },
     };
     const wrapper = await mountView();
@@ -377,7 +383,9 @@ describe('InvoicePaymentImportView', () => {
     answer();
     await flushPromises();
 
-    expect(sentBody('POST', '/api/invoice-payment/confirm')).toEqual({ invoiceIds: [1] });
+    expect(sentBody('POST', '/api/invoice-payment/confirm')).toEqual({
+      payments: [{ invoiceId: 1, booking: bookingOf(1) }],
+    });
     const rows = wrapper.findAll('.match-row');
     expect(rows).toHaveLength(1);
     expect(rows[0].find('[data-testid="invoice-link"]').attributes('href')).toBe('/invoice/2');
@@ -401,10 +409,24 @@ describe('InvoicePaymentImportView', () => {
     expect(wrapper.findAll('.match-row')).toHaveLength(2);
   });
 
+  it('lists the bookings that already paid an invoice in an earlier import', async () => {
+    replies['POST /api/invoice-payment/match'] = {
+      status: 200,
+      body: { matches: [], unmatched: [], used: [bookingOf(1)] },
+    };
+    const wrapper = await mountView();
+    await runMatch(wrapper);
+
+    const used = wrapper.find('[data-testid="used-bookings"]');
+    expect(used.text()).toContain('Bookings already used for a paid invoice (1)');
+    expect(used.text()).toContain('Anna Alt');
+    expect(wrapper.find('[data-testid="unmatched-bookings"]').exists()).toBe(false);
+  });
+
   it('lists the bookings without a match', async () => {
     replies['POST /api/invoice-payment/match'] = {
       status: 200,
-      body: { matches: [], unmatched: [bookingOf(1)] },
+      body: { matches: [], unmatched: [bookingOf(1)], used: [] },
     };
     const wrapper = await mountView();
     await runMatch(wrapper);

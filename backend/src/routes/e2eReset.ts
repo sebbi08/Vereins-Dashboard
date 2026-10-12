@@ -27,6 +27,7 @@ e2eResetRouter.post('/reset', async (_req, res) => {
     await prisma.instructor.deleteMany();
     await prisma.donationReceiptRevision.deleteMany();
     await prisma.donationReceipt.deleteMany();
+    await prisma.paidBooking.deleteMany();
     await prisma.invoiceRevision.deleteMany();
     await prisma.invoice.deleteMany();
     await prisma.invoiceDraft.deleteMany();

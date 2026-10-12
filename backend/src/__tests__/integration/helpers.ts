@@ -9,6 +9,7 @@ export async function cleanDatabase() {
   await prisma.instructorInvoiceRequest.deleteMany();
   await prisma.instructor.deleteMany();
   await prisma.invoiceDraft.deleteMany();
+  await prisma.paidBooking.deleteMany();
   await prisma.invoiceRevision.deleteMany();
   await prisma.invoice.deleteMany();
   await prisma.invoiceRecipient.deleteMany();

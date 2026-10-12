@@ -8,8 +8,15 @@ pairs the user confirms as paid.
 
 ## Decisions (agreed 2026-10-09)
 
-- **Only a paid flag.** No payment date, no amount, no booking data is stored. The CSV itself is
-  never stored and never sent to the server as a file.
+- **Only a paid flag.** No payment date, no amount, no readable booking data is stored. The CSV
+  itself is never stored and never sent to the server as a file.
+- **Used bookings (added 2026-10-12).** Exports overlap, so a booking that already paid an invoice
+  would be proposed again — for another invoice of the same payer and amount, even preselected.
+  When a proposal is confirmed, the app therefore keeps a fingerprint of the booking (a SHA-256
+  hash of day, amount, payer and purpose; the booking cannot be read back from it) with the
+  invoice. Later matches set such bookings aside. Bookings that were never confirmed are always
+  proposed again, however old they are. A date limit ("only bookings after the last import") was
+  tried and dropped: it also hid bookings that had never been matched.
 - **Paid is separate from the status.** `AKTIV`/`STORNIERT` stays as it is. Only active invoices
   can be marked as paid; unmarking is always allowed. Cancelling a paid invoice is allowed and it
   stays marked as paid (money may have to be returned).
@@ -47,6 +54,24 @@ model Invoice {
 
 Existing invoices start as unpaid.
 
+Used bookings get their own table, with a migration:
+
+```prisma
+model PaidBooking {
+  id          Int      @id @default(autoincrement())
+  invoiceId   Int
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  fingerprint String
+  createdAt   DateTime @default(now())
+
+  @@index([invoiceId])
+}
+```
+
+The fingerprint is the SHA-256 hex digest of `JSON.stringify([date, amountCents, payer, purpose])`
+with payer and purpose trimmed, inner whitespace collapsed and lower-cased
+(`services/paidBookings.ts`). The row number is not part of it.
+
 The import settings are one `SystemSetting` row, key `bookingImport`, value JSON:
 
 ```json
@@ -75,7 +100,9 @@ amountCents: number }` — `row` is the 1-based data row in the file, for displa
 - `interface MatchCandidate { invoiceId; invoiceNumber; recipientName; invoiceDate;
 amountCents; reasons: MatchReason[]; differenceCents: number }` (booking − invoice)
 - `interface BookingMatch { booking: Booking; level: MatchLevel; candidates: MatchCandidate[] }`
-- `interface MatchResult { matches: BookingMatch[]; unmatched: Booking[] }`
+- `interface MatchResult { matches: BookingMatch[]; unmatched: Booking[]; used: Booking[] }` —
+  `used` are the bookings set aside because they already paid an invoice
+- `interface ConfirmedPayment { invoiceId: number; booking: Booking }`
 - `InvoiceListItem` and the invoice detail DTO get `paid: boolean`.
 
 ## API
@@ -87,6 +114,8 @@ amountCents; reasons: MatchReason[]; differenceCents: number }` (booking − inv
 - 400 for an invalid id or body, 404 for an unknown invoice.
 - 400 `Cancelled invoices cannot be marked as paid` when setting `paid: true` on a cancelled
   invoice. `paid: false` is always allowed.
+- `paid: false` also deletes the invoice's `PaidBooking` rows, in the same transaction: its
+  booking is proposed again by the next match. Cancelling a paid invoice keeps them.
 - Answers the updated `{ id, paid }`.
 
 `GET /api/invoice` returns `paid` on every item, `GET /api/invoice/:id` returns `paid`. The list
@@ -105,17 +134,19 @@ encoding or delimiter, or a column value that is not a string (max. 200 characte
 `POST /api/invoice-payment/match` with `{ bookings: Booking[] }` → `MatchResult`
 
 - Changes nothing in the database.
+- Bookings whose fingerprint is stored are not matched; they come back in `used`. Identical
+  bookings are counted: one stored fingerprint sets aside one of them, the first in the file.
 - The body is parsed in `services/requestParsing.ts`: an array of at most 10 000 bookings, each
   with a valid `YYYY-MM-DD` date, strings for payer and purpose, a positive integer `amountCents`.
   Anything else → 400.
 - This route gets its own `express.json({ limit: '2mb' })`, mounted before the global JSON parser
   in `app.ts` (the global 100 kB limit is too small for a year of bookings).
 
-`POST /api/invoice-payment/confirm` with `{ invoiceIds: number[] }`
+`POST /api/invoice-payment/confirm` with `{ payments: ConfirmedPayment[] }`
 
-- Marks all of them as paid in one transaction.
-- 400 `{ error: 'MISSING_IDS' }` for an empty or invalid list, 400 `{ error: 'DUPLICATE_IDS' }`
-  when an id appears twice.
+- Marks all invoices as paid and stores one `PaidBooking` per payment, in one transaction.
+- 400 `{ error: 'MISSING_IDS' }` for an empty or invalid list (also an invalid booking), 400
+  `{ error: 'DUPLICATE_IDS' }` when an invoice appears twice.
 - 400 `{ error: 'NOT_FOUND' | 'CANCELLED', ids }` when an invoice is unknown or cancelled; nothing
   is changed then.
 - An invoice that is already paid is not an error.
@@ -219,9 +250,11 @@ candidate goes to `unmatched`. `matches` is sorted by level in that order, then 
    - `CONFIDENT` rows with one candidate start selected; all others start unselected.
    - An invoice can be selected in one row only: selecting it elsewhere is disabled while it is
      selected in another row.
-   - Collapsible sections: "Bookings without a match (n)" and "Skipped rows (n)" with row number,
-     raw values and the reason ("Unreadable amount", "Unreadable date").
-   - "Mark n invoices as paid" with a confirmation dialog → `/confirm`. On success a toast, and the
+   - Collapsible sections: "Bookings already used for a paid invoice (n)", "Bookings without a
+     match (n)" and "Skipped rows (n)" with row number, raw values and the reason ("Unreadable
+     amount", "Unreadable date").
+   - "Mark n invoices as paid" with a confirmation dialog → `/confirm` with the booking of every
+     selected row. On success a toast, and the
      confirmed rows disappear from the result. On a 400 the error is shown and nothing changes.
 
 ### CSV reading (`frontend/src/utils/bookingCsv.ts`, unit-tested)

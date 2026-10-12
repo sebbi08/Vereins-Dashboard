@@ -18,35 +18,47 @@ async function acceptConfirm(label: string) {
   await accept.click();
 }
 
+/** An invoice over 59,50 € for the payer of the booking file; answers its id. */
+async function createInvoice(title: string): Promise<number> {
+  const res = await fetch(`${BACKEND_URL}/api/invoice`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      inputs: {
+        salutation: '',
+        name: 'E2E Zahler GmbH',
+        street: 'Zahlweg 1',
+        city: 'Zahlstadt',
+        invoiceDate: '2025-06-01',
+        title,
+        lineItems: [{ text: 'Raummiete Juni', priceInCents: 5000 }],
+        vat: 19,
+        directDebit: false,
+        email: '',
+        emailSalutation: '',
+      },
+      recipientData: { name: 'E2E Zahler GmbH', street: 'Zahlweg 1', city: 'Zahlstadt' },
+    }),
+  });
+  expect([200, 201, 202]).toContain(res.status);
+  const id: number = (await res.json()).invoiceId;
+  expect(id).toBeGreaterThan(0);
+  return id;
+}
+
 describe('Invoice payments', () => {
   let invoiceId = 0;
+  let file = '';
 
   before(async function () {
     this.timeout(60000);
     await uploadInvoiceTemplate();
-    const res = await fetch(`${BACKEND_URL}/api/invoice`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        inputs: {
-          salutation: '',
-          name: 'E2E Zahler GmbH',
-          street: 'Zahlweg 1',
-          city: 'Zahlstadt',
-          invoiceDate: '2025-06-01',
-          title: 'E2E Raummiete',
-          lineItems: [{ text: 'Raummiete Juni', priceInCents: 5000 }],
-          vat: 19,
-          directDebit: false,
-          email: '',
-          emailSalutation: '',
-        },
-        recipientData: { name: 'E2E Zahler GmbH', street: 'Zahlweg 1', city: 'Zahlstadt' },
-      }),
-    });
-    expect([200, 201, 202]).toContain(res.status);
-    invoiceId = (await res.json()).invoiceId;
-    expect(invoiceId).toBeGreaterThan(0);
+    invoiceId = await createInvoice('E2E Raummiete Juni');
+    file = writeBookingFile([
+      'Buchungstag;Konto;Empfänger;Verwendungszweck;Betrag',
+      '01.07.2025;Giro;E2E Zahler GmbH;"Miete Juni; danke";59,50',
+      '02.07.2025;Giro;Stadtwerke;Strom;-120,00',
+    ]);
   });
 
   it('marks the invoice paid from a bank export', async function () {
@@ -54,11 +66,6 @@ describe('Invoice payments', () => {
     await browser.url('/invoice/payment-import');
     await (await $('h2=Import bank bookings')).waitForDisplayed({ timeout: 10000 });
 
-    const file = writeBookingFile([
-      'Buchungstag;Konto;Empfänger;Verwendungszweck;Betrag',
-      '01.07.2025;Giro;E2E Zahler GmbH;"Miete Juni; danke";59,50',
-      '02.07.2025;Giro;Stadtwerke;Strom;-120,00',
-    ]);
     await $('[data-testid="booking-file"]').setValue(file);
     await expect($('[data-testid="csv-preview"]')).toHaveText(
       expect.stringContaining('E2E Zahler GmbH'),
@@ -75,6 +82,21 @@ describe('Invoice payments', () => {
 
     await browser.url(`/invoice/${invoiceId}`);
     await expect($('[data-testid="payment-status"]')).toHaveText('Paid');
+  });
+
+  it('does not propose the used booking for another invoice of the payer', async function () {
+    this.timeout(60000);
+    await createInvoice('E2E Raummiete Juli');
+
+    await browser.url('/invoice/payment-import');
+    await (await $('h2=Import bank bookings')).waitForDisplayed({ timeout: 10000 });
+    await $('[data-testid="booking-file"]').setValue(file);
+    await $('[data-testid="match-bookings"]').click();
+
+    const used = await $('[data-testid="used-bookings"] summary');
+    await used.waitForDisplayed({ timeout: 10000 });
+    await expect(used).toHaveText('Bookings already used for a paid invoice (1)');
+    await expect($('.match-row')).not.toBeExisting();
   });
 
   it('marks the invoice unpaid again on its page', async function () {

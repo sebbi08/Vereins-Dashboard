@@ -7,6 +7,7 @@ import {
   initialRows,
   removePaidInvoices,
   selectedInvoiceIds,
+  selectedPayments,
   setSelected,
 } from '../utils/paymentSelection';
 
@@ -47,6 +48,20 @@ describe('initialRows', () => {
     const rows = initialRows([match(1, 'CONFIDENT', [1]), match(2, 'CONFIDENT', [1])]);
     expect(rows.map((r) => r.selected)).toEqual([true, false]);
     expect(canSelect(rows, rows[1])).toBe(false);
+  });
+});
+
+describe('selectedPayments', () => {
+  it('pairs the invoice of every selected row with its booking', () => {
+    const rows = initialRows([
+      match(1, 'CONFIDENT', [1]),
+      match(2, 'AMOUNT_ONLY', [2]),
+      match(3, 'CONFIDENT', [3]),
+    ]);
+    expect(selectedPayments(rows)).toEqual([
+      { invoiceId: 1, booking: rows[0].match.booking },
+      { invoiceId: 3, booking: rows[2].match.booking },
+    ]);
   });
 });
 

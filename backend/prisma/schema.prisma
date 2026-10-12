@@ -113,6 +113,19 @@ model Invoice {
   paid          Boolean           @default(false)
   createdAt     DateTime          @default(now())
   revisions     InvoiceRevision[]
+  paidBookings  PaidBooking[]
+}
+
+/// A bank booking that was confirmed as the payment of an invoice. Only a hash of the booking is
+/// kept, so a later export that still contains it does not propose it again.
+model PaidBooking {
+  id          Int      @id @default(autoincrement())
+  invoiceId   Int
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  fingerprint String
+  createdAt   DateTime @default(now())
+
+  @@index([invoiceId])
 }
 
 model InvoiceRevision {

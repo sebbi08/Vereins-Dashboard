@@ -174,7 +174,10 @@ function rate(
  * Proposes invoices for incoming bookings. Each booking appears once, with its best level and
  * every candidate of that level; bookings without any candidate are `unmatched`.
  */
-export function matchBookings(bookings: Booking[], invoices: OpenInvoice[]): MatchResult {
+export function matchBookings(
+  bookings: Booking[],
+  invoices: OpenInvoice[],
+): Pick<MatchResult, 'matches' | 'unmatched'> {
   const prepared: PreparedInvoice[] = [...invoices]
     .sort((a, b) => a.year - b.year || a.runningNumber - b.runningNumber)
     .map((invoice) => ({

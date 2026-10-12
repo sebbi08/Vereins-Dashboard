@@ -2,6 +2,7 @@ import type {
   Booking,
   BookingColumns,
   BookingImportSettings,
+  ConfirmedPayment,
   InvoiceContent,
   InvoiceLineItem,
   ReceiptInputs,
@@ -336,37 +337,48 @@ export function parseBookingImportSettings(raw: unknown): Parsed<BookingImportSe
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** POST /api/invoice-payment/match: incoming bookings as the browser read them from the file. */
+/** One incoming booking as the browser read it from the file. */
+function booking(item: unknown): Booking {
+  if (!isRecord(item)) throw new BodyError(INVALID_BODY);
+  const date = text(item, 'date');
+  if (!ISO_DAY.test(date) || !parseCalendarDay(date)) throw new BodyError(INVALID_BODY);
+  const row = integer(item, 'row');
+  const amountCents = integer(item, 'amountCents');
+  if (row < 1 || amountCents <= 0) throw new BodyError(INVALID_BODY);
+  return { row, date, payer: text(item, 'payer'), purpose: text(item, 'purpose'), amountCents };
+}
+
+/** POST /api/invoice-payment/match: the incoming bookings of the file. */
 export function parseMatchBody(raw: unknown): Parsed<Booking[]> {
   return attempt(() => {
     if (!isRecord(raw) || !Array.isArray(raw.bookings)) throw new BodyError(INVALID_BODY);
     if (raw.bookings.length > MAX_BOOKINGS_PER_MATCH) {
       throw new BodyError(`At most ${MAX_BOOKINGS_PER_MATCH} bookings per match`);
     }
-    return raw.bookings.map((item: unknown): Booking => {
-      if (!isRecord(item)) throw new BodyError(INVALID_BODY);
-      const date = text(item, 'date');
-      if (!ISO_DAY.test(date) || !parseCalendarDay(date)) throw new BodyError(INVALID_BODY);
-      const row = integer(item, 'row');
-      const amountCents = integer(item, 'amountCents');
-      if (row < 1 || amountCents <= 0) throw new BodyError(INVALID_BODY);
-      return { row, date, payer: text(item, 'payer'), purpose: text(item, 'purpose'), amountCents };
-    });
+    return raw.bookings.map(booking);
   });
 }
 
-/** POST /api/invoice-payment/confirm: distinct invoice ids; the error is the code to answer. */
-export function parseConfirmBody(raw: unknown): Parsed<number[]> {
-  return attempt(() => {
-    const ids = isRecord(raw) ? raw.invoiceIds : undefined;
-    if (
-      !Array.isArray(ids) ||
-      ids.length === 0 ||
-      !ids.every((id) => typeof id === 'number' && Number.isSafeInteger(id) && id > 0)
-    ) {
-      throw new BodyError('MISSING_IDS');
+/**
+ * POST /api/invoice-payment/confirm: which booking paid which invoice, every invoice once.
+ * The error is the code to answer.
+ */
+export function parseConfirmBody(raw: unknown): Parsed<ConfirmedPayment[]> {
+  try {
+    const items = isRecord(raw) ? raw.payments : undefined;
+    if (!Array.isArray(items) || items.length === 0) return { error: 'MISSING_IDS' };
+    const payments = items.map((item: unknown): ConfirmedPayment => {
+      if (!isRecord(item)) throw new BodyError(INVALID_BODY);
+      const invoiceId = integer(item, 'invoiceId');
+      if (invoiceId < 1) throw new BodyError(INVALID_BODY);
+      return { invoiceId, booking: booking(item.booking) };
+    });
+    if (new Set(payments.map((payment) => payment.invoiceId)).size !== payments.length) {
+      return { error: 'DUPLICATE_IDS' };
     }
-    if (new Set(ids).size !== ids.length) throw new BodyError('DUPLICATE_IDS');
-    return ids as number[];
-  });
+    return { value: payments };
+  } catch (err) {
+    if (err instanceof BodyError) return { error: 'MISSING_IDS' };
+    throw err;
+  }
 }

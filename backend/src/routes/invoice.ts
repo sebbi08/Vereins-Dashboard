@@ -508,6 +508,11 @@ invoiceRouter.patch('/:id/paid', async (req, res) => {
     return;
   }
 
-  const updated = await prisma.invoice.update({ where: { id }, data: { paid: parsed.value } });
+  const paid = parsed.value;
+  const updated = await prisma.$transaction(async (tx) => {
+    // An unpaid invoice no longer uses up a bank booking: it may be proposed again
+    if (!paid) await tx.paidBooking.deleteMany({ where: { invoiceId: id } });
+    return tx.invoice.update({ where: { id }, data: { paid } });
+  });
   res.json({ id: updated.id, paid: updated.paid });
 });

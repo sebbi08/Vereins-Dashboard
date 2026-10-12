@@ -68,4 +68,12 @@ export interface BookingMatch {
 export interface MatchResult {
   matches: BookingMatch[];
   unmatched: Booking[];
+  /** Bookings that already paid an invoice in an earlier import; they are not matched again. */
+  used: Booking[];
+}
+
+/** One confirmed proposal: this booking paid that invoice. */
+export interface ConfirmedPayment {
+  invoiceId: number;
+  booking: Booking;
 }

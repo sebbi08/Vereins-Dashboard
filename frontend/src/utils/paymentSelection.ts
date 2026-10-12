@@ -1,4 +1,4 @@
-import type { BookingMatch, MatchCandidate } from 'shared';
+import type { BookingMatch, ConfirmedPayment, MatchCandidate } from 'shared';
 
 /** One proposal on the import page: the booking, the chosen invoice, and whether to mark it. */
 export interface MatchRow {
@@ -79,4 +79,13 @@ export function removePaidInvoices(rows: MatchRow[], paidIds: Iterable<number>):
 
 export function selectedInvoiceIds(rows: MatchRow[]): number[] {
   return rows.flatMap((row) => (row.selected && row.invoiceId !== null ? [row.invoiceId] : []));
+}
+
+/** What confirming sends: for every selected row, which booking pays which invoice. */
+export function selectedPayments(rows: MatchRow[]): ConfirmedPayment[] {
+  return rows.flatMap((row) =>
+    row.selected && row.invoiceId !== null
+      ? [{ invoiceId: row.invoiceId, booking: row.match.booking }]
+      : [],
+  );
 }

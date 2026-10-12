@@ -80,6 +80,15 @@ function booking(overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** The confirmation of one proposal: this booking paid that invoice. */
+function payment(invoiceId: number, overrides: Record<string, unknown> = {}) {
+  return { invoiceId, booking: booking(overrides) };
+}
+
+function confirm(payments: unknown) {
+  return request.post('/api/invoice-payment/confirm').send({ payments });
+}
+
 async function isPaid(id: number) {
   return (await prisma.invoice.findUnique({ where: { id } }))?.paid;
 }
@@ -109,6 +118,7 @@ describe('POST /api/invoice-payment/match', () => {
         },
       ],
       unmatched: [],
+      used: [],
     });
     expect(await isPaid(invoice.id)).toBe(false);
   });
@@ -117,7 +127,7 @@ describe('POST /api/invoice-payment/match', () => {
     await seedInvoice({ status: 'STORNIERT' });
     await seedInvoice({ paid: true });
     const res = await request.post('/api/invoice-payment/match').send({ bookings: [booking()] });
-    expect(res.body).toEqual({ matches: [], unmatched: [booking()] });
+    expect(res.body).toEqual({ matches: [], unmatched: [booking()], used: [] });
   });
 
   it.each([
@@ -164,9 +174,7 @@ describe('POST /api/invoice-payment/confirm', () => {
   it('marks every given invoice as paid', async () => {
     const a = await seedInvoice();
     const b = await seedInvoice();
-    const res = await request
-      .post('/api/invoice-payment/confirm')
-      .send({ invoiceIds: [a.id, b.id] });
+    const res = await confirm([payment(a.id), payment(b.id, { row: 2 })]);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ marked: 2 });
     expect(await isPaid(a.id)).toBe(true);
@@ -175,47 +183,111 @@ describe('POST /api/invoice-payment/confirm', () => {
 
   it('accepts an invoice that is already paid', async () => {
     const paid = await seedInvoice({ paid: true });
-    const res = await request.post('/api/invoice-payment/confirm').send({ invoiceIds: [paid.id] });
+    const res = await confirm([payment(paid.id)]);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ marked: 1 });
   });
 
   it('changes nothing when an invoice is unknown', async () => {
     const open = await seedInvoice();
-    const res = await request
-      .post('/api/invoice-payment/confirm')
-      .send({ invoiceIds: [open.id, 99999] });
+    const res = await confirm([payment(open.id), payment(99999, { row: 2 })]);
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'NOT_FOUND', ids: [99999] });
     expect(await isPaid(open.id)).toBe(false);
+    expect(await prisma.paidBooking.count()).toBe(0);
   });
 
   it('changes nothing when an invoice is cancelled', async () => {
     const open = await seedInvoice();
     const cancelled = await seedInvoice({ status: 'STORNIERT' });
-    const res = await request
-      .post('/api/invoice-payment/confirm')
-      .send({ invoiceIds: [open.id, cancelled.id] });
+    const res = await confirm([payment(open.id), payment(cancelled.id, { row: 2 })]);
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'CANCELLED', ids: [cancelled.id] });
     expect(await isPaid(open.id)).toBe(false);
+    expect(await prisma.paidBooking.count()).toBe(0);
   });
 
   it('rejects an invoice given twice', async () => {
     const open = await seedInvoice();
-    const res = await request
-      .post('/api/invoice-payment/confirm')
-      .send({ invoiceIds: [open.id, open.id] });
+    const res = await confirm([payment(open.id), payment(open.id, { row: 2 })]);
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'DUPLICATE_IDS', ids: [] });
   });
 
-  it.each([{}, { invoiceIds: [] }, { invoiceIds: ['1'] }, { invoiceIds: [1.5] }])(
-    'rejects %j',
-    async (body) => {
-      const res = await request.post('/api/invoice-payment/confirm').send(body);
-      expect(res.status).toBe(400);
-      expect(res.body).toEqual({ error: 'MISSING_IDS', ids: [] });
-    },
-  );
+  it.each([
+    {},
+    { payments: [] },
+    { payments: [{ invoiceId: '1', booking: booking() }] },
+    { payments: [{ invoiceId: 1.5, booking: booking() }] },
+    { payments: [{ invoiceId: 1 }] },
+    { payments: [{ invoiceId: 1, booking: booking({ date: '10.03.2026' }) }] },
+    { invoiceIds: [1] },
+  ])('rejects %j', async (body) => {
+    const res = await request.post('/api/invoice-payment/confirm').send(body);
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'MISSING_IDS', ids: [] });
+  });
+});
+
+describe('bookings that already paid an invoice', () => {
+  function match(bookings: unknown[]) {
+    return request.post('/api/invoice-payment/match').send({ bookings });
+  }
+
+  it('are set aside by the next match instead of being proposed for another invoice', async () => {
+    const first = await seedInvoice();
+    const second = await seedInvoice();
+    const before = await match([booking()]);
+    expect(
+      before.body.matches[0].candidates.map((c: { invoiceId: number }) => c.invoiceId),
+    ).toEqual([first.id, second.id]);
+
+    await confirm([payment(first.id)]);
+
+    const after = await match([booking()]);
+    expect(after.body).toEqual({ matches: [], unmatched: [], used: [booking()] });
+    expect(await isPaid(second.id)).toBe(false);
+  });
+
+  it('are recognised wherever they stand in a later file', async () => {
+    const first = await seedInvoice();
+    await seedInvoice();
+    await confirm([payment(first.id)]);
+
+    const res = await match([booking({ row: 7, payer: 'MUSIKSCHULE  KLANGWELT' })]);
+    expect(res.body.used).toHaveLength(1);
+    expect(res.body.matches).toEqual([]);
+  });
+
+  it('leave an identical second booking open', async () => {
+    const first = await seedInvoice();
+    const second = await seedInvoice();
+    await confirm([payment(first.id)]);
+
+    const res = await match([booking(), booking({ row: 2 })]);
+    expect(res.body.used).toEqual([booking()]);
+    expect(res.body.matches).toHaveLength(1);
+    expect(res.body.matches[0].booking).toEqual(booking({ row: 2 }));
+    expect(res.body.matches[0].candidates[0].invoiceId).toBe(second.id);
+  });
+
+  it('are proposed again once the invoice is marked unpaid', async () => {
+    const first = await seedInvoice();
+    await confirm([payment(first.id)]);
+    expect((await match([booking()])).body.used).toHaveLength(1);
+
+    await request.patch(`/api/invoice/${first.id}/paid`).send({ paid: false });
+
+    const res = await match([booking()]);
+    expect(res.body.used).toEqual([]);
+    expect(res.body.matches[0].candidates[0].invoiceId).toBe(first.id);
+    expect(await prisma.paidBooking.count()).toBe(0);
+  });
+
+  it('stay set aside when the paid invoice is cancelled', async () => {
+    const first = await seedInvoice();
+    await confirm([payment(first.id)]);
+    await request.patch(`/api/invoice/${first.id}/cancel`);
+    expect((await match([booking()])).body.used).toHaveLength(1);
+  });
 });
