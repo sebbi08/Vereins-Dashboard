@@ -86,18 +86,40 @@ describe('booking import settings', () => {
     delimiter: '\t',
     columns: { date: 'Datum', payer: 'Name', purpose: 'Text', amount: 'Umsatz' },
   };
+  const defaults = { ...DEFAULT_BOOKING_IMPORT_SETTINGS, lastBookingDate: null };
 
-  it('answers the defaults when nothing is stored', async () => {
+  it('answers the defaults and no last booking date when nothing is stored', async () => {
     const res = await request.get('/api/settings/booking-import');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(DEFAULT_BOOKING_IMPORT_SETTINGS);
+    expect(res.body).toEqual(defaults);
   });
 
   it('stores the settings and answers them on the next GET', async () => {
     const put = await request.put('/api/settings/booking-import').send(custom);
     expect(put.status).toBe(200);
     expect(put.body).toEqual(custom);
-    expect((await request.get('/api/settings/booking-import')).body).toEqual(custom);
+    expect((await request.get('/api/settings/booking-import')).body).toEqual({
+      ...custom,
+      lastBookingDate: null,
+    });
+  });
+
+  it('keeps the last booking date when the settings are saved', async () => {
+    await prisma.systemSetting.create({
+      data: { key: 'bookingImportLastDate', value: '2026-09-30' },
+    });
+    await request.put('/api/settings/booking-import').send(custom);
+    expect((await request.get('/api/settings/booking-import')).body).toEqual({
+      ...custom,
+      lastBookingDate: '2026-09-30',
+    });
+  });
+
+  it('ignores a stored last booking date that is no calendar day', async () => {
+    await prisma.systemSetting.create({
+      data: { key: 'bookingImportLastDate', value: '30.09.2026' },
+    });
+    expect((await request.get('/api/settings/booking-import')).body).toEqual(defaults);
   });
 
   it.each([
@@ -110,15 +132,13 @@ describe('booking import settings', () => {
   ])('rejects %j', async (body) => {
     const res = await request.put('/api/settings/booking-import').send(body);
     expect(res.status).toBe(400);
-    expect((await request.get('/api/settings/booking-import')).body).toEqual(
-      DEFAULT_BOOKING_IMPORT_SETTINGS,
-    );
+    expect((await request.get('/api/settings/booking-import')).body).toEqual(defaults);
   });
 
   it('falls back to the defaults when the stored value is unreadable', async () => {
     await prisma.systemSetting.create({ data: { key: 'bookingImport', value: '{oops' } });
     const res = await request.get('/api/settings/booking-import');
-    expect(res.body).toEqual(DEFAULT_BOOKING_IMPORT_SETTINGS);
+    expect(res.body).toEqual(defaults);
   });
 
   it('keeps the booking import out of the general settings', async () => {

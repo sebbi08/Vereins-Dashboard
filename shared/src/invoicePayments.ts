@@ -29,6 +29,12 @@ export const DEFAULT_BOOKING_IMPORT_SETTINGS: BookingImportSettings = {
   },
 };
 
+/** What the import page loads: the settings plus where the last confirmed import ended. */
+export interface StoredBookingImportSettings extends BookingImportSettings {
+  /** Newest booking day (YYYY-MM-DD) of the file confirmed last; null before the first one. */
+  lastBookingDate: string | null;
+}
+
 export const MAX_BOOKINGS_PER_MATCH = 10_000;
 export const MAX_COLUMN_NAME_LENGTH = 200;
 

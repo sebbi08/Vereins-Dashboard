@@ -25,6 +25,7 @@ interface ViewVM {
   settings: BookingImportSettings;
   encoding: string;
   rows: MatchRow[];
+  bookingsFrom: Date | null;
   choose: (row: MatchRow, invoiceId: number | null) => void;
 }
 
@@ -339,7 +340,10 @@ describe('InvoicePaymentImportView', () => {
     expect(confirmAction).toHaveBeenCalledWith(
       expect.objectContaining({ message: 'Mark 1 invoice as paid?' }),
     );
-    expect(sentBody('POST', '/api/invoice-payment/confirm')).toEqual({ invoiceIds: [1] });
+    expect(sentBody('POST', '/api/invoice-payment/confirm')).toEqual({
+      invoiceIds: [1],
+      lastBookingDate: '2026-03-13',
+    });
     expect(notify.success).toHaveBeenCalledWith('1 invoice marked as paid');
     expect(wrapper.findAll('.match-row')).toHaveLength(1);
   });
@@ -377,7 +381,10 @@ describe('InvoicePaymentImportView', () => {
     answer();
     await flushPromises();
 
-    expect(sentBody('POST', '/api/invoice-payment/confirm')).toEqual({ invoiceIds: [1] });
+    expect(sentBody('POST', '/api/invoice-payment/confirm')).toEqual({
+      invoiceIds: [1],
+      lastBookingDate: '2026-03-13',
+    });
     const rows = wrapper.findAll('.match-row');
     expect(rows).toHaveLength(1);
     expect(rows[0].find('[data-testid="invoice-link"]').attributes('href')).toBe('/invoice/2');
@@ -399,6 +406,54 @@ describe('InvoicePaymentImportView', () => {
       'Some invoices have been cancelled. Run the match again.',
     );
     expect(wrapper.findAll('.match-row')).toHaveLength(2);
+  });
+
+  it('leaves out bookings before the last confirmed import and says so', async () => {
+    replies['GET /api/settings/booking-import'] = {
+      status: 200,
+      body: { ...STORED, lastBookingDate: '2026-03-11' },
+    };
+    const wrapper = await mountView();
+    await runMatch(wrapper);
+
+    expect(sentBody('PUT', '/api/settings/booking-import')).toEqual(STORED);
+    expect(sentBody('POST', '/api/invoice-payment/match')).toEqual({
+      bookings: [
+        {
+          row: 2,
+          date: '2026-03-11',
+          payer: 'Bernd Bach',
+          purpose: 'RE 2/2026; danke',
+          amountCents: 4000,
+        },
+      ],
+    });
+    const hidden = wrapper.find('[data-testid="hidden-bookings"]');
+    expect(hidden.text()).toContain('1 booking before 11.03.2026');
+  });
+
+  it('sends every booking again once the date is cleared', async () => {
+    replies['GET /api/settings/booking-import'] = {
+      status: 200,
+      body: { ...STORED, lastBookingDate: '2026-03-11' },
+    };
+    const wrapper = await mountView();
+    vm(wrapper).bookingsFrom = null;
+    await runMatch(wrapper);
+
+    const sent = sentBody('POST', '/api/invoice-payment/match') as { bookings: unknown[] };
+    expect(sent.bookings).toHaveLength(2);
+    expect(wrapper.find('[data-testid="hidden-bookings"]').exists()).toBe(false);
+  });
+
+  it('drops the proposals when the date changes', async () => {
+    const wrapper = await mountView();
+    await runMatch(wrapper);
+    expect(wrapper.find('[data-testid="match-result"]').exists()).toBe(true);
+
+    vm(wrapper).bookingsFrom = new Date(2026, 2, 11);
+    await flushPromises();
+    expect(wrapper.find('[data-testid="match-result"]').exists()).toBe(false);
   });
 
   it('lists the bookings without a match', async () => {

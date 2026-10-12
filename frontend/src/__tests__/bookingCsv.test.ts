@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   decodeBookingFile,
+  newestBookingDate,
   parseCsv,
   parseGermanAmount,
   parseGermanDate,
@@ -162,5 +163,25 @@ describe('toBookings', () => {
     expect(toBookings(rows, reversed, columns).bookings).toEqual([
       { row: 1, date: '2025-04-01', payer: 'Zahler', purpose: 'Zweck', amountCents: 1000 },
     ]);
+  });
+});
+
+describe('newestBookingDate', () => {
+  const header = ['Buchungstag', 'Betrag'];
+
+  it('finds the newest readable booking day of the file, outgoing bookings included', () => {
+    const rows = [
+      ['24.03.2025', '10,00'],
+      ['31.03.2025', '-5,00'],
+      ['kaputt', '1,00'],
+      ['02.03.2025', 'abc'],
+    ];
+    expect(newestBookingDate(rows, header, 'Buchungstag')).toBe('2025-03-31');
+  });
+
+  it('is null when no row has a readable date', () => {
+    expect(newestBookingDate([], header, 'Buchungstag')).toBeNull();
+    expect(newestBookingDate([['kaputt', '1,00']], header, 'Buchungstag')).toBeNull();
+    expect(newestBookingDate([['24.03.2025', '1,00']], header, 'Datum')).toBeNull();
   });
 });
