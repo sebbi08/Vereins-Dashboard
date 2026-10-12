@@ -139,21 +139,3 @@ export function toBookings(
   });
   return { bookings, skipped };
 }
-
-/**
- * The newest booking day (YYYY-MM-DD) in the file, whatever the amounts: the export covers the
- * account up to that day. Null when no row has a readable date.
- */
-export function newestBookingDate(
-  rows: string[][],
-  header: string[],
-  dateColumn: string,
-): string | null {
-  const index = header.indexOf(dateColumn);
-  let newest: string | null = null;
-  for (const values of rows) {
-    const date = parseGermanDate(values[index] ?? '');
-    if (date !== null && (newest === null || date > newest)) newest = date;
-  }
-  return newest;
-}

@@ -4,7 +4,6 @@ import Card from 'primevue/card';
 import Checkbox from 'primevue/checkbox';
 import Column from 'primevue/column';
 import DataTable from 'primevue/datatable';
-import DatePicker from 'primevue/datepicker';
 import Message from 'primevue/message';
 import Select from 'primevue/select';
 import {
@@ -14,7 +13,6 @@ import {
   type BookingEncoding,
   type BookingImportSettings,
   type MatchResult,
-  type StoredBookingImportSettings,
 } from 'shared';
 import { computed, onMounted, ref, shallowRef, watch } from 'vue';
 import { useRouter } from 'vue-router';
@@ -24,13 +22,12 @@ import { useConfirmAction } from '../composables/useConfirmAction';
 import { useNotify } from '../composables/useNotify';
 import {
   decodeBookingFile,
-  newestBookingDate,
   readBookingTable,
   SKIP_REASON_LABELS,
   toBookings,
   type SkippedRow,
 } from '../utils/bookingCsv';
-import { formatCents, formatDate, fromIsoDate, toIsoDate } from '../utils/format';
+import { formatCents, formatDate } from '../utils/format';
 import {
   canSelect,
   chooseInvoice,
@@ -78,24 +75,14 @@ const fileName = ref('');
 const result = ref<MatchResult | null>(null);
 const rows = ref<MatchRow[]>([]);
 const skipped = ref<SkippedRow[]>([]);
-/** Only bookings from this day on are matched; starts where the last confirmed import ended. */
-const bookingsFrom = ref<Date | null>(null);
-const hiddenBefore = ref(0);
 const matching = ref(false);
 const confirming = ref(false);
 
 onMounted(async () => {
   try {
     const res = await requestJson('/api/settings/booking-import');
-    if (!res.ok) {
-      notify.error('Import settings could not be loaded');
-      return;
-    }
-    const { lastBookingDate, ...loaded } = structuredClone(
-      res.body,
-    ) as unknown as StoredBookingImportSettings;
-    settings.value = loaded;
-    bookingsFrom.value = lastBookingDate ? fromIsoDate(lastBookingDate) : null;
+    if (res.ok) settings.value = structuredClone(res.body) as unknown as BookingImportSettings;
+    else notify.error('Import settings could not be loaded');
   } catch {
     notify.error('Import settings could not be loaded');
   }
@@ -140,12 +127,11 @@ const canMatch = computed(
 
 // Proposals belong to one file read with one set of settings
 watch(
-  [settings, fileBytes, bookingsFrom],
+  [settings, fileBytes],
   () => {
     result.value = null;
     rows.value = [];
     skipped.value = [];
-    hiddenBefore.value = 0;
   },
   { deep: true },
 );
@@ -170,14 +156,10 @@ async function match() {
     if (!saved.ok) notify.error(`Import settings could not be saved: ${errorMessage(saved)}`);
 
     const converted = toBookings(current.rows, current.header, used.columns);
-    const from = bookingsFrom.value ? toIsoDate(bookingsFrom.value) : null;
-    const bookings = from
-      ? converted.bookings.filter((booking) => booking.date >= from)
-      : converted.bookings;
     const res = await requestJson('/api/invoice-payment/match', {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify({ bookings }),
+      body: JSON.stringify({ bookings: converted.bookings }),
     });
     if (!res.ok) {
       notify.error(errorMessage(res));
@@ -187,7 +169,6 @@ async function match() {
     result.value = body;
     rows.value = initialRows(body.matches);
     skipped.value = converted.skipped;
-    hiddenBefore.value = converted.bookings.length - bookings.length;
   } catch {
     notify.error('Network error');
   } finally {
@@ -242,16 +223,12 @@ async function confirmPaid() {
   });
   if (!confirmed) return;
   const sent = new Set(ids);
-  // The next import starts at the newest booking day of this file
-  const lastBookingDate = table.value
-    ? newestBookingDate(table.value.rows, table.value.header, settings.value.columns.date)
-    : null;
   confirming.value = true;
   try {
     const res = await requestJson('/api/invoice-payment/confirm', {
       method: 'POST',
       headers: JSON_HEADERS,
-      body: JSON.stringify({ invoiceIds: ids, lastBookingDate }),
+      body: JSON.stringify({ invoiceIds: ids }),
     });
     if (!res.ok) {
       notify.error(confirmError(res));
@@ -330,23 +307,7 @@ async function confirmPaid() {
                   @update:model-value="(name: string | null) => setColumn(key, name)"
                 />
               </div>
-              <div class="field">
-                <label for="bookings-from">Bookings from</label>
-                <DatePicker
-                  v-model="bookingsFrom"
-                  input-id="bookings-from"
-                  date-format="dd.mm.yy"
-                  show-icon
-                  show-button-bar
-                  data-testid="bookings-from"
-                />
-              </div>
             </div>
-            <small class="muted">
-              "Bookings from" starts at the newest booking day of the last confirmed import, so
-              bookings you already handled are not proposed again. Clear it to match every booking
-              in the file.
-            </small>
           </div>
         </template>
       </Card>
@@ -398,11 +359,6 @@ async function confirmPaid() {
             @click="confirmPaid"
           />
         </div>
-        <small v-if="hiddenBefore > 0 && bookingsFrom" class="muted" data-testid="hidden-bookings">
-          {{ hiddenBefore }} {{ hiddenBefore === 1 ? 'booking' : 'bookings' }} before
-          {{ formatDate(toIsoDate(bookingsFrom)) }}
-          {{ hiddenBefore === 1 ? 'is' : 'are' }} not shown.
-        </small>
 
         <DataTable :value="tableRows" data-key="key" size="small" :row-class="() => 'match-row'">
           <template #empty>No booking matches an open invoice.</template>

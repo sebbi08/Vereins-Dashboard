@@ -22,11 +22,6 @@ pairs the user confirms as paid.
   in the database (`SystemSetting`), so they apply on every computer.
 - **A differing amount** is proposed only when the invoice number is clearly in the purpose text.
   Such pairs are flagged "Amount differs" with the difference and are never preselected.
-- **Overlapping exports (added 2026-10-12):** no booking is stored, so a booking that was used
-  before would be proposed again by the next export that still contains it. When an import is
-  confirmed, the app therefore remembers the newest booking day **of that CSV** (always taken from
-  the file, never the day of the import). The next import starts at that day (inclusive) by
-  default; the user can change or clear the date.
 - **Out of scope:** one booking paying several invoices, partial payments. These are marked paid
   by hand.
 
@@ -99,11 +94,8 @@ page already loads all invoices and filters in the browser, so there is no `paid
 
 ### Import settings
 
-`GET /api/settings/booking-import` → `StoredBookingImportSettings`: the `BookingImportSettings`
-(defaults when nothing is stored: `utf-16le`, `;`, columns `Buchungstag`, `Empfänger`,
-`Verwendungszweck`, `Betrag`) plus `lastBookingDate: string | null` (`YYYY-MM-DD`), the newest
-booking day of the import confirmed last. It lives in its own `SystemSetting` row
-`bookingImportLastDate` and is only written by `/confirm`.
+`GET /api/settings/booking-import` → `BookingImportSettings` (defaults when nothing is stored:
+`utf-16le`, `;`, columns `Buchungstag`, `Empfänger`, `Verwendungszweck`, `Betrag`).
 
 `PUT /api/settings/booking-import` with `BookingImportSettings` → stores it. 400 for an unknown
 encoding or delimiter, or a column value that is not a string (max. 200 characters).
@@ -119,13 +111,9 @@ encoding or delimiter, or a column value that is not a string (max. 200 characte
 - This route gets its own `express.json({ limit: '2mb' })`, mounted before the global JSON parser
   in `app.ts` (the global 100 kB limit is too small for a year of bookings).
 
-`POST /api/invoice-payment/confirm` with `{ invoiceIds: number[], lastBookingDate?: string }`
+`POST /api/invoice-payment/confirm` with `{ invoiceIds: number[] }`
 
 - Marks all of them as paid in one transaction.
-- `lastBookingDate` (`YYYY-MM-DD`, the newest booking day of the file) is stored in the same
-  transaction and always replaces the stored value, also with an older day. Without it the stored
-  value stays. 400 `{ error: 'INVALID_DATE' }` for anything that is not such a day; nothing is
-  changed then.
 - 400 `{ error: 'MISSING_IDS' }` for an empty or invalid list, 400 `{ error: 'DUPLICATE_IDS' }`
   when an id appears twice.
 - 400 `{ error: 'NOT_FOUND' | 'CANCELLED', ids }` when an invoice is unknown or cancelled; nothing
@@ -217,15 +205,10 @@ candidate goes to `unmatched`. `matches` is sorted by level in that order, then 
    - Four column selects (Booking date, Payer, Purpose, Amount), options are the header names of
      the file. A stored name missing from the file leaves the select empty.
    - Changing any setting updates the preview at once, without picking the file again.
-   - A date field "Bookings from", prefilled with `lastBookingDate`: only bookings from that day
-     on (inclusive) are sent to `/match`. It can be changed or cleared; changing it drops the
-     shown proposals. The result says how many bookings were left out.
 3. **Preview:** a table with the header and the first 3 data rows; mapped columns are highlighted.
 4. **Match bookings** button, disabled until a file is read and all four columns are mapped.
    It stores the settings (`PUT /api/settings/booking-import`), converts the rows, sends the
    positive bookings to `/match` and shows the result.
-   Confirming sends the newest readable booking day of the whole file (outgoing bookings
-   included) as `lastBookingDate`.
 5. **Result:**
    - A table: selection checkbox, booking date, payer, purpose (shortened, full text as tooltip),
      booking amount, invoice (number as link to the detail page, opens in a new tab), name,

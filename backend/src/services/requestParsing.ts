@@ -336,11 +336,6 @@ export function parseBookingImportSettings(raw: unknown): Parsed<BookingImportSe
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-/** A calendar day given exactly as "YYYY-MM-DD"; null for anything else. */
-export function parseIsoDay(value: unknown): string | null {
-  return typeof value === 'string' && ISO_DAY.test(value) && parseCalendarDay(value) ? value : null;
-}
-
 /** POST /api/invoice-payment/match: incoming bookings as the browser read them from the file. */
 export function parseMatchBody(raw: unknown): Parsed<Booking[]> {
   return attempt(() => {
@@ -350,8 +345,8 @@ export function parseMatchBody(raw: unknown): Parsed<Booking[]> {
     }
     return raw.bookings.map((item: unknown): Booking => {
       if (!isRecord(item)) throw new BodyError(INVALID_BODY);
-      const date = parseIsoDay(item.date);
-      if (!date) throw new BodyError(INVALID_BODY);
+      const date = text(item, 'date');
+      if (!ISO_DAY.test(date) || !parseCalendarDay(date)) throw new BodyError(INVALID_BODY);
       const row = integer(item, 'row');
       const amountCents = integer(item, 'amountCents');
       if (row < 1 || amountCents <= 0) throw new BodyError(INVALID_BODY);
@@ -360,17 +355,8 @@ export function parseMatchBody(raw: unknown): Parsed<Booking[]> {
   });
 }
 
-export interface ConfirmBody {
-  invoiceIds: number[];
-  /** Newest booking day of the confirmed file; null when the request carries none. */
-  lastBookingDate: string | null;
-}
-
-/**
- * POST /api/invoice-payment/confirm: distinct invoice ids and, optionally, the newest booking
- * day of the file. The error is the code to answer.
- */
-export function parseConfirmBody(raw: unknown): Parsed<ConfirmBody> {
+/** POST /api/invoice-payment/confirm: distinct invoice ids; the error is the code to answer. */
+export function parseConfirmBody(raw: unknown): Parsed<number[]> {
   return attempt(() => {
     const ids = isRecord(raw) ? raw.invoiceIds : undefined;
     if (
@@ -381,11 +367,6 @@ export function parseConfirmBody(raw: unknown): Parsed<ConfirmBody> {
       throw new BodyError('MISSING_IDS');
     }
     if (new Set(ids).size !== ids.length) throw new BodyError('DUPLICATE_IDS');
-    const given = isRecord(raw) ? raw.lastBookingDate : undefined;
-    const lastBookingDate = given === undefined || given === null ? null : parseIsoDay(given);
-    if (given !== undefined && given !== null && !lastBookingDate) {
-      throw new BodyError('INVALID_DATE');
-    }
-    return { invoiceIds: ids as number[], lastBookingDate };
+    return ids as number[];
   });
 }

@@ -1,6 +1,5 @@
 import { Router } from 'express';
 import { prisma } from '../prismaClient.js';
-import { saveLastBookingDate } from '../services/bookingImportStore.js';
 import { calculateGross } from '../services/invoiceCreation.js';
 import { matchBookings, type OpenInvoice } from '../services/paymentMatching.js';
 import { parseConfirmBody, parseMatchBody } from '../services/requestParsing.js';
@@ -47,7 +46,7 @@ invoicePaymentRouter.post('/confirm', async (req, res) => {
     res.status(400).json({ error: parsed.error, ids: [] });
     return;
   }
-  const { invoiceIds: ids, lastBookingDate } = parsed.value;
+  const ids = parsed.value;
 
   const result = await prisma.$transaction(async (tx) => {
     const found = await tx.invoice.findMany({
@@ -60,8 +59,6 @@ invoicePaymentRouter.post('/confirm', async (req, res) => {
     const cancelled = ids.filter((id) => statusById.get(id) !== 'AKTIV');
     if (cancelled.length > 0) return { error: 'CANCELLED', ids: cancelled };
     await tx.invoice.updateMany({ where: { id: { in: ids } }, data: { paid: true } });
-    // The next import starts where this file ended
-    if (lastBookingDate) await saveLastBookingDate(tx, lastBookingDate);
     return { marked: ids.length };
   });
 
