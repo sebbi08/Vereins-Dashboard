@@ -84,6 +84,13 @@ function rows(wrapper: VueWrapper) {
   return wrapper.findAll('.receipt-row');
 }
 
+/** The row of one donor, wherever the sorting puts it. */
+function rowOf(wrapper: VueWrapper, name: string) {
+  const row = rows(wrapper).find((candidate) => candidate.text().includes(name));
+  if (!row) throw new Error(`No row for ${name}`);
+  return row;
+}
+
 async function setFilter(wrapper: VueWrapper, field: string, value: unknown) {
   const current = vm(wrapper).filters[field] as { matchMode: string };
   vm(wrapper).filters = { ...vm(wrapper).filters, [field]: { ...current, value } };
@@ -120,6 +127,16 @@ afterEach(() => {
 });
 
 describe('DonationReceiptView', () => {
+  it('lists the newest donation date first by default', async () => {
+    const wrapper = await mountView();
+    await setFilter(wrapper, 'status', null);
+    const names = rows(wrapper).map((row) => row.text());
+    expect(names[0]).toContain('Bernd Bach'); // 01.03.2026
+    expect(names[1]).toContain('Clara Cord'); // 10.02.2026
+    expect(names[2]).toContain('Anna Alt'); // 15.01.2026
+    expect(wrapper.find('th[aria-sort="descending"]').text()).toContain('Donation Date');
+  });
+
   it('loads all receipts (incl. cancelled) once', async () => {
     await mountView();
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -197,24 +214,24 @@ describe('DonationReceiptView', () => {
 
   it('shows number, amount, date, revision and status', async () => {
     const wrapper = await mountView();
-    const first = rows(wrapper)[0].text();
-    expect(first).toContain('SQ-2026-001');
-    expect(first).toContain('100,00');
-    expect(first).toContain('15.01.2026');
-    expect(first).toContain('R1');
-    expect(first).toContain('Active');
+    const anna = rowOf(wrapper, 'Anna Alt').text();
+    expect(anna).toContain('SQ-2026-001');
+    expect(anna).toContain('100,00');
+    expect(anna).toContain('15.01.2026');
+    expect(anna).toContain('R1');
+    expect(anna).toContain('Active');
   });
 
   it('opens a receipt on row click', async () => {
     const wrapper = await mountView();
-    await rows(wrapper)[1].trigger('click');
+    await rowOf(wrapper, 'Bernd Bach').trigger('click');
     expect(push).toHaveBeenCalledWith('/donation-receipt/2');
   });
 
   it('selects without opening when the checkbox or its cell is clicked', async () => {
     const wrapper = await mountView();
-    await rows(wrapper)[0].find('input[type="checkbox"]').trigger('click');
-    await rows(wrapper)[1].find('td[data-p-selection-column="true"]').trigger('click');
+    await rowOf(wrapper, 'Anna Alt').find('input[type="checkbox"]').trigger('click');
+    await rowOf(wrapper, 'Bernd Bach').find('td[data-p-selection-column="true"]').trigger('click');
     await flushPromises();
     expect(push).not.toHaveBeenCalled();
     expect(vm(wrapper).selection.map((r) => r.id)).toEqual([1]);
@@ -222,7 +239,7 @@ describe('DonationReceiptView', () => {
 
   it('copies a receipt without opening it', async () => {
     const wrapper = await mountView();
-    await wrapper.findAll('[data-testid="copy-receipt"]')[0].trigger('click');
+    await rowOf(wrapper, 'Anna Alt').find('[data-testid="copy-receipt"]').trigger('click');
     expect(push).toHaveBeenCalledTimes(1);
     expect(push).toHaveBeenCalledWith('/donation-receipt/new?copyFrom=1');
   });

@@ -88,6 +88,13 @@ function rows(wrapper: VueWrapper) {
   return wrapper.findAll('.invoice-row');
 }
 
+/** The row of one recipient, wherever the sorting puts it. */
+function rowOf(wrapper: VueWrapper, name: string) {
+  const row = rows(wrapper).find((candidate) => candidate.text().includes(name));
+  if (!row) throw new Error(`No row for ${name}`);
+  return row;
+}
+
 async function setFilter(wrapper: VueWrapper, field: string, value: unknown) {
   const current = vm(wrapper).filters[field] as { matchMode: string };
   vm(wrapper).filters = { ...vm(wrapper).filters, [field]: { ...current, value } };
@@ -134,6 +141,16 @@ describe('InvoiceView', () => {
     const wrapper = await mountView();
     expect(rows(wrapper)).toHaveLength(2);
     expect(wrapper.text()).not.toContain('Clara Cord');
+  });
+
+  it('lists the newest invoice date first by default', async () => {
+    const wrapper = await mountView();
+    await setFilter(wrapper, 'status', null);
+    const names = rows(wrapper).map((row) => row.text());
+    expect(names[0]).toContain('Bernd Bach'); // 01.03.2026
+    expect(names[1]).toContain('Clara Cord'); // 10.02.2026
+    expect(names[2]).toContain('Anna Alt'); // 15.01.2026
+    expect(wrapper.find('th[aria-sort="descending"]').text()).toContain('Invoice Date');
   });
 
   it('shows cancelled invoices when the status filter is cleared', async () => {
@@ -208,24 +225,24 @@ describe('InvoiceView', () => {
 
   it('shows amount, date, revision and status tags', async () => {
     const wrapper = await mountView();
-    const first = rows(wrapper)[0].text();
-    expect(first).toContain('1 / 2026');
-    expect(first).toContain('119,00');
-    expect(first).toContain('15.01.2026');
-    expect(first).toContain('R1');
-    expect(first).toContain('Active');
-    expect(rows(wrapper)[1].text()).toContain('Email sent');
+    const anna = rowOf(wrapper, 'Anna Alt').text();
+    expect(anna).toContain('1 / 2026');
+    expect(anna).toContain('119,00');
+    expect(anna).toContain('15.01.2026');
+    expect(anna).toContain('R1');
+    expect(anna).toContain('Active');
+    expect(rowOf(wrapper, 'Bernd Bach').text()).toContain('Email sent');
   });
 
   it('opens an invoice on row click', async () => {
     const wrapper = await mountView();
-    await rows(wrapper)[1].trigger('click');
+    await rowOf(wrapper, 'Bernd Bach').trigger('click');
     expect(push).toHaveBeenCalledWith('/invoice/2');
   });
 
   it('does not open the invoice when its checkbox is clicked', async () => {
     const wrapper = await mountView();
-    const checkbox = rows(wrapper)[0].find('input[type="checkbox"]');
+    const checkbox = rowOf(wrapper, 'Anna Alt').find('input[type="checkbox"]');
     await checkbox.trigger('click');
     await flushPromises();
     expect(push).not.toHaveBeenCalled();
@@ -234,13 +251,13 @@ describe('InvoiceView', () => {
 
   it('does not open the invoice when the selection cell is clicked', async () => {
     const wrapper = await mountView();
-    await rows(wrapper)[0].find('td[data-p-selection-column="true"]').trigger('click');
+    await rowOf(wrapper, 'Anna Alt').find('td[data-p-selection-column="true"]').trigger('click');
     expect(push).not.toHaveBeenCalled();
   });
 
   it('copies an invoice without opening it', async () => {
     const wrapper = await mountView();
-    await wrapper.findAll('[data-testid="copy-invoice"]')[0].trigger('click');
+    await rowOf(wrapper, 'Anna Alt').find('[data-testid="copy-invoice"]').trigger('click');
     expect(push).toHaveBeenCalledTimes(1);
     expect(push).toHaveBeenCalledWith('/invoice/new?copyFrom=1');
   });

@@ -145,6 +145,8 @@ function onRowClick(event: DataTableRowClickEvent<DonationReceiptListItem>) {
         :value="receipts"
         data-key="id"
         v-bind="TABLE_DEFAULTS"
+        sort-field="donationDate"
+        :sort-order="-1"
         :global-filter-fields="['number', 'donorName']"
         :loading="loading"
         row-hover

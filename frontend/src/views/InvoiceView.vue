@@ -214,6 +214,8 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
         :value="invoices"
         data-key="id"
         v-bind="TABLE_DEFAULTS"
+        sort-field="invoiceDate"
+        :sort-order="-1"
         :global-filter-fields="['number', 'recipientName']"
         :loading="loading"
         row-hover
