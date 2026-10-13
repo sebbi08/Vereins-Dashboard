@@ -70,7 +70,11 @@ function reportLoadFailure(message: string) {
   else loadError.value = message;
 }
 
+/** Counts started and finished saves, so a load can tell a save happened while it was running. */
+let emailTextSaves = 0;
+
 async function loadData() {
+  const savesAtStart = emailTextSaves;
   loading.value = invoice.value === null;
   loadError.value = '';
   try {
@@ -81,7 +85,10 @@ async function loadData() {
     }
     invoice.value = (await res.json()) as InvoiceDto;
     // The page reloads itself while a PDF is pending: never overwrite a text being edited
-    if (!emailTextDirty.value) {
+    // A cancelled invoice cannot be edited: its stored text always wins
+    const settled =
+      !emailTextDirty.value && !busy.value['email-text'] && savesAtStart === emailTextSaves;
+    if (invoice.value.status !== 'AKTIV' || settled) {
       const loaded = {
         emailSubject: invoice.value.emailSubject,
         emailBody: invoice.value.emailBody,
@@ -203,6 +210,7 @@ async function retryPdf(rev: InvoiceRevisionDto) {
 }
 
 async function saveEmailText() {
+  emailTextSaves++;
   const text = { ...emailText.value };
   const ok = await run(
     'email-text',
@@ -215,18 +223,23 @@ async function saveEmailText() {
     (body) => body.error || 'Error saving the email text',
   );
   if (ok) {
+    emailTextSaves++;
     savedEmailText.value = text;
     notify.success('Email text saved');
+  } else {
+    // The invoice may have been cancelled elsewhere; an active one keeps the edits (still dirty)
+    await loadData();
   }
 }
 
 async function sendEmail(rev: InvoiceRevisionDto) {
+  if (emailTextDirty.value) return;
   const confirmed = await confirmAction({
     message: `Send invoice ${invoice.value?.number} to ${rev.inputs.email.trim()}?`,
     header: 'Send invoice',
     acceptLabel: 'Send email',
   });
-  if (!confirmed) return;
+  if (!confirmed || emailTextDirty.value) return;
   const ok = await run(
     `email-${rev.id}`,
     () => fetch(`/api/invoice/revision/${rev.id}/send-email`, { method: 'POST' }),
@@ -238,6 +251,7 @@ async function sendEmail(rev: InvoiceRevisionDto) {
 }
 
 async function sendTestEmail(rev: InvoiceRevisionDto) {
+  if (emailTextDirty.value) return;
   const ok = await run(
     `test-${rev.id}`,
     () => fetch(`/api/invoice/revision/${rev.id}/send-test-email`, { method: 'POST' }),

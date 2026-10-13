@@ -75,7 +75,7 @@ function makeInvoice(overrides: Partial<InvoiceDto> = {}): InvoiceDto {
   };
 }
 
-type Reply = { status: number; body?: unknown };
+type Reply = { status: number; body?: unknown; gate?: Promise<void> };
 let replies: Record<string, Reply>;
 const push = vi.fn();
 
@@ -83,6 +83,7 @@ const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
   const key = `${init?.method ?? 'GET'} ${url}`;
   const reply = replies[key];
   if (!reply) throw new Error(`Unexpected fetch: ${key}`);
+  if (reply.gate) await reply.gate;
   return {
     ok: reply.status < 400,
     status: reply.status,
@@ -171,6 +172,10 @@ describe('InvoiceDetailView', () => {
     expect((wrapper.find('[data-testid="email-body"]').element as HTMLTextAreaElement).value).toBe(
       EDITED.emailBody,
     );
+    // A failed save reloads the invoice (it may have been cancelled elsewhere), keeping the edits
+    expect(calls().filter((c) => c === 'GET /api/invoice/1')).toHaveLength(2);
+    expect(wrapper.find('[data-testid="save-email-text-hint"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="send-test-email"]').attributes('disabled')).toBeDefined();
   });
 
   it('locks sending while the email text has unsaved edits', async () => {
@@ -201,6 +206,47 @@ describe('InvoiceDetailView', () => {
     expect((wrapper.find('[data-testid="email-body"]').element as HTMLTextAreaElement).value).toBe(
       EDITED.emailBody,
     );
+  });
+
+  it('does not let a reload that started before a save put the old text back', async () => {
+    replies['PATCH /api/invoice/1/paid'] = { status: 200, body: { id: 1, paid: true } };
+    replies['PATCH /api/invoice/1/email-text'] = { status: 200, body: EDITED };
+    const wrapper = await mountView();
+
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    replies['GET /api/invoice/1'] = { status: 200, body: makeInvoice({ paid: true }), gate };
+    await wrapper.find('[data-testid="mark-paid"]').trigger('click');
+    await flushPromises(); // the reload's GET is now pending
+
+    await editEmailText(wrapper);
+    await wrapper.find('[data-testid="save-email-text"]').trigger('click');
+    await flushPromises();
+    release(); // the GET answers with the old text
+    await flushPromises();
+
+    expect((wrapper.find('[data-testid="email-body"]').element as HTMLTextAreaElement).value).toBe(
+      EDITED.emailBody,
+    );
+    expect(wrapper.find('[data-testid="save-email-text"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('[data-testid="send-test-email"]').attributes('disabled')).toBeUndefined();
+  });
+
+  it('takes the server text when the invoice is cancelled with unsaved edits', async () => {
+    replies['PATCH /api/invoice/1/cancel'] = { status: 200, body: {} };
+    const wrapper = await mountView();
+    await editEmailText(wrapper);
+
+    replies['GET /api/invoice/1'] = { status: 200, body: makeInvoice({ status: 'STORNIERT' }) };
+    await wrapper.find('[data-testid="cancel-invoice"]').trigger('click');
+    await flushPromises();
+
+    const invoice = makeInvoice();
+    expect((wrapper.find('[data-testid="email-subject"]').element as HTMLInputElement).value).toBe(
+      invoice.emailSubject,
+    );
+    expect(wrapper.find('[data-testid="email-subject"]').attributes('disabled')).toBeDefined();
+    expect(await leaveGuards[leaveGuards.length - 1]()).toBe(true);
   });
 
   it('asks before leaving with an unsaved email text', async () => {
