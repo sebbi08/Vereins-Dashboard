@@ -10,10 +10,12 @@ const { notify, confirmAction } = vi.hoisted(() => ({
   confirmAction: vi.fn(),
 }));
 
+const { leaveGuards } = vi.hoisted(() => ({ leaveGuards: [] as Array<() => unknown> }));
 vi.mock('vue-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('vue-router')>()),
   useRoute: vi.fn(),
   useRouter: vi.fn(),
+  onBeforeRouteLeave: (guard: () => unknown) => leaveGuards.push(guard),
 }));
 vi.mock('../composables/useNotify', () => ({ useNotify: () => notify }));
 vi.mock('../composables/useConfirmAction', () => ({
@@ -102,6 +104,7 @@ async function mountView(): Promise<VueWrapper> {
 
 beforeEach(() => {
   replies = { 'GET /api/invoice/1': { status: 200, body: makeInvoice() } };
+  leaveGuards.length = 0;
   fetchMock.mockClear();
   push.mockReset();
   confirmAction.mockReset().mockResolvedValue(true);
@@ -118,6 +121,106 @@ afterEach(() => {
 });
 
 describe('InvoiceDetailView', () => {
+  const EDITED = { emailSubject: 'Mein Betreff {number}', emailBody: 'Mein Text' };
+
+  async function editEmailText(wrapper: VueWrapper) {
+    await wrapper.find('[data-testid="email-subject"]').setValue(EDITED.emailSubject);
+    await wrapper.find('[data-testid="email-body"]').setValue(EDITED.emailBody);
+    await flushPromises();
+  }
+
+  it('shows the email text of the invoice', async () => {
+    const wrapper = await mountView();
+    const invoice = makeInvoice();
+    expect((wrapper.find('[data-testid="email-subject"]').element as HTMLInputElement).value).toBe(
+      invoice.emailSubject,
+    );
+    expect((wrapper.find('[data-testid="email-body"]').element as HTMLTextAreaElement).value).toBe(
+      invoice.emailBody,
+    );
+    expect(wrapper.find('[data-testid="save-email-text"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('saves an edited email text', async () => {
+    replies['PATCH /api/invoice/1/email-text'] = { status: 200, body: EDITED };
+    const wrapper = await mountView();
+    await editEmailText(wrapper);
+
+    await wrapper.find('[data-testid="save-email-text"]').trigger('click');
+    await flushPromises();
+
+    const patch = fetchMock.mock.calls.find(([url]) => url === '/api/invoice/1/email-text');
+    expect(patch?.[1]?.method).toBe('PATCH');
+    expect(JSON.parse(String(patch?.[1]?.body))).toEqual(EDITED);
+    expect(notify.success).toHaveBeenCalledWith('Email text saved');
+    expect(wrapper.find('[data-testid="save-email-text"]').attributes('disabled')).toBeDefined();
+  });
+
+  it('keeps the edits and reports the error when saving fails', async () => {
+    replies['PATCH /api/invoice/1/email-text'] = {
+      status: 400,
+      body: { error: 'Email subject is required' },
+    };
+    const wrapper = await mountView();
+    await editEmailText(wrapper);
+
+    await wrapper.find('[data-testid="save-email-text"]').trigger('click');
+    await flushPromises();
+
+    expect(notify.error).toHaveBeenCalledWith('Email subject is required');
+    expect((wrapper.find('[data-testid="email-body"]').element as HTMLTextAreaElement).value).toBe(
+      EDITED.emailBody,
+    );
+  });
+
+  it('locks sending while the email text has unsaved edits', async () => {
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="send-test-email"]').attributes('disabled')).toBeUndefined();
+    expect(wrapper.find('[data-testid="save-email-text-hint"]').exists()).toBe(false);
+
+    await editEmailText(wrapper);
+
+    expect(wrapper.find('[data-testid="send-email"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('[data-testid="send-test-email"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('[data-testid="save-email-text-hint"]').text()).toBe(
+      'Save the email text first',
+    );
+  });
+
+  it('keeps unsaved email text when the invoice is reloaded', async () => {
+    replies['PATCH /api/invoice/1/paid'] = { status: 200, body: { id: 1, paid: true } };
+    const wrapper = await mountView();
+    await editEmailText(wrapper);
+
+    // Marking as paid reloads the invoice, like the PDF polling does
+    replies['GET /api/invoice/1'] = { status: 200, body: makeInvoice({ paid: true }) };
+    await wrapper.find('[data-testid="mark-paid"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="payment-status"]').text()).toBe('Paid');
+    expect((wrapper.find('[data-testid="email-body"]').element as HTMLTextAreaElement).value).toBe(
+      EDITED.emailBody,
+    );
+  });
+
+  it('asks before leaving with an unsaved email text', async () => {
+    const wrapper = await mountView();
+    const tryLeave = () => leaveGuards[leaveGuards.length - 1]();
+    expect(await tryLeave()).toBe(true);
+
+    await editEmailText(wrapper);
+    confirmAction.mockResolvedValue(false);
+    expect(await tryLeave()).toBe(false);
+  });
+
+  it('shows the email text of a cancelled invoice read-only', async () => {
+    replies['GET /api/invoice/1'] = { status: 200, body: makeInvoice({ status: 'STORNIERT' }) };
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="email-subject"]').attributes('disabled')).toBeDefined();
+    expect(wrapper.find('[data-testid="save-email-text"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="reset-email-text"]').exists()).toBe(false);
+  });
+
   it('shows number, status and the newest revision expanded', async () => {
     const wrapper = await mountView();
     expect(wrapper.find('[data-testid="page-title"]').text()).toBe('Invoice 1 / 2026');

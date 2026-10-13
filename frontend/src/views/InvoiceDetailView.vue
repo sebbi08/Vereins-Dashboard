@@ -6,15 +6,22 @@ import AccordionPanel from 'primevue/accordionpanel';
 import Button from 'primevue/button';
 import Card from 'primevue/card';
 import Message from 'primevue/message';
-import { calculateInvoiceTotals, type InvoiceDto, type InvoiceRevisionDto } from 'shared';
+import {
+  calculateInvoiceTotals,
+  type InvoiceDto,
+  type InvoiceEmailText,
+  type InvoiceRevisionDto,
+} from 'shared';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import InvoiceEmailTextEditor from '../components/InvoiceEmailText.vue';
 import PdfFailureNotice from '../components/PdfFailureNotice.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
 import StatusTag from '../components/ui/StatusTag.vue';
 import { useActionRunner } from '../composables/useActionRunner';
 import { useConfirmAction } from '../composables/useConfirmAction';
 import { useNotify } from '../composables/useNotify';
+import { useUnsavedChangesGuard } from '../composables/useUnsavedChangesGuard';
 import { formatCents, formatDate, formatDateTime } from '../utils/format';
 import {
   documentStatusTag,
@@ -37,6 +44,23 @@ const loading = ref(false);
 const loadError = ref('');
 const openPanels = ref<number[]>([]);
 
+const emailText = ref<InvoiceEmailText>({ emailSubject: '', emailBody: '' });
+const savedEmailText = ref<InvoiceEmailText>({ emailSubject: '', emailBody: '' });
+const emailTextInvalid = ref(false);
+const emailTextDirty = computed(
+  () =>
+    emailText.value.emailSubject !== savedEmailText.value.emailSubject ||
+    emailText.value.emailBody !== savedEmailText.value.emailBody,
+);
+useUnsavedChangesGuard(() => emailTextDirty.value);
+
+/** What "Reset from template" builds the text from: the revision that would be sent. */
+const emailTextSource = computed(
+  () =>
+    invoice.value?.activeRevision?.inputs ??
+    invoice.value?.revisions[0]?.inputs ?? { emailSalutation: '', name: '', title: '', email: '' },
+);
+
 const isActive = computed(() => invoice.value?.status === 'AKTIV');
 const title = computed(() => (invoice.value ? `Invoice ${invoice.value.number}` : 'Invoice'));
 
@@ -56,6 +80,15 @@ async function loadData() {
       return;
     }
     invoice.value = (await res.json()) as InvoiceDto;
+    // The page reloads itself while a PDF is pending: never overwrite a text being edited
+    if (!emailTextDirty.value) {
+      const loaded = {
+        emailSubject: invoice.value.emailSubject,
+        emailBody: invoice.value.emailBody,
+      };
+      emailText.value = { ...loaded };
+      savedEmailText.value = loaded;
+    }
     if (openPanels.value.length === 0 && invoice.value.revisions.length > 0) {
       openPanels.value = [invoice.value.revisions[0].id];
     }
@@ -166,6 +199,24 @@ async function retryPdf(rev: InvoiceRevisionDto) {
       notify.success('PDF generated successfully');
     }
     await loadData();
+  }
+}
+
+async function saveEmailText() {
+  const text = { ...emailText.value };
+  const ok = await run(
+    'email-text',
+    () =>
+      fetch(`/api/invoice/${id}/email-text`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(text),
+      }),
+    (body) => body.error || 'Error saving the email text',
+  );
+  if (ok) {
+    savedEmailText.value = text;
+    notify.success('Email text saved');
   }
 }
 
@@ -303,6 +354,33 @@ function downloadPdf(rev: InvoiceRevisionDto) {
       </Card>
 
       <section class="stack gap-sm">
+        <h3 class="section-title">Email</h3>
+        <Card>
+          <template #content>
+            <div class="stack">
+              <InvoiceEmailTextEditor
+                v-model:subject="emailText.emailSubject"
+                v-model:body="emailText.emailBody"
+                v-model:invalid="emailTextInvalid"
+                :source="emailTextSource"
+                :disabled="!isActive"
+              />
+              <div v-if="isActive" class="row">
+                <Button
+                  label="Save"
+                  icon="pi pi-save"
+                  :disabled="!emailTextDirty || emailTextInvalid"
+                  :loading="busy['email-text']"
+                  data-testid="save-email-text"
+                  @click="saveEmailText"
+                />
+              </div>
+            </div>
+          </template>
+        </Card>
+      </section>
+
+      <section class="stack gap-sm">
         <h3 class="section-title">Revisions</h3>
         <p v-if="invoice.revisions.length === 0" class="muted">No revisions available</p>
         <Accordion v-else v-model:value="openPanels" multiple lazy>
@@ -407,6 +485,7 @@ function downloadPdf(rev: InvoiceRevisionDto) {
                     severity="secondary"
                     outlined
                     :loading="busy[`test-${rev.id}`]"
+                    :disabled="emailTextDirty"
                     data-testid="send-test-email"
                     @click="sendTestEmail(rev)"
                   />
@@ -421,7 +500,7 @@ function downloadPdf(rev: InvoiceRevisionDto) {
                     icon="pi pi-envelope"
                     size="small"
                     :loading="busy[`email-${rev.id}`]"
-                    :disabled="!rev.inputs.email.trim()"
+                    :disabled="!rev.inputs.email.trim() || emailTextDirty"
                     data-testid="send-email"
                     @click="sendEmail(rev)"
                   />
@@ -437,6 +516,13 @@ function downloadPdf(rev: InvoiceRevisionDto) {
                     data-testid="no-email-hint"
                   >
                     No email address on this invoice
+                  </small>
+                  <small
+                    v-if="emailTextDirty && rev.pdfStatus === 'OK' && isActive && isLatest(rev)"
+                    class="muted"
+                    data-testid="save-email-text-hint"
+                  >
+                    Save the email text first
                   </small>
                   <StatusTag
                     v-if="rev.emailStatus !== 'NOT_SENT'"
