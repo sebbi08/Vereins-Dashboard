@@ -122,6 +122,8 @@ Key convention: Recipient/donor fields on the revision form are editable (not re
 - Revision creation must update the linked recipient/donor record in place
 - Canceled invoices cannot be sent by email (enforced at service layer)
 - Receipts require tax office, tax number and exemption date
+- The email text of an invoice is stored on the invoice or draft; a new revision or re-saving a
+  draft must not change it
 
 ## E2E Tests
 

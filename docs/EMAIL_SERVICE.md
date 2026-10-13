@@ -20,8 +20,21 @@ and read on every send. There are no SMTP environment variables.
 | `emailBody`        | Plain-text body template                                            |
 | `emailTestAddress` | Address for test sends; also BCC'd on every real send (see below)   |
 
-Templates support `{salutation}`, `{name}`, `{number}`, `{title}` and `{email}`, filled from the
-revision. Mails are plain text with the revision PDF attached as `<number>.pdf`.
+Templates support `{salutation}`, `{name}`, `{number}`, `{title}` and `{email}`. Mails are plain
+text with the revision PDF attached as `<number>.pdf`.
+
+## Text per invoice
+
+The templates are only the starting point. When a draft is first saved or an invoice is created,
+subject and text are built from them (`services/invoiceEmailText.ts`) and stored on the draft or
+invoice (`emailSubject`, `emailBody`); every placeholder is filled in except `{number}`. From then
+on only the user changes the text: in the form of a saved draft, or in the "Email" card on the
+invoice page (`PATCH /api/invoice/:id/email-text`). "Reset from template" builds it anew
+(`POST /api/email-settings/invoice-text`). Saving a draft again or creating a new revision keeps
+the text; activating a draft copies it to the invoice.
+
+Sending uses the stored text and fills in `{number}` — nothing else. Invoices from before this
+existed have no stored text; they are sent with what the templates give at that moment.
 
 ## Two sends per revision
 
@@ -68,4 +81,5 @@ settings. The settings page disables the button while there are unsaved edits.
 On the invoice detail page the latest active revision with a finished PDF shows _Send Test
 Email_ and, until it was sent, _Send via Email_. The latter asks for confirmation naming the
 invoice and the address, and is disabled when the invoice has no address. The status tag shows
-`SENT`/`FAILED`, with the error text for failures.
+`SENT`/`FAILED`, with the error text for failures. While the email card has unsaved edits, both
+send buttons are disabled.
