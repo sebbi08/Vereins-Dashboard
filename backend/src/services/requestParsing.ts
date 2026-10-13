@@ -4,6 +4,7 @@ import type {
   BookingImportSettings,
   ConfirmedPayment,
   InvoiceContent,
+  InvoiceEmailText,
   InvoiceLineItem,
   ReceiptInputs,
 } from 'shared';
@@ -14,6 +15,10 @@ import {
   MAX_BOOKINGS_PER_MATCH,
   MAX_COLUMN_NAME_LENGTH,
 } from '../../../shared/src/invoicePayments.js';
+import {
+  MAX_EMAIL_BODY_LENGTH,
+  MAX_EMAIL_SUBJECT_LENGTH,
+} from '../../../shared/src/invoiceEmailText.js';
 import type { RecipientData, RecipientSelection } from './invoiceCreation.js';
 
 /**
@@ -179,15 +184,37 @@ export function todayAsCalendarDay(now = new Date()): Date {
   return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()));
 }
 
-/** POST/PUT /api/invoice-draft: only the name is required. */
+/** Subject and text of an invoice email as edited by the user. */
+export function parseEmailText(raw: unknown): Parsed<InvoiceEmailText> {
+  return attempt(() => {
+    if (!isRecord(raw)) throw new BodyError(INVALID_BODY);
+    const emailSubject = text(raw, 'emailSubject');
+    const emailBody = text(raw, 'emailBody');
+    if (
+      /[\r\n]/.test(emailSubject) ||
+      emailSubject.length > MAX_EMAIL_SUBJECT_LENGTH ||
+      emailBody.length > MAX_EMAIL_BODY_LENGTH
+    ) {
+      throw new BodyError(INVALID_BODY);
+    }
+    if (!emailSubject.trim()) throw new BodyError('Email subject is required');
+    return { emailSubject, emailBody };
+  });
+}
+
+/** POST/PUT /api/invoice-draft: only the name is required; an edited email text is optional. */
 export function parseDraftBody(
   raw: unknown,
-): Parsed<RecipientSelection & { inputs: InvoiceContent }> {
+): Parsed<RecipientSelection & { inputs: InvoiceContent; emailText?: InvoiceEmailText }> {
   return attempt(() => {
     if (!isRecord(raw) || !isRecord(raw.inputs)) throw new BodyError(INVALID_BODY);
     const name = raw.inputs.name;
     if (typeof name !== 'string' || !name.trim()) throw new BodyError('Name is required');
-    return { ...recipientSelection(raw), inputs: invoiceContent(raw.inputs, false) };
+    const body = { ...recipientSelection(raw), inputs: invoiceContent(raw.inputs, false) };
+    if (raw.emailText === undefined) return body;
+    const emailText = parseEmailText(raw.emailText);
+    if ('error' in emailText) throw new BodyError(emailText.error);
+    return { ...body, emailText: emailText.value };
   });
 }
 

@@ -106,6 +106,8 @@ const draftDto: InvoiceDraftDto = {
     email: 'd@example.com',
     emailSalutation: 'Hallo',
   },
+  emailSubject: 'Ihre Rechnung {number}',
+  emailBody: 'Hallo\n\nanbei Ihre Rechnung {number}.',
   createdAt: '2026-10-01T10:00:00Z',
   updatedAt: '2026-10-01T10:00:00Z',
 };

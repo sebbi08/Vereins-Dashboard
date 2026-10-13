@@ -64,6 +64,8 @@ function makeInvoice(overrides: Partial<InvoiceDto> = {}): InvoiceDto {
       salutation: null,
     },
     invoiceDate: '2026-10-05T00:00:00.000Z',
+    emailSubject: 'Ihre Rechnung {number}',
+    emailBody: 'Hallo\n\nanbei Ihre Rechnung {number}.',
     createdAt: '2026-10-05T10:00:00.000Z',
     activeRevision: null,
     revisions: [revision({})],

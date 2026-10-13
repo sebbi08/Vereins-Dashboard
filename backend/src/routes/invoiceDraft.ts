@@ -16,6 +16,7 @@ import {
   type RecipientSelection,
 } from '../services/invoiceCreation.js';
 import { attemptInvoicePdfGeneration } from '../services/invoicePdf.js';
+import { buildInvoiceEmailText, storedOrBuiltEmailText } from '../services/invoiceEmailText.js';
 import { parseDraftBody } from '../services/requestParsing.js';
 
 export const invoiceDraftRouter = Router();
@@ -113,6 +114,7 @@ invoiceDraftRouter.get('/:id', async (req, res) => {
       salutation: draft.recipient.salutation,
     },
     inputs: draftToContent(draft),
+    ...storedOrBuiltEmailText(draft, await prisma.systemSetting.findMany(), draft),
     createdAt: draft.createdAt.toISOString(),
     updatedAt: draft.updatedAt.toISOString(),
   };
@@ -135,8 +137,9 @@ invoiceDraftRouter.post('/', async (req, res) => {
   const result = await prisma
     .$transaction(async (tx: Prisma.TransactionClient) => {
       const recipientId = await saveRecipient(tx, body, body.inputs);
+      const emailText = buildInvoiceEmailText(await tx.systemSetting.findMany(), body.inputs);
       return tx.invoiceDraft.create({
-        data: { recipientId, ...contentToDraftData(body.inputs) },
+        data: { recipientId, ...contentToDraftData(body.inputs), ...emailText },
       });
     })
     .catch((err: unknown) => {
@@ -180,7 +183,7 @@ invoiceDraftRouter.put('/:id', async (req, res) => {
       const recipientId = await saveRecipient(tx, body, body.inputs);
       return tx.invoiceDraft.update({
         where: { id },
-        data: { recipientId, ...contentToDraftData(body.inputs) },
+        data: { recipientId, ...contentToDraftData(body.inputs), ...(body.emailText ?? {}) },
       });
     })
     .catch((err: unknown) => {
@@ -256,11 +259,13 @@ invoiceDraftRouter.post('/:id/activate', async (req, res) => {
 
   const result = await prisma
     .$transaction(async (tx: Prisma.TransactionClient) => {
+      const emailText = storedOrBuiltEmailText(draft, await tx.systemSetting.findMany(), draft);
       const { invoice, revision } = await createInvoiceWithFirstRevision(tx, {
         recipientId: draft.recipientId,
         inputs,
         invoiceDate: todayAsInvoiceDate(),
         templateId: invoiceTemplate.id,
+        emailText,
       });
       // Throws P2025 if a concurrent activation already deleted the draft,
       // which rolls back the invoice created above.

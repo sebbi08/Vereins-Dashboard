@@ -5,6 +5,7 @@ import { prisma } from '../prismaClient.js';
 import { fileStem, sendDocumentBatch, sendPdf } from '../services/documentDownloads.js';
 import { createRetryPdfHandler } from '../services/documentPdf.js';
 import { sendInvoiceEmail } from '../services/emailService.js';
+import { storedOrBuiltEmailText } from '../services/invoiceEmailText.js';
 import { createRevisionLock } from '../services/revisionLock.js';
 import {
   calculateGross,
@@ -286,6 +287,13 @@ invoiceRouter.get('/:id', async (req, res) => {
     paid: invoice.paid,
     recipient: invoice.recipient,
     invoiceDate: invoice.invoiceDate.toISOString(),
+    // Invoices from before texts were stored show what the template gives for the current revision
+    ...storedOrBuiltEmailText(
+      invoice,
+      await prisma.systemSetting.findMany(),
+      activeRevision ??
+        invoice.revisions[0] ?? { emailSalutation: '', name: '', title: '', email: '' },
+    ),
     createdAt: invoice.createdAt.toISOString(),
     activeRevision: activeRevision ? revisionToDto(activeRevision) : null,
     revisions: invoice.revisions.map(revisionToDto),

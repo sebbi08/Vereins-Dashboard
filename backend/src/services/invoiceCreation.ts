@@ -1,6 +1,7 @@
-import type { InvoiceContent, InvoiceLineItem } from 'shared';
+import type { InvoiceContent, InvoiceEmailText, InvoiceLineItem } from 'shared';
 import { calculateInvoiceTotals } from '../../../shared/src/invoiceTotals.js';
 import type { Prisma } from '../../prisma/generated/client.js';
+import { buildInvoiceEmailText } from './invoiceEmailText.js';
 import { generateInvoiceNumber } from './invoiceNumber.js';
 
 export class RecipientError extends Error {}
@@ -93,13 +94,22 @@ export async function saveRecipient(
 
 export async function createInvoiceWithFirstRevision(
   tx: Prisma.TransactionClient,
-  params: { recipientId: number; inputs: InvoiceContent; invoiceDate: Date; templateId: number },
+  params: {
+    recipientId: number;
+    inputs: InvoiceContent;
+    invoiceDate: Date;
+    templateId: number;
+    /** The draft's text when a draft becomes an invoice; built from the template otherwise. */
+    emailText?: InvoiceEmailText;
+  },
 ) {
   const { recipientId, inputs, invoiceDate, templateId } = params;
   const { number, year, runningNumber } = await generateInvoiceNumber(tx);
+  const emailText =
+    params.emailText ?? buildInvoiceEmailText(await tx.systemSetting.findMany(), inputs);
 
   const invoice = await tx.invoice.create({
-    data: { number, year, runningNumber, recipientId, invoiceDate },
+    data: { number, year, runningNumber, recipientId, invoiceDate, ...emailText },
   });
 
   const revision = await tx.invoiceRevision.create({

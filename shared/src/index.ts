@@ -72,6 +72,9 @@ export interface InvoiceDto {
   paid: boolean;
   recipient: InvoiceRecipientDto;
   invoiceDate: string;
+  /** Subject and text the invoice is sent with; `{number}` is filled in on sending. */
+  emailSubject: string;
+  emailBody: string;
   createdAt: string;
   activeRevision: InvoiceRevisionDto | null;
   revisions: InvoiceRevisionDto[];
@@ -81,6 +84,9 @@ export interface InvoiceDraftDto {
   id: number;
   recipient: InvoiceRecipientDto;
   inputs: InvoiceContent;
+  /** Subject and text the invoice is sent with; `{number}` is filled in on sending. */
+  emailSubject: string;
+  emailBody: string;
   createdAt: string;
   updatedAt: string;
 }
