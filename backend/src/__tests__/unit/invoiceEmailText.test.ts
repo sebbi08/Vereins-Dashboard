@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildInvoiceEmailText,
+  DEFAULT_EMAIL_SUBJECT,
   fillInvoiceNumber,
   storedOrBuiltEmailText,
 } from '../../services/invoiceEmailText';
+import { MAX_EMAIL_BODY_LENGTH } from '../../../../shared/src/invoiceEmailText';
 
 const values = {
   emailSalutation: 'Sehr geehrte Frau Alt',
@@ -64,6 +66,25 @@ describe('buildInvoiceEmailText', () => {
   });
 });
 
+describe('buildInvoiceEmailText limits', () => {
+  it('falls back to the default subject when the built subject is blank', () => {
+    for (const value of ['{title}', '   ', '{title}\n ']) {
+      const text = buildInvoiceEmailText([{ key: 'emailSubject', value }], {
+        ...values,
+        title: '',
+      });
+      expect(text.emailSubject).toBe(DEFAULT_EMAIL_SUBJECT);
+    }
+  });
+
+  it('cuts the body to the maximum length', () => {
+    const long = [{ key: 'emailBody', value: '{name}' + 'x'.repeat(MAX_EMAIL_BODY_LENGTH) }];
+    const text = buildInvoiceEmailText(long, values);
+    expect(text.emailBody).toHaveLength(MAX_EMAIL_BODY_LENGTH);
+    expect(text.emailBody.startsWith('Anna Alt')).toBe(true);
+  });
+});
+
 describe('fillInvoiceNumber', () => {
   it('replaces every {number} and nothing else', () => {
     expect(fillInvoiceNumber('Nr. {number} / {number}, {name}', '7 / 2026')).toBe(
@@ -83,6 +104,5 @@ describe('storedOrBuiltEmailText', () => {
     expect(
       storedOrBuiltEmailText({ emailSubject: null, emailBody: null }, settings, values),
     ).toEqual(built);
-    expect(storedOrBuiltEmailText({}, settings, values)).toEqual(built);
   });
 });

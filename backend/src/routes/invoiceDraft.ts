@@ -156,6 +156,7 @@ invoiceDraftRouter.get('/:id/preview', async (req, res) => {
   }
 
   res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Disposition', 'inline; filename="invoice-preview.pdf"');
   res.send(pdf);
 });

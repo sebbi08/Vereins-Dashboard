@@ -84,7 +84,12 @@ describe('sendInvoiceEmail — dev override', () => {
     title: 'Jahresbeitrag 2024',
     pdfStatus: 'OK' as const,
     filePath: 'invoices/1/r1/doc.pdf',
-    invoice: { number: '2024-001', status: 'AKTIV' as string },
+    invoice: {
+      number: '2024-001',
+      status: 'AKTIV' as string,
+      emailSubject: null as string | null,
+      emailBody: null as string | null,
+    },
   };
 
   function buildPrismaMock(

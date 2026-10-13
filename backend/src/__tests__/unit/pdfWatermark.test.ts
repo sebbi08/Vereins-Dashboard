@@ -43,7 +43,7 @@ describe('addWatermark', () => {
     expect(marked[0]).toContain(Buffer.from('Seite 1', 'latin1').toString('hex'));
   });
 
-  it('draws it half transparent, in grey and rotated', async () => {
+  it('draws it mostly transparent (35 % opacity), in grey and rotated', async () => {
     const [page] = await pageContents(await addWatermark(await twoPages(), 'Preview'));
     const watermark = page.slice(page.lastIndexOf('BT', page.indexOf(PREVIEW_HEX)) - 40);
     expect(watermark).toMatch(/\/GS-\d+ gs/); // an opacity state

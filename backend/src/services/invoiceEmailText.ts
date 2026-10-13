@@ -1,5 +1,8 @@
 import type { EmailTextValues, InvoiceEmailText } from 'shared';
-import { MAX_EMAIL_SUBJECT_LENGTH } from '../../../shared/src/invoiceEmailText.js';
+import {
+  MAX_EMAIL_BODY_LENGTH,
+  MAX_EMAIL_SUBJECT_LENGTH,
+} from '../../../shared/src/invoiceEmailText.js';
 
 export const DEFAULT_EMAIL_SUBJECT = 'Ihre Rechnung {number}';
 export const DEFAULT_EMAIL_BODY =
@@ -7,10 +10,10 @@ export const DEFAULT_EMAIL_BODY =
 
 export type SettingRow = { key: string; value: string };
 
-/** Text columns of an invoice or draft; missing or null means nothing is stored yet. */
+/** Text columns of an invoice or draft; null means nothing is stored yet. Always select both. */
 export interface StoredEmailText {
-  emailSubject?: string | null;
-  emailBody?: string | null;
+  emailSubject: string | null;
+  emailBody: string | null;
 }
 
 function template(settings: SettingRow[], key: string, fallback: string): string {
@@ -41,8 +44,12 @@ export function buildInvoiceEmailText(
     .trim()
     .slice(0, MAX_EMAIL_SUBJECT_LENGTH);
   return {
-    emailSubject: subject,
-    emailBody: fill(template(settings, 'emailBody', DEFAULT_EMAIL_BODY)),
+    // What the editor demands, so a built text can always be saved
+    emailSubject: subject || DEFAULT_EMAIL_SUBJECT,
+    emailBody: fill(template(settings, 'emailBody', DEFAULT_EMAIL_BODY)).slice(
+      0,
+      MAX_EMAIL_BODY_LENGTH,
+    ),
   };
 }
 

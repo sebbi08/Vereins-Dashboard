@@ -76,6 +76,7 @@ describe('GET /api/invoice-draft/:id/preview', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toBe('application/pdf');
     expect(res.headers['content-disposition']).toBe('inline; filename="invoice-preview.pdf"');
+    expect(res.headers['cache-control']).toBe('no-store');
     expect((res.body as Buffer).equals(PDF)).toBe(true);
     expect(previewMock).toHaveBeenCalledWith('templates/template.docx', inputs, expect.any(Date));
   });

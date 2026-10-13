@@ -3,8 +3,8 @@ import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib';
 const ANGLE = Math.PI / 4;
 
 /**
- * Draws `text` across every page: centred, rotated 45°, light grey and half transparent, about
- * 60 % of the page diagonal wide. The page content stays untouched below it.
+ * Draws `text` across every page: centred, rotated 45°, light grey and mostly transparent
+ * (35 % opacity), about 60 % of the page diagonal wide. The page content stays untouched below it.
  */
 export async function addWatermark(pdf: Buffer, text: string): Promise<Buffer> {
   const doc = await PDFDocument.load(pdf);
