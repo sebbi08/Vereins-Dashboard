@@ -17,6 +17,7 @@ import {
 } from '../services/invoiceCreation.js';
 import { attemptInvoicePdfGeneration } from '../services/invoicePdf.js';
 import { buildInvoiceEmailText, storedOrBuiltEmailText } from '../services/invoiceEmailText.js';
+import { generateInvoicePreview } from '../services/invoicePreview.js';
 import { parseDraftBody } from '../services/requestParsing.js';
 
 export const invoiceDraftRouter = Router();
@@ -119,6 +120,44 @@ invoiceDraftRouter.get('/:id', async (req, res) => {
     updatedAt: draft.updatedAt.toISOString(),
   };
   res.json(dto);
+});
+
+// GET /api/invoice-draft/:id/preview — the saved draft as a watermarked PDF; stores nothing
+invoiceDraftRouter.get('/:id/preview', async (req, res) => {
+  const id = parseId(req.params.id);
+  if (id === null) {
+    res.status(400).json({ error: 'Invalid ID' });
+    return;
+  }
+  const draft = await prisma.invoiceDraft.findUnique({ where: { id } });
+  if (!draft) {
+    res.status(404).json({ error: 'Draft not found' });
+    return;
+  }
+  const invoiceTemplate = await prisma.template.findFirst({
+    where: { type: 'RECHNUNG', active: true },
+  });
+  if (!invoiceTemplate) {
+    res.status(400).json({ error: 'No active invoice template found' });
+    return;
+  }
+
+  let pdf: Buffer;
+  try {
+    pdf = await generateInvoicePreview(
+      invoiceTemplate.filePath,
+      draftToContent(draft),
+      todayAsInvoiceDate(),
+    );
+  } catch (error) {
+    console.error(`[invoice-draft] Preview generation failed for draft ${id}`, error);
+    res.status(500).json({ error: 'Preview could not be generated' });
+    return;
+  }
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'inline; filename="invoice-preview.pdf"');
+  res.send(pdf);
 });
 
 // POST /api/invoice-draft
