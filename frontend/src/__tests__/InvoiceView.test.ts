@@ -255,6 +255,26 @@ describe('InvoiceView', () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  it('opens the preview of a draft from the list without opening the draft', async () => {
+    drafts = [
+      {
+        id: 9,
+        recipientName: 'Dora Draft',
+        title: 'Kurs',
+        amountCents: 5950,
+        updatedAt: '2026-10-01T10:00:00Z',
+      },
+    ];
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const wrapper = await mountView();
+
+    await wrapper.find('[data-testid="preview-draft"]').trigger('click');
+
+    expect(open).toHaveBeenCalledWith('/api/invoice-draft/9/preview', '_blank');
+    expect(push).not.toHaveBeenCalled();
+    open.mockRestore();
+  });
+
   it('copies an invoice without opening it', async () => {
     const wrapper = await mountView();
     await rowOf(wrapper, 'Anna Alt').find('[data-testid="copy-invoice"]').trigger('click');

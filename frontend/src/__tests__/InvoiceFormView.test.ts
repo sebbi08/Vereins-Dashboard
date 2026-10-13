@@ -148,6 +148,12 @@ afterEach(() => {
 });
 
 describe('InvoiceFormView — new invoice', () => {
+  it('shows neither the email text nor a preview for a new invoice', async () => {
+    const wrapper = await mountForm();
+    expect(wrapper.find('[data-testid="email-subject"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="preview-draft"]').exists()).toBe(false);
+  });
+
   it('redirects to the list without an invoice template', async () => {
     useAppStore().invoiceTemplateAvailable = false;
     await mountForm();
@@ -695,6 +701,63 @@ describe('InvoiceFormView — draft mode', () => {
   it('keeps recipient fields editable', async () => {
     const wrapper = await mountForm();
     expect(wrapper.findAll('input[disabled]')).toHaveLength(0);
+  });
+
+  it('shows the stored email text of a saved draft and sends edits with the save', async () => {
+    replies['PUT /api/invoice-draft/42'] = { status: 200, body: { draftId: 42 } };
+    const wrapper = await mountForm();
+    const subject = wrapper.find('[data-testid="email-subject"]');
+    expect((subject.element as HTMLInputElement).value).toBe(draftDto.emailSubject);
+
+    await subject.setValue('Mein Betreff {number}');
+    await wrapper.find('[data-testid="email-body"]').setValue('Mein Text');
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    expect(bodyOf('PUT /api/invoice-draft/42').emailText).toEqual({
+      emailSubject: 'Mein Betreff {number}',
+      emailBody: 'Mein Text',
+    });
+  });
+
+  it('counts an edited email text as unsaved changes', async () => {
+    const wrapper = await mountForm();
+    confirmAction.mockResolvedValue(false);
+    expect(await tryLeave()).toBe(true);
+
+    await wrapper.find('[data-testid="email-body"]').setValue('Geändert');
+    expect(await tryLeave()).toBe(false);
+  });
+
+  it('does not save a draft whose email subject is blank', async () => {
+    const wrapper = await mountForm();
+    await wrapper.find('[data-testid="email-subject"]').setValue(' ');
+    await flushPromises();
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+    expect(calls()).not.toContain('PUT /api/invoice-draft/42');
+  });
+
+  it('opens the preview of the saved draft in a new tab', async () => {
+    const open = vi.spyOn(window, 'open').mockReturnValue(null);
+    const wrapper = await mountForm();
+
+    await wrapper.find('[data-testid="preview-draft"]').trigger('click');
+
+    expect(open).toHaveBeenCalledWith('/api/invoice-draft/42/preview', '_blank');
+    open.mockRestore();
+  });
+
+  it('locks the preview while the form has unsaved changes', async () => {
+    const wrapper = await mountForm();
+    const preview = () => wrapper.find('[data-testid="preview-draft"]');
+    expect(preview().attributes('disabled')).toBeUndefined();
+
+    vm(wrapper).inputs.title = 'Neuer Titel';
+    await flushPromises();
+
+    expect(preview().attributes('disabled')).toBeDefined();
+    expect(preview().attributes('title')).toBe('Save the draft to preview it');
   });
 
   it('save-draft is the submit button in draft mode and saves exactly once', async () => {

@@ -118,6 +118,10 @@ function onInvoiceRowClick(event: DataTableRowClickEvent<InvoiceListItem>) {
   router.push(`/invoice/${event.data.id}`);
 }
 
+function openDraftPreview(draftId: number) {
+  window.open(`/api/invoice-draft/${draftId}/preview`, '_blank');
+}
+
 function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
   if (isControlClick(event.originalEvent)) return;
   router.push(`/invoice/draft/${event.data.id}`);
@@ -204,6 +208,18 @@ function onDraftRowClick(event: DataTableRowClickEvent<InvoiceDraftListItem>) {
           </Column>
           <Column header="Status">
             <template #body><Tag value="Draft" severity="warn" /></template>
+          </Column>
+          <Column header-style="width: 7rem">
+            <template #body="{ data }">
+              <Button
+                label="Preview"
+                icon="pi pi-eye"
+                size="small"
+                text
+                data-testid="preview-draft"
+                @click.stop="openDraftPreview(data.id)"
+              />
+            </template>
           </Column>
         </DataTable>
       </section>

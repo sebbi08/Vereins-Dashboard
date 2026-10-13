@@ -12,6 +12,7 @@ import ToggleSwitch from 'primevue/toggleswitch';
 import type {
   InstructorInvoicePrefillDto,
   InvoiceDraftDto,
+  InvoiceEmailText,
   InvoiceInputs,
   InvoiceRecipientDto,
 } from 'shared';
@@ -19,6 +20,7 @@ import { calculateInvoiceTotals, INVOICE_VAT_PERCENT } from 'shared';
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import FormSection from '../components/ui/FormSection.vue';
+import InvoiceEmailTextEditor from '../components/InvoiceEmailText.vue';
 import LineItemsEditor from '../components/LineItemsEditor.vue';
 import PageHeader from '../components/ui/PageHeader.vue';
 import { useConfirmAction } from '../composables/useConfirmAction';
@@ -75,12 +77,17 @@ const inputs = ref<InvoiceInputs>({
   emailSalutation: 'Sehr geehrte Damen und Herren',
 });
 
+/** Email subject and text of a saved draft; a new draft gets them from the template on save. */
+const emailText = ref<InvoiceEmailText>({ emailSubject: '', emailBody: '' });
+const emailTextInvalid = ref(false);
+
 /** Form state as last loaded or saved; anything else counts as unsaved changes. */
 function formSnapshot(): string {
-  return JSON.stringify([inputs.value, recipient.value?.id ?? null]);
+  return JSON.stringify([inputs.value, recipient.value?.id ?? null, emailText.value]);
 }
 const savedSnapshot = ref(formSnapshot());
-const { allowLeave } = useUnsavedChangesGuard(() => formSnapshot() !== savedSnapshot.value);
+const hasUnsavedChanges = computed(() => formSnapshot() !== savedSnapshot.value);
+const { allowLeave } = useUnsavedChangesGuard(() => hasUnsavedChanges.value);
 
 // A request that finishes after the user left the form must not pull them back
 let leftForm = false;
@@ -233,6 +240,7 @@ async function loadDraft() {
   }
   const data = (await res.json()) as InvoiceDraftDto;
   inputs.value = { ...data.inputs, invoiceDate: inputs.value.invoiceDate };
+  emailText.value = { emailSubject: data.emailSubject, emailBody: data.emailBody };
   recipient.value = data.recipient;
   recipientSearch.value = data.recipient.name;
   draftLoaded.value = true;
@@ -289,7 +297,13 @@ function recipientRequestBody(): Record<string, unknown> {
       salutation: inputs.value.salutation,
     };
   }
+  // Only a saved draft carries an email text; a new one gets it from the template on the server
+  if (isDraft && draftLoaded.value) body.emailText = emailText.value;
   return body;
+}
+
+function openPreview() {
+  window.open(`/api/invoice-draft/${draftId}/preview`, '_blank');
 }
 
 /** Drafts only need a name; invoices and revisions need title and line item texts too. */
@@ -351,6 +365,7 @@ async function submit() {
 async function saveDraft(): Promise<number | null> {
   if (loadError.value) return null;
   if (!validate(false)) return null;
+  if (isDraft && emailTextInvalid.value) return null;
   sending.value = true;
   try {
     const res = await requestJson(
@@ -664,6 +679,15 @@ function onFormSubmit() {
         </div>
       </FormSection>
 
+      <FormSection v-if="isDraft && draftLoaded" title="Email Text">
+        <InvoiceEmailTextEditor
+          v-model:subject="emailText.emailSubject"
+          v-model:body="emailText.emailBody"
+          v-model:invalid="emailTextInvalid"
+          :source="inputs"
+        />
+      </FormSection>
+
       <div class="form-actions">
         <Button
           v-if="isDraft && draftLoaded"
@@ -677,6 +701,17 @@ function onFormSubmit() {
           @click="deleteDraft"
         />
         <Button label="Cancel" text severity="secondary" @click="router.back()" />
+        <Button
+          v-if="isDraft && draftLoaded"
+          label="Preview"
+          icon="pi pi-eye"
+          severity="secondary"
+          outlined
+          :disabled="hasUnsavedChanges"
+          :title="hasUnsavedChanges ? 'Save the draft to preview it' : undefined"
+          data-testid="preview-draft"
+          @click="openPreview"
+        />
         <Button
           v-if="!isNewRevision && (!isDraft || draftLoaded)"
           :type="isDraft ? 'submit' : 'button'"
