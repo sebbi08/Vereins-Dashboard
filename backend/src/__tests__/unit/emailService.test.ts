@@ -23,7 +23,7 @@ vi.mock('../../config.js', () => ({
 // Imports — mocks are applied by the time these load
 // ---------------------------------------------------------------------------
 import type { PrismaClient } from '../../../prisma/generated/client';
-import { getSetting, replaceVariables, sendInvoiceEmail } from '../../services/emailService';
+import { getSetting, sendInvoiceEmail } from '../../services/emailService';
 
 // ---------------------------------------------------------------------------
 // Unit tests for the pure helper functions
@@ -54,51 +54,6 @@ describe('getSetting', () => {
       { key: 'a', value: 'second' },
     ];
     expect(getSetting(dupes, 'a')).toBe('first');
-  });
-});
-
-describe('replaceVariables', () => {
-  it('replaces {salutation}, {name}, {number}, {email} in a template', () => {
-    const template = '{salutation} {name},\n\nRechnung {number}\n\n{email}';
-    const vars = {
-      salutation: 'Herr',
-      name: 'Max Mustermann',
-      number: '2024-001',
-      email: 'max@example.com',
-    };
-    const result = replaceVariables(template, vars);
-    expect(result).toBe('Herr Max Mustermann,\n\nRechnung 2024-001\n\nmax@example.com');
-  });
-
-  it('replaces a single variable', () => {
-    expect(replaceVariables('Hallo {name}', { name: 'Anna' })).toBe('Hallo Anna');
-  });
-
-  it('leaves the template unchanged when no variables match', () => {
-    const template = 'Hello {something}';
-    expect(replaceVariables(template, { other: 'x' })).toBe('Hello {something}');
-  });
-
-  it('replaces multiple occurrences of the same variable', () => {
-    const template = '{name} — reminder for {name}';
-    expect(replaceVariables(template, { name: 'John' })).toBe('John — reminder for John');
-  });
-
-  it('handles an empty vars object (no replacements)', () => {
-    const template = '{salutation} {name}';
-    expect(replaceVariables(template, {})).toBe('{salutation} {name}');
-  });
-
-  it('handles special characters in variable values', () => {
-    const template = 'Subject: {subject}';
-    const vars = { subject: '100% "free" & more' };
-    expect(replaceVariables(template, vars)).toBe('Subject: 100% "free" & more');
-  });
-
-  it('replaces {name} inside {{name}} (replaceAll replaces all occurrences of the pattern)', () => {
-    // replaceAll('{name}', 'Bob') on '{{name}}' → '{Bob}'
-    const template = '{{name}} and {name}';
-    expect(replaceVariables(template, { name: 'Bob' })).toBe('{Bob} and Bob');
   });
 });
 
@@ -353,5 +308,49 @@ describe('sendInvoiceEmail — dev override', () => {
     expect(result.success).toBe(false);
     expect(result.error).toBe('Canceled invoices cannot be sent by email');
     expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  it('sends the text stored on the invoice and only fills in the number', async () => {
+    process.env.NODE_ENV = 'production';
+    const stored = {
+      ...revision,
+      invoice: {
+        ...revision.invoice,
+        emailSubject: 'Meine Rechnung {number} für {name}',
+        emailBody: 'Hallo Max,\n\nRechnung {number}. {salutation}',
+      },
+    };
+
+    await sendInvoiceEmail(buildPrismaMock({ revision: stored }), 1);
+
+    const mail = sendMailMock.mock.calls[0][0];
+    expect(mail.subject).toBe('Meine Rechnung 2024-001 für {name}');
+    expect(mail.text).toBe('Hallo Max,\n\nRechnung 2024-001. {salutation}');
+  });
+
+  it('uses the stored text for a test send as well', async () => {
+    process.env.NODE_ENV = 'production';
+    const stored = {
+      ...revision,
+      invoice: { ...revision.invoice, emailSubject: 'Betreff {number}', emailBody: 'Mein Text' },
+    };
+
+    await sendInvoiceEmail(buildPrismaMock({ revision: stored }), 1, { forceTestAddress: true });
+
+    const mail = sendMailMock.mock.calls[0][0];
+    expect(mail.subject).toBe('Betreff 2024-001');
+    expect(mail.text).toBe(
+      '[TEST SEND — Original recipient: Max Mustermann <max@example.com>]\n\nMein Text',
+    );
+  });
+
+  it('builds the text from the template when the invoice has none stored', async () => {
+    process.env.NODE_ENV = 'production';
+
+    await sendInvoiceEmail(buildPrismaMock(), 1);
+
+    const mail = sendMailMock.mock.calls[0][0];
+    expect(mail.subject).toBe('Rechnung 2024-001');
+    expect(mail.text).toBe('Herr\n\nRechnung 2024-001.');
   });
 });

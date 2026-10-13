@@ -1,17 +1,10 @@
 import nodemailer from 'nodemailer';
 import type { PrismaClient } from '../../prisma/generated/client.js';
 import { toAbsolutePath } from '../config.js';
+import { fillInvoiceNumber, storedOrBuiltEmailText } from './invoiceEmailText.js';
 
 export function getSetting(rows: { key: string; value: string }[], key: string): string {
   return rows.find((r) => r.key === key)?.value ?? '';
-}
-
-export function replaceVariables(template: string, vars: Record<string, string>): string {
-  let result = template;
-  for (const [key, value] of Object.entries(vars)) {
-    result = result.replaceAll(`{${key}}`, value);
-  }
-  return result;
 }
 
 /**
@@ -61,27 +54,17 @@ export async function sendInvoiceEmail(
   const smtpUser = getSetting(settings, 'smtpUser');
   const smtpPassword = getSetting(settings, 'smtpPassword');
   const smtpSecure = getSetting(settings, 'smtpSecure') === 'true';
-  const emailSubject = getSetting(settings, 'emailSubject') || 'Ihre Rechnung {number}';
-  const emailBody =
-    getSetting(settings, 'emailBody') ||
-    '{salutation}\n\nanbei erhalten Sie Ihre Rechnung {number}.\n\nMit freundlichen Grüßen';
   const testAddress = getSetting(settings, 'emailTestAddress');
 
   if (!smtpHost || !smtpUser || !smtpPassword) {
     return { success: false, error: 'SMTP settings are not configured' };
   }
 
-  const vars: Record<string, string> = {
-    salutation: revision.emailSalutation,
-    name: revision.name,
-    number: revision.invoice.number,
-    title: revision.title,
-    email: revision.email,
-  };
-
+  // What is stored on the invoice is what goes out; only the number is filled in here
+  const text = storedOrBuiltEmailText(revision.invoice, settings, revision);
   let to = revision.email.trim();
-  let body = replaceVariables(emailBody, vars);
-  const subject = replaceVariables(emailSubject, vars);
+  let body = fillInvoiceNumber(text.emailBody, revision.invoice.number);
+  const subject = fillInvoiceNumber(text.emailSubject, revision.invoice.number);
 
   if (forceTestAddress) {
     if (!testAddress) {

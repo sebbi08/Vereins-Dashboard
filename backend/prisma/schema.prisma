@@ -111,6 +111,8 @@ model Invoice {
   recipient     InvoiceRecipient  @relation(fields: [recipientId], references: [id])
   invoiceDate   DateTime
   paid          Boolean           @default(false)
+  emailSubject  String?
+  emailBody     String?
   createdAt     DateTime          @default(now())
   revisions     InvoiceRevision[]
   paidBookings  PaidBooking[]
@@ -172,6 +174,8 @@ model InvoiceDraft {
   directDebit     Boolean
   email           String
   emailSalutation String
+  emailSubject    String?
+  emailBody       String?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 }
