@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import type { EmailSettings } from 'shared';
 import { prisma } from '../prismaClient.js';
-import { parseTextSettings } from '../services/requestParsing.js';
+import { buildInvoiceEmailText } from '../services/invoiceEmailText.js';
+import { parseEmailTextValues, parseTextSettings } from '../services/requestParsing.js';
 import { sendTestEmail } from '../services/emailService.js';
 
 export const emailSettingsRouter = Router();
@@ -60,4 +61,14 @@ emailSettingsRouter.post('/test', async (_req, res) => {
   } else {
     res.status(400).json({ error: result.error });
   }
+});
+
+// POST /api/email-settings/invoice-text — the text the template gives for these values; stores nothing
+emailSettingsRouter.post('/invoice-text', async (req, res) => {
+  const parsed = parseEmailTextValues(req.body);
+  if ('error' in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+  res.json(buildInvoiceEmailText(await prisma.systemSetting.findMany(), parsed.value));
 });

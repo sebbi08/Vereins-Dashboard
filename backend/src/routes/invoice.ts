@@ -16,6 +16,7 @@ import {
 } from '../services/invoiceCreation.js';
 import { attemptInvoicePdfGeneration } from '../services/invoicePdf.js';
 import {
+  parseEmailText,
   parseInvoiceCreateBody,
   parseInvoiceRevisionBody,
   parsePaidBody,
@@ -523,4 +524,31 @@ invoiceRouter.patch('/:id/paid', async (req, res) => {
     return tx.invoice.update({ where: { id }, data: { paid } });
   });
   res.json({ id: updated.id, paid: updated.paid });
+});
+
+// PATCH /api/invoice/:id/email-text
+invoiceRouter.patch('/:id/email-text', async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    res.status(400).json({ error: 'Invalid ID' });
+    return;
+  }
+  const parsed = parseEmailText(req.body);
+  if ('error' in parsed) {
+    res.status(400).json({ error: parsed.error });
+    return;
+  }
+
+  const invoice = await prisma.invoice.findUnique({ where: { id } });
+  if (!invoice) {
+    res.status(404).json({ error: 'Invoice not found' });
+    return;
+  }
+  if (invoice.status !== 'AKTIV') {
+    res.status(400).json({ error: 'Cancelled invoices cannot be changed' });
+    return;
+  }
+
+  await prisma.invoice.update({ where: { id }, data: parsed.value });
+  res.json(parsed.value);
 });

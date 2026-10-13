@@ -196,3 +196,67 @@ describe('email text of an invoice', () => {
     });
   });
 });
+
+describe('PATCH /api/invoice/:id/email-text', () => {
+  const edited = { emailSubject: 'Mein Betreff {number}', emailBody: 'Mein Text' };
+
+  it('stores the edited text', async () => {
+    const id = await createInvoice();
+    const res = await request.patch(`/api/invoice/${id}/email-text`).send(edited);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(edited);
+    expect(emailTextOf((await request.get(`/api/invoice/${id}`)).body)).toEqual(edited);
+  });
+
+  it.each([
+    [{ emailSubject: ' ', emailBody: 'Text' }, 'Email subject is required'],
+    [{ emailSubject: 'A\nB', emailBody: 'Text' }, 'Invalid request body'],
+    [{ emailSubject: 'Betreff' }, 'Invalid request body'],
+  ])('rejects %j', async (body, error) => {
+    const id = await createInvoice();
+    const res = await request.patch(`/api/invoice/${id}/email-text`).send(body);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe(error);
+    expect(emailTextOf((await request.get(`/api/invoice/${id}`)).body)).toEqual(BUILT);
+  });
+
+  it('refuses a cancelled invoice', async () => {
+    const id = await createInvoice();
+    await request.patch(`/api/invoice/${id}/cancel`);
+    const res = await request.patch(`/api/invoice/${id}/email-text`).send(edited);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Cancelled invoices cannot be changed');
+    expect(emailTextOf((await request.get(`/api/invoice/${id}`)).body)).toEqual(BUILT);
+  });
+
+  it('answers 404 for an unknown invoice and 400 for an invalid id', async () => {
+    expect((await request.patch('/api/invoice/99999/email-text').send(edited)).status).toBe(404);
+    expect((await request.patch('/api/invoice/abc/email-text').send(edited)).status).toBe(400);
+  });
+});
+
+describe('POST /api/email-settings/invoice-text', () => {
+  const values = {
+    emailSalutation: 'Hallo Bernd',
+    name: 'Bernd Bach',
+    title: 'Kursgebühr',
+    email: 'bernd@example.org',
+  };
+
+  it('builds the text from the template without storing anything', async () => {
+    const res = await request.post('/api/email-settings/invoice-text').send(values);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      emailSubject: 'Rechnung {number}: Kursgebühr',
+      emailBody: 'Hallo Bernd,\n\nRechnung {number} für Bernd Bach.',
+    });
+    expect(await prisma.invoice.count()).toBe(0);
+    expect(await prisma.invoiceDraft.count()).toBe(0);
+  });
+
+  it.each([{}, { ...values, name: 5 }, 'text'])('rejects %j', async (body) => {
+    const res = await request.post('/api/email-settings/invoice-text').send(body as object);
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Invalid request body');
+  });
+});

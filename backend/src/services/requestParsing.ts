@@ -3,6 +3,7 @@ import type {
   BookingColumns,
   BookingImportSettings,
   ConfirmedPayment,
+  EmailTextValues,
   InvoiceContent,
   InvoiceEmailText,
   InvoiceLineItem,
@@ -199,6 +200,19 @@ export function parseEmailText(raw: unknown): Parsed<InvoiceEmailText> {
     }
     if (!emailSubject.trim()) throw new BodyError('Email subject is required');
     return { emailSubject, emailBody };
+  });
+}
+
+/** POST /api/email-settings/invoice-text: what the template placeholders are filled with. */
+export function parseEmailTextValues(raw: unknown): Parsed<EmailTextValues> {
+  return attempt(() => {
+    if (!isRecord(raw)) throw new BodyError(INVALID_BODY);
+    return {
+      emailSalutation: text(raw, 'emailSalutation'),
+      name: text(raw, 'name'),
+      title: text(raw, 'title'),
+      email: text(raw, 'email'),
+    };
   });
 }
 
