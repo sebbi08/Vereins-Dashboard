@@ -77,6 +77,7 @@ describe('InvoiceEmailText', () => {
     expect(wrapper.text()).toContain(
       '{number} is replaced by the invoice number when the email is sent.',
     );
+    expect(wrapper.text()).toContain('Other placeholders are sent as written.');
   });
 
   it('reports a blank subject', async () => {

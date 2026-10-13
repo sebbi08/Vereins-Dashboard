@@ -365,7 +365,10 @@ async function submit() {
 async function saveDraft(): Promise<number | null> {
   if (loadError.value) return null;
   if (!validate(false)) return null;
-  if (isDraft && emailTextInvalid.value) return null;
+  if (isDraft && emailTextInvalid.value) {
+    notify.error('Email subject is required');
+    return null;
+  }
   sending.value = true;
   try {
     const res = await requestJson(
@@ -408,6 +411,8 @@ async function activateDraft() {
 
   const id = await saveDraft();
   if (id === null) return;
+  // Saved: a failed activation below must not leave the draft looking unsaved
+  savedSnapshot.value = formSnapshot();
 
   sending.value = true;
   try {
@@ -677,6 +682,13 @@ function onFormSubmit() {
             <InputText id="email-salutation" v-model="inputs.emailSalutation" fluid />
           </div>
         </div>
+        <small v-if="isDraft && draftLoaded" class="muted" data-testid="email-text-kept-hint">
+          The email text below is not updated automatically. Use "Reset from template" to rebuild
+          it.
+        </small>
+        <small v-else-if="isNewRevision" class="muted" data-testid="email-text-kept-hint">
+          A new revision does not change the email text. Check it on the invoice page.
+        </small>
       </FormSection>
 
       <FormSection v-if="isDraft && draftLoaded" title="Email Text">
@@ -701,6 +713,13 @@ function onFormSubmit() {
           @click="deleteDraft"
         />
         <Button label="Cancel" text severity="secondary" @click="router.back()" />
+        <small
+          v-if="isDraft && draftLoaded && hasUnsavedChanges"
+          class="muted"
+          data-testid="preview-draft-hint"
+        >
+          Save the draft to preview it
+        </small>
         <Button
           v-if="isDraft && draftLoaded"
           label="Preview"

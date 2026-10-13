@@ -499,7 +499,7 @@ function downloadPdf(rev: InvoiceRevisionDto) {
                     severity="secondary"
                     outlined
                     :loading="busy[`test-${rev.id}`]"
-                    :disabled="emailTextDirty"
+                    :disabled="emailTextDirty || emailTextInvalid"
                     data-testid="send-test-email"
                     @click="sendTestEmail(rev)"
                   />
@@ -514,7 +514,7 @@ function downloadPdf(rev: InvoiceRevisionDto) {
                     icon="pi pi-envelope"
                     size="small"
                     :loading="busy[`email-${rev.id}`]"
-                    :disabled="!rev.inputs.email.trim() || emailTextDirty"
+                    :disabled="!rev.inputs.email.trim() || emailTextDirty || emailTextInvalid"
                     data-testid="send-email"
                     @click="sendEmail(rev)"
                   />

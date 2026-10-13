@@ -152,6 +152,7 @@ describe('InvoiceFormView — new invoice', () => {
     const wrapper = await mountForm();
     expect(wrapper.find('[data-testid="email-subject"]').exists()).toBe(false);
     expect(wrapper.find('[data-testid="preview-draft"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="email-text-kept-hint"]').exists()).toBe(false);
   });
 
   it('redirects to the list without an invoice template', async () => {
@@ -533,6 +534,15 @@ describe('InvoiceFormView — copy and revision', () => {
     },
   };
 
+  it('says that a new revision does not change the email text', async () => {
+    setRoute({ id: '3' });
+    replies['GET /api/invoice/3'] = { status: 200, body: invoiceDto };
+    const wrapper = await mountForm();
+    expect(wrapper.find('[data-testid="email-text-kept-hint"]').text()).toBe(
+      'A new revision does not change the email text. Check it on the invoice page.',
+    );
+  });
+
   it('copies an invoice with today as date', async () => {
     setRoute({}, { copyFrom: '3' });
     replies['GET /api/invoice/3'] = { status: 200, body: invoiceDto };
@@ -729,6 +739,13 @@ describe('InvoiceFormView — draft mode', () => {
     expect(await tryLeave()).toBe(false);
   });
 
+  it('says that the email text is not updated automatically', async () => {
+    const wrapper = await mountForm();
+    expect(wrapper.find('[data-testid="email-text-kept-hint"]').text()).toBe(
+      'The email text below is not updated automatically. Use "Reset from template" to rebuild it.',
+    );
+  });
+
   it('does not save a draft whose email subject is blank', async () => {
     const wrapper = await mountForm();
     await wrapper.find('[data-testid="email-subject"]').setValue(' ');
@@ -736,6 +753,34 @@ describe('InvoiceFormView — draft mode', () => {
     await wrapper.find('form').trigger('submit');
     await flushPromises();
     expect(calls()).not.toContain('PUT /api/invoice-draft/42');
+    expect(notify.error).toHaveBeenCalledWith('Email subject is required');
+  });
+
+  it('does not activate a draft whose email subject is blank', async () => {
+    const wrapper = await mountForm();
+    await wrapper.find('[data-testid="email-subject"]').setValue(' ');
+    await flushPromises();
+    await wrapper.find('[data-testid="activate-draft"]').trigger('click');
+    await flushPromises();
+    expect(calls()).toEqual(['GET /api/invoice-draft/42']);
+    expect(notify.error).toHaveBeenCalledWith('Email subject is required');
+  });
+
+  it('keeps the preview open after the activation failed', async () => {
+    replies['PUT /api/invoice-draft/42'] = { status: 200, body: { draftId: 42 } };
+    replies['POST /api/invoice-draft/42/activate'] = {
+      status: 400,
+      body: { error: 'Street is required' },
+    };
+    const wrapper = await mountForm();
+    vm(wrapper).inputs.title = 'Geändert';
+    await flushPromises();
+
+    await wrapper.find('[data-testid="activate-draft"]').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="preview-draft"]').attributes('disabled')).toBeUndefined();
+    expect(wrapper.find('[data-testid="preview-draft-hint"]').exists()).toBe(false);
   });
 
   it('opens the preview of the saved draft in a new tab', async () => {
@@ -751,11 +796,14 @@ describe('InvoiceFormView — draft mode', () => {
   it('locks the preview while the form has unsaved changes', async () => {
     const wrapper = await mountForm();
     const preview = () => wrapper.find('[data-testid="preview-draft"]');
+    const hint = () => wrapper.find('[data-testid="preview-draft-hint"]');
     expect(preview().attributes('disabled')).toBeUndefined();
+    expect(hint().exists()).toBe(false);
 
     vm(wrapper).inputs.title = 'Neuer Titel';
     await flushPromises();
 
+    expect(hint().text()).toBe('Save the draft to preview it');
     expect(preview().attributes('disabled')).toBeDefined();
     expect(preview().attributes('title')).toBe('Save the draft to preview it');
   });

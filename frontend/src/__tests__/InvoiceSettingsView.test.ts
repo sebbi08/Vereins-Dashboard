@@ -312,6 +312,13 @@ describe('InvoiceSettingsView', () => {
     expect(notify.error).toHaveBeenCalledWith('Name is required');
   });
 
+  it('says what a template change affects', async () => {
+    const wrapper = await mountView();
+    expect(wrapper.find('[data-testid="email-template-hint"]').text()).toBe(
+      'Changes apply to new drafts and invoices. Existing ones keep their text until it is reset from the template.',
+    );
+  });
+
   it('asks to save edited email settings before sending a test email', async () => {
     replies['PUT /api/email-settings'] = { status: 200, body: {} };
     const wrapper = await mountView();

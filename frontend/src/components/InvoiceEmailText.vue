@@ -92,7 +92,8 @@ async function resetFromTemplate() {
         data-testid="email-body"
       />
       <small class="muted">
-        {number} is replaced by the invoice number when the email is sent.
+        {number} is replaced by the invoice number when the email is sent. Other placeholders are
+        sent as written.
       </small>
     </div>
     <div v-if="!disabled" class="row">

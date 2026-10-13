@@ -246,6 +246,11 @@ describe('InvoiceDetailView', () => {
       invoice.emailSubject,
     );
     expect(wrapper.find('[data-testid="email-subject"]').attributes('disabled')).toBeDefined();
+    expect((wrapper.find('[data-testid="email-body"]').element as HTMLTextAreaElement).value).toBe(
+      invoice.emailBody,
+    );
+    // Without edits the guard lets go even though the confirmation would say no
+    confirmAction.mockResolvedValue(false);
     expect(await leaveGuards[leaveGuards.length - 1]()).toBe(true);
   });
 

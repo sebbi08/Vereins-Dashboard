@@ -341,6 +341,10 @@ onMounted(() => {
                 auto-resize
                 fluid
               />
+              <small class="muted" data-testid="email-template-hint">
+                Changes apply to new drafts and invoices. Existing ones keep their text until it is
+                reset from the template.
+              </small>
             </div>
             <div class="field">
               <label for="email-test-address">
