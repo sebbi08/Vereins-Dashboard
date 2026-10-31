@@ -9,7 +9,7 @@ describe('Home / Dashboard', () => {
   it('shows the Donation Receipt navigation card', async () => {
     await browser.url('/');
 
-    const card = await $('a[href="/donation-receipt"]');
+    const card = await $('a.tile__link[href="/donation-receipt"]');
     await expect(card).toBeDisplayed();
     await expect(card).toHaveText(expect.stringContaining('Donation Receipt'));
   });
@@ -17,7 +17,7 @@ describe('Home / Dashboard', () => {
   it('shows the Invoice navigation card', async () => {
     await browser.url('/');
 
-    const card = await $('a[href="/invoice"]');
+    const card = await $('a.tile__link[href="/invoice"]');
     await expect(card).toBeDisplayed();
     await expect(card).toHaveText(expect.stringContaining('Invoice'));
   });
@@ -25,7 +25,7 @@ describe('Home / Dashboard', () => {
   it('navigates to Donation Receipt list on card click', async () => {
     await browser.url('/');
 
-    const card = await $('a[href="/donation-receipt"]');
+    const card = await $('a.tile__link[href="/donation-receipt"]');
     await card.click();
 
     await browser.waitUntil(async () => (await browser.getUrl()).includes('/donation-receipt'), {

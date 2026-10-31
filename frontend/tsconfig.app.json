@@ -12,7 +12,7 @@
     "jsxImportSource": "vue",
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
+    "types": ["node"],
     "paths": {
       "@/*": ["./src/*"],
       "shared": ["../shared/src/index.ts"]

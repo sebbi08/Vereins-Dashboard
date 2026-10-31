@@ -262,7 +262,6 @@ donationReceiptRouter.post('/', async (req, res) => {
     .$transaction(async (tx: Prisma.TransactionClient) => {
       // Inside the transaction: transactions run one at a time, so two requests cannot pick the same number.
       const { number, year, runningNumber } = await generateReceiptNumber(tx);
-      let donorUpdated = false;
       let donorId = body.donorId;
 
       if (donorId) {
@@ -291,7 +290,6 @@ donationReceiptRouter.post('/', async (req, res) => {
         }
 
         await tx.donor.update({ where: { id: donorId }, data: donorUpdateData });
-        donorUpdated = true;
       } else {
         if (!body.donorData) {
           throw new DonorError('No donor specified');
@@ -311,7 +309,6 @@ donationReceiptRouter.post('/', async (req, res) => {
           },
         });
         donorId = newDonor.id;
-        donorUpdated = true;
       }
 
       const receipt = await tx.donationReceipt.create({
@@ -352,7 +349,7 @@ donationReceiptRouter.post('/', async (req, res) => {
 
       const donor = await tx.donor.findUniqueOrThrow({ where: { id: donorId! } });
 
-      return { receipt, revision, donor, donorUpdated };
+      return { receipt, revision, donor, donorUpdated: true };
     })
     .catch((err: unknown) => {
       if (err instanceof DonorError) return err;

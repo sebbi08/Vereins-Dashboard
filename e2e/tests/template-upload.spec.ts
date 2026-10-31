@@ -72,7 +72,7 @@ async function verifyTemplateInBackend(typ: string) {
 
 async function verifyVersionDisplayed() {
   // The UI should show "Version 1" or higher for the uploaded template
-  const versionEl = await $(`p*=Version`);
+  const versionEl = await $('[data-testid="template-version"]');
   await expect(versionEl).toBeDisplayed();
 }
 

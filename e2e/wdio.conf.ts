@@ -1,5 +1,4 @@
 import { Browser, detectBrowserPlatform, install, resolveBuildId } from '@puppeteer/browsers';
-import type { Options } from '@wdio/types';
 import { spawn, type ChildProcess } from 'child_process';
 import path from 'path';
 
@@ -33,7 +32,7 @@ async function waitForServer(url: string, timeout = 30_000): Promise<void> {
 
 // ── WDIO config ──────────────────────────────────────────────────────
 
-export const config: Options.Testrunner = {
+export const config: WebdriverIO.Config = {
   runner: 'local',
   specs: ['./tests/**/*.spec.ts'],
   maxInstances: 1,

@@ -85,12 +85,7 @@ const pageTitle = isNewRevision
     : 'New Donation Receipt';
 
 type FieldKey =
-  | 'letterSalutation'
-  | 'amount'
-  | 'donationDate'
-  | 'taxOfficeName'
-  | 'taxNumber'
-  | 'exemptionDate';
+  'letterSalutation' | 'amount' | 'donationDate' | 'taxOfficeName' | 'taxNumber' | 'exemptionDate';
 
 /** Shown after the first submit attempt and kept up to date while the user fixes them. */
 const fieldErrors = computed<Partial<Record<FieldKey, string>>>(() => {
