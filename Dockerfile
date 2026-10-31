@@ -1,5 +1,5 @@
 # Build stage
-FROM node:22-alpine AS builder
+FROM node:26-alpine AS builder
 
 WORKDIR /app
 
@@ -22,7 +22,7 @@ ENV VITE_PRIMEUI_LICENSE=${PRIMEUI_LICENSE}
 RUN npm run build
 
 # Production stage
-FROM node:22-alpine
+FROM node:26-alpine
 
 # LibreOffice renders DOCX templates to PDF. Liberation (Arial, Times New Roman, Courier New)
 # and Carlito (Calibri) are metric-compatible with the fonts the templates use, so line and
