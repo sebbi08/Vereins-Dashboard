@@ -16,6 +16,17 @@ function documentXml(docx: Buffer): string {
   return new PizZip(docx).file('word/document.xml')!.asText();
 }
 
+function coreXml(docx: Buffer): string {
+  return new PizZip(docx).file('docProps/core.xml')!.asText();
+}
+
+/** The fixture template with its document properties changed by `change`. */
+function withCoreXml(change: (xml: string) => string): Buffer {
+  const zip = new PizZip(fs.readFileSync(templatePath));
+  zip.file('docProps/core.xml', change(zip.file('docProps/core.xml')!.asText()));
+  return zip.generate({ type: 'nodebuffer' }) as Buffer;
+}
+
 /** Visible text of the document (tags removed, entities kept). */
 function textOf(xml: string): string {
   return xml.replace(/<[^>]+>/g, '');
@@ -145,6 +156,36 @@ describe('buildInvoiceDocx', () => {
       }),
     );
     expect(xml).toContain('Kurs {A} }{ &lt;b&gt; &amp; Co');
+  });
+
+  it('sets the document title to the invoice title instead of the template title', () => {
+    const docx = buildInvoiceDocx(fs.readFileSync(templatePath), {
+      ...baseInput,
+      title: 'Miete <Saal> & Bühne $&',
+      lineItems: [{ text: 'A', priceInCents: 100 }],
+    });
+
+    const core = coreXml(docx);
+    expect(core).toContain('<dc:title>Miete &lt;Saal&gt; &amp; Bühne $&amp;</dc:title>');
+    expect(core).not.toContain('Niederschrift');
+    expect(core.match(/<dc:title/g)).toHaveLength(1);
+  });
+
+  it.each([
+    [
+      'an empty title element',
+      (xml: string) => xml.replace(/<dc:title>.*?<\/dc:title>/, '<dc:title/>'),
+    ],
+    ['no title element', (xml: string) => xml.replace(/<dc:title>.*?<\/dc:title>/, '')],
+  ])('sets the document title when the template has %s', (_label, change) => {
+    const docx = buildInvoiceDocx(withCoreXml(change), {
+      ...baseInput,
+      lineItems: [{ text: 'A', priceInCents: 100 }],
+    });
+
+    const core = coreXml(docx);
+    expect(core).toContain('<dc:title>Raummiete</dc:title>');
+    expect(core.match(/<dc:title/g)).toHaveLength(1);
   });
 
   it('does not warn about reusing a generated zip', () => {

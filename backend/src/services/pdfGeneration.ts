@@ -3,7 +3,7 @@ import Docxtemplater from 'docxtemplater';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { PDFDocument, RotationTypes, StandardFonts } from 'pdf-lib';
+import { PDFDocument, PDFName, RotationTypes, StandardFonts } from 'pdf-lib';
 import PizZip from 'pizzip';
 import type { TemplateType } from 'shared';
 import { calculateInvoiceTotals } from '../../../shared/src/invoiceTotals.js';
@@ -144,7 +144,36 @@ function getDocxTableLineItems(lineItems: Array<{ text: string; priceInCents: nu
         </w:tbl>`;
 }
 
-async function fillCoverLetterTemplate(
+/**
+ * Sets the title in the document properties, which LibreOffice carries into the PDF (viewers
+ * show it instead of the file name). Without this every PDF has the title of the template.
+ */
+function setDocumentTitle(zip: PizZip, title: string): void {
+  const core = zip.file('docProps/core.xml');
+  if (!core) return;
+  const element = `<dc:title>${escapeXml(title)}</dc:title>`;
+  const xml = core.asText();
+  const existing = /<dc:title\s*\/>|<dc:title>[\s\S]*?<\/dc:title>/;
+  const updated = existing.test(xml)
+    ? xml.replace(existing, () => element)
+    : xml.replace(/<cp:coreProperties\b[^>]*>/, (open) => open + element);
+  zip.file('docProps/core.xml', updated);
+}
+
+/**
+ * Sets the PDF title and lets viewers show it instead of the file name. The XMP metadata of the
+ * template is dropped: viewers prefer its title, which is the one of the template.
+ */
+function setPdfTitle(pdfDoc: PDFDocument, title: string): void {
+  pdfDoc.catalog.delete(PDFName.of('Metadata'));
+  pdfDoc.setTitle(title, { showInWindowTitleBar: true });
+}
+
+function receiptTitle(number: string | undefined): string {
+  return number ? `Zuwendungsbestätigung ${number}` : 'Zuwendungsbestätigung';
+}
+
+export async function fillCoverLetterTemplate(
   templateBuffer: Buffer,
   data: CoverLetterData,
 ): Promise<Buffer> {
@@ -154,7 +183,9 @@ async function fillCoverLetterTemplate(
     linebreaks: true,
   });
   doc.render(data);
-  return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
+  const filled = doc.getZip();
+  setDocumentTitle(filled, 'Anschreiben');
+  return filled.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
 }
 
 const execFileAsync = promisify(execFile);
@@ -283,6 +314,8 @@ async function fillPdfForm(templateBuffer: Buffer, data: PdfFormData): Promise<B
     }
   }
 
+  setPdfTitle(pdfDoc, receiptTitle(data.quittungsNummer));
+
   try {
     return Buffer.from(await pdfDoc.save());
   } catch {
@@ -362,13 +395,14 @@ export async function generatePreviewTemplate(
   return fillPdfForm(templateBuffer, data as PdfFormData);
 }
 
-async function mergePdfs(pdfs: Buffer[]): Promise<Buffer> {
+export async function mergePdfs(pdfs: Buffer[], title: string): Promise<Buffer> {
   const merged = await PDFDocument.create();
   for (const pdfBuffer of pdfs) {
     const doc = await PDFDocument.load(pdfBuffer);
     const pages = await merged.copyPages(doc, doc.getPageIndices());
     pages.forEach((p) => merged.addPage(p));
   }
+  setPdfTitle(merged, title);
   return Buffer.from(await merged.save());
 }
 
@@ -438,7 +472,10 @@ export async function generateReceiptPdf(
   });
   pdfs.push(receiptPdf);
 
-  const finalPdf = pdfs.length > 1 ? await mergePdfs(pdfs) : pdfs[0];
+  const finalPdf =
+    pdfs.length > 1
+      ? await mergePdfs(pdfs, receiptTitle(revision.donationReceipt.number))
+      : pdfs[0];
 
   const outputDir = path.join(
     RECEIPTS_DIR,
@@ -506,7 +543,9 @@ export function buildInvoiceDocx(templateBuffer: Buffer, input: InvoiceDocxInput
     MonthlyBruto: '',
   });
 
-  return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
+  const zip = doc.getZip();
+  setDocumentTitle(zip, input.title);
+  return zip.generate({ type: 'nodebuffer', compression: 'DEFLATE' }) as Buffer;
 }
 
 export async function generateInvoicePdf(
