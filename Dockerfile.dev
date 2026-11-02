@@ -1,6 +1,6 @@
 # Dev image — provides OS-level dependencies only.
 # Project code and node_modules are bind-mounted at runtime.
-FROM node:22-slim
+FROM node:26-slim
 
 # Liberation and Carlito are metric-compatible with Arial/Times/Courier and Calibri, the fonts
 # the templates use; the production image installs the same families.
