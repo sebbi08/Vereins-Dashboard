@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - master
+      # Renovate only opens a PR once its branch has checks (prCreation: not-pending),
+      # so its update branches are checked on push too.
+      - 'renovate/**'
   pull_request:
 
 concurrency:
